@@ -28,7 +28,7 @@ export function ExerciseCard({ exercise, expanded, onToggle, onLog, onSwap, onSk
 
 	return (
 		<div
-			class={`row plan-row exercise-card ${skipped ? 'exercise-card--skipped' : ''} ${expanded ? 'exercise-card--expanded' : ''} ${exercise.superset_group != null ? 'exercise-card--superset' : ''}`}
+			class={`row exercise-card ${skipped ? 'exercise-card--skipped' : ''} ${expanded ? 'exercise-card--expanded' : ''} ${exercise.superset_group != null ? 'exercise-card--superset' : ''}`}
 		>
 			<button type="button" class="plan-row exercise-card-summary" aria-expanded={expanded} onClick={onToggle}>
 				<div class="plan-row-main">
