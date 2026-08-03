@@ -1,44 +1,201 @@
-:root {
-	color-scheme: light dark;
-	font-family: system-ui, sans-serif;
-	--accent: #2563eb;
-	--surface: color-mix(in srgb, currentColor 6%, transparent);
-	--surface-strong: color-mix(in srgb, currentColor 12%, transparent);
-	--border: color-mix(in srgb, currentColor 18%, transparent);
+/* ==========================================================================
+   Training log — design system
+   Editorial, restrained, high-contrast. Quiet by default; claret (--accent)
+   is spent only on focus, "today"/active state, and destructive confirm —
+   never as a fill for a whole control. Tap targets stay >=44px even where
+   the visual language is quiet, because this app is used one-handed,
+   mid-workout, on a sweaty screen.
+   ========================================================================== */
+
+/* ---- Fonts -------------------------------------------------------------- */
+
+@font-face {
+	font-family: "IBM Plex Sans";
+	src:
+		url("/fonts/ibm-plex-sans-var-latin.woff2") format("woff2-variations"),
+		url("/fonts/ibm-plex-sans-var-latin.woff2") format("woff2");
+	font-weight: 400 600;
+	font-style: normal;
+	font-display: swap;
 }
+
+@font-face {
+	font-family: "IBM Plex Mono";
+	src: url("/fonts/ibm-plex-mono-latin.woff2") format("woff2");
+	font-weight: 400;
+	font-style: normal;
+	font-display: swap;
+}
+
+/* ---- Tokens --------------------------------------------------------------
+   Exact values, contrast-checked against WCAG AA. Do not change. */
+
+:root {
+	--paper: #fafafa;
+	--paper-alt: #f2f3f1;
+	--ink: #16181d;
+	--rule: #dcdee1;
+	--muted: #5f646e;
+	--accent: #96262b;
+	--sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+	--mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+	--s1: 0.25rem;
+	--s2: 0.5rem;
+	--s3: 0.75rem;
+	--s4: 1rem;
+	--s5: 1.5rem;
+	--s6: 2rem;
+	color-scheme: light dark;
+
+	/* Additional tokens (not part of the fixed palette above, safe to tune) */
+	--nav-h: 56px;
+	--radius: 2px;
+	--radius-sheet: 12px;
+}
+
+@media (prefers-color-scheme: dark) {
+	:root {
+		--paper: #16181d;
+		--paper-alt: #1e2127;
+		--ink: #f2f3f1;
+		--rule: #2f333b;
+		--muted: #9aa0ab;
+		--accent: #d4666b;
+	}
+}
+
+/* ---- Reset / base --------------------------------------------------------- */
 
 * {
 	box-sizing: border-box;
 }
 
+html {
+	-webkit-text-size-adjust: 100%;
+}
+
 body {
 	margin: 0;
 	padding: 0;
-	line-height: 1.5;
+	background: var(--paper);
+	color: var(--ink);
+	font-family: var(--sans);
+	font-size: 17px;
+	line-height: 1.7;
+	-webkit-font-smoothing: antialiased;
 }
+
+::selection {
+	background: var(--accent);
+	color: var(--paper);
+}
+
+p {
+	margin: var(--s2) 0;
+}
+
+/* Screen title (h1-equivalent) */
+h1 {
+	font-size: clamp(28px, 5vw, 34px);
+	font-weight: 600;
+	letter-spacing: -0.025em;
+	line-height: 1.12;
+	margin: var(--s2) 0 var(--s4);
+}
+
+/* Default h2 — used as a component/dialog title (Today card label, Swap
+   sheet heading). Deliberately has NO divider/border-top: that treatment is
+   reserved for .section-heading, the true "section divider" heading used
+   on list screens. */
+h2 {
+	font-size: 1.3rem;
+	font-weight: 600;
+	letter-spacing: -0.015em;
+	line-height: 1.3;
+	margin: var(--s1) 0;
+}
+
+/* Section heading (h2-equivalent, list/screen dividers e.g. "This week") */
+.section-heading {
+	font-size: 19px;
+	font-weight: 600;
+	letter-spacing: -0.015em;
+	line-height: 1.3;
+	margin: var(--s6) 0 var(--s4);
+	padding-top: 1.1rem;
+	border-top: 1px solid var(--rule);
+}
+.section-heading:first-child {
+	margin-top: 0;
+	padding-top: 0;
+	border-top: 0;
+}
+
+a {
+	color: var(--ink);
+	text-decoration: underline;
+	text-decoration-color: var(--rule);
+	text-underline-offset: 0.16em;
+	transition: text-decoration-color 0.15s ease;
+}
+a:hover,
+a:focus-visible {
+	text-decoration-color: var(--accent);
+}
+
+button {
+	font-family: var(--sans);
+}
+button:disabled {
+	opacity: 0.4;
+	cursor: not-allowed;
+}
+
+/* Eyebrow — small-caps style metadata label (dates, categories, tags) */
+.eyebrow {
+	display: block;
+	font-size: 11px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.12em;
+	color: var(--muted);
+	margin: 0;
+}
+.eyebrow--accent {
+	color: var(--accent);
+}
+
+/* Numerals utility — weights, reps, clocks, table figures: tabular mono */
+.num {
+	font-family: var(--mono);
+	font-variant-numeric: tabular-nums;
+}
+
+/* ---- Screen chrome --------------------------------------------------------- */
 
 .screen {
 	max-width: 480px;
 	margin: 0 auto;
-	padding: 1rem 1rem 3rem;
-}
-
-h1 {
-	font-size: 1.5rem;
-	margin: 0.5rem 0;
+	padding: var(--s4) var(--s4) var(--s6);
 }
 
 .exercise-target {
-	color: color-mix(in srgb, currentColor 65%, transparent);
+	color: var(--muted);
 	margin-top: 0;
+	font-family: var(--mono);
+	font-variant-numeric: tabular-nums;
 }
 
 .back-btn {
+	display: inline-flex;
+	align-items: center;
+	min-height: 44px;
 	background: none;
 	border: none;
-	font-size: 1rem;
-	padding: 0.75rem 0;
-	color: inherit;
+	font: 600 15px var(--sans);
+	padding: var(--s2) 0;
+	margin: 0 0 var(--s1);
+	color: var(--ink);
 	cursor: pointer;
 }
 
@@ -46,67 +203,205 @@ h1 {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	gap: 1rem;
-	margin: 0.5rem 0;
+	gap: var(--s4);
+	margin: var(--s3) 0 var(--s4);
 }
 
 .exercise-nav button {
-	font-size: 1.5rem;
-	width: 3rem;
-	height: 3rem;
-	border-radius: 999px;
-	border: 1px solid var(--border);
-	background: var(--surface);
-	color: inherit;
+	min-width: 44px;
+	min-height: 44px;
+	font-size: 1.25rem;
+	line-height: 1;
+	border-radius: var(--radius);
+	border: 1px solid var(--rule);
+	background: transparent;
+	color: var(--ink);
+	cursor: pointer;
 }
 
 .exercise-nav button:disabled {
 	opacity: 0.3;
 }
 
-/* Today */
+.exercise-nav span {
+	font-family: var(--mono);
+	font-variant-numeric: tabular-nums;
+	color: var(--muted);
+	font-size: 0.9rem;
+	min-width: 3.5rem;
+	text-align: center;
+}
 
-.today-card {
-	border: 1px solid var(--border);
-	border-radius: 1rem;
-	padding: 1.5rem;
-	margin-top: 1rem;
-	background: var(--surface);
+/* ---- App shell / bottom nav ------------------------------------------------
+   Not yet wired into app.tsx, but the markup is coming: a persistent 3-tab
+   bar (Today · Plan · History) fixed to the bottom of the viewport. */
+
+.shell {
+	display: flex;
+	flex-direction: column;
+	min-height: 100dvh;
+	min-height: 100vh;
+}
+
+.shell-content {
+	flex: 1 1 auto;
+	overflow-y: auto;
+	padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + var(--s4));
+}
+
+.tabbar {
+	position: fixed;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	z-index: 30;
+	display: flex;
+	background: var(--paper);
+	border-top: 1px solid var(--rule);
+	padding-bottom: env(safe-area-inset-bottom);
+}
+
+.tabbar-item {
+	position: relative;
+	flex: 1 1 0;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: var(--s1);
+	min-height: var(--nav-h);
+	background: none;
+	border: none;
+	color: var(--muted);
+	font: 500 12px var(--sans);
+	text-decoration: none;
 	cursor: pointer;
 }
 
-.today-card h2 {
-	margin: 0.25rem 0;
-	font-size: 1.75rem;
+.tabbar-item[aria-current="page"] {
+	color: var(--ink);
+	font-weight: 600;
 }
 
+.tabbar-item[aria-current="page"]::before {
+	content: "";
+	position: absolute;
+	top: 0;
+	left: 50%;
+	transform: translateX(-50%);
+	width: 28px;
+	height: 2px;
+	background: var(--accent);
+	border-radius: 1px;
+}
+
+/* ---- Row primitive ---------------------------------------------------------
+   Replaces three ad-hoc bordered-box variants (today-card, set-row, sheet
+   options) with one hairline list-item. .today-card and .set-row are kept
+   as compatibility selectors so the current markup (which still uses those
+   class names) renders correctly; new screens should use .row directly. */
+
+.row,
+.today-card,
+.set-row {
+	display: block;
+	width: 100%;
+	text-align: left;
+	padding: var(--s4) 0;
+	border-bottom: 1px solid var(--rule);
+	border-left: none;
+	border-right: none;
+	border-top: none;
+	background: none;
+	color: inherit;
+	font: inherit;
+}
+
+.row:last-child,
+.set-row:last-child {
+	border-bottom: 0;
+}
+
+.row,
+.today-card {
+	cursor: pointer;
+}
+
+/* Today card — a .row containing an eyebrow date, title, and status line */
 .today-card-date {
-	margin: 0;
-	color: color-mix(in srgb, currentColor 65%, transparent);
+	font-size: 11px;
+	font-weight: 600;
 	text-transform: uppercase;
-	font-size: 0.8rem;
-	letter-spacing: 0.05em;
+	letter-spacing: 0.12em;
+	color: var(--muted);
+	margin: 0;
 }
 
-/* Buttons */
+.today-card h2 {
+	margin: var(--s1) 0;
+}
+
+/* Plan / History list row — a .row variant with eyebrow+title left,
+   muted progress string, and a trailing chevron. Combine as
+   class="row plan-row" (add "plan-row--today" to accent the eyebrow). */
+.plan-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--s3);
+}
+
+.plan-row-main {
+	display: flex;
+	flex-direction: column;
+	gap: var(--s1);
+	min-width: 0;
+}
+
+.plan-row-title {
+	font-size: 1rem;
+	font-weight: 600;
+	letter-spacing: -0.01em;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.plan-row-meta {
+	font-size: 0.85rem;
+	color: var(--muted);
+	font-family: var(--mono);
+	font-variant-numeric: tabular-nums;
+}
+
+.plan-row-chevron {
+	flex-shrink: 0;
+	color: var(--muted);
+	font-size: 1.25rem;
+	line-height: 1;
+}
+
+.plan-row--today .eyebrow {
+	color: var(--accent);
+}
+
+/* ---- Buttons ---------------------------------------------------------------- */
 
 .btn-primary,
 .btn-secondary {
 	display: block;
 	width: 100%;
-	padding: 1rem;
-	margin: 0.75rem 0;
-	font-size: 1.1rem;
-	font-weight: 600;
-	border-radius: 0.75rem;
-	border: none;
+	min-height: 48px;
+	margin: var(--s3) 0;
+	border-radius: var(--radius);
+	font: 600 16px var(--sans);
 	cursor: pointer;
-	min-height: 3.25rem;
 }
 
 .btn-primary {
-	background: var(--accent);
-	color: white;
+	background: var(--ink);
+	color: var(--paper);
+	border: 0;
 }
 
 .btn-primary:disabled {
@@ -115,87 +410,105 @@ h1 {
 }
 
 .btn-secondary {
-	background: var(--surface);
-	border: 1px solid var(--border);
-	color: inherit;
+	background: transparent;
+	border: 1px solid var(--rule);
+	color: var(--ink);
 }
 
-/* Stepper */
-
-.stepper {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	gap: 1.5rem;
-	margin: 0.75rem 0;
+/* Destructive / confirm-pain affordance in the swap flow — the one place
+   besides focus rings and "today" that spends the claret budget. */
+.btn-danger {
+	background: var(--accent);
+	color: var(--paper);
+	border: 0;
 }
 
-.stepper-btn {
-	width: 3.5rem;
-	height: 3.5rem;
-	border-radius: 999px;
-	border: 1px solid var(--border);
-	background: var(--surface);
-	color: inherit;
-	font-size: 1.75rem;
-	cursor: pointer;
-}
-
-.stepper-value {
-	min-width: 6rem;
-	text-align: center;
-	font-size: 1.5rem;
-	font-weight: 700;
-	font-variant-numeric: tabular-nums;
-}
-
-/* Tap rows (reps, RIR, RPE, swap options) */
+/* ---- Tap targets (reps, RIR, RPE, swap reasons/candidates) ------------------
+   .tap is the new primitive; .tap-btn is kept as a compatibility alias for
+   the class name currently rendered by SetRow/SwapSheet/RunSession. */
 
 .tap-row {
 	display: flex;
 	flex-wrap: wrap;
-	gap: 0.5rem;
-	margin: 0.5rem 0;
+	gap: var(--s2);
+	margin: var(--s3) 0;
 }
 
 .tap-row--stacked {
 	flex-direction: column;
 }
 
+.tap,
 .tap-btn {
+	min-height: 44px;
+	min-width: 44px;
 	flex: 1 1 2.75rem;
-	min-width: 2.75rem;
-	min-height: 2.75rem;
-	padding: 0.5rem 0.75rem;
-	border-radius: 0.6rem;
-	border: 1px solid var(--border);
-	background: var(--surface);
-	color: inherit;
-	font-size: 1rem;
+	background: transparent;
+	border: 1px solid var(--rule);
+	color: var(--ink);
+	border-radius: var(--radius);
+	font: 600 15px var(--sans);
+	padding: var(--s2) var(--s3);
+	text-align: center;
 	cursor: pointer;
 }
 
+/* Marks the reps that are inside the prescribed target range */
+.tap--target,
 .tap-btn--target {
-	border-color: var(--accent);
+	box-shadow: inset 0 -2px 0 var(--rule);
 }
 
+/* Selected/pressed state — new markup should use aria-pressed; the
+   .tap-btn--selected class is kept for the markup that exists today. */
+.tap[aria-pressed="true"],
 .tap-btn--selected {
-	background: var(--accent);
-	border-color: var(--accent);
-	color: white;
+	border-color: var(--ink);
+	background: var(--paper-alt);
 }
 
-/* Set rows */
-
-.set-row {
-	border: 1px solid var(--border);
-	border-radius: 1rem;
-	padding: 1rem;
-	margin: 1rem 0;
+.tap-row--stacked .tap,
+.tap-row--stacked .tap-btn {
+	flex: 1 1 100%;
+	width: 100%;
+	text-align: left;
 }
+
+/* ---- Stepper (weight increment/decrement) ----------------------------------- */
+
+.stepper {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: var(--s5);
+	margin: var(--s3) 0;
+}
+
+.stepper-btn {
+	min-width: 44px;
+	min-height: 44px;
+	width: 3rem;
+	height: 3rem;
+	border-radius: var(--radius);
+	border: 1px solid var(--rule);
+	background: transparent;
+	color: var(--ink);
+	font-size: 1.5rem;
+	line-height: 1;
+	cursor: pointer;
+}
+
+.stepper-value {
+	min-width: 6rem;
+	text-align: center;
+	font: 600 1.5rem var(--mono);
+	font-variant-numeric: tabular-nums;
+}
+
+/* ---- Set row internals ------------------------------------------------------- */
 
 .set-row--logged {
-	background: var(--surface);
+	background: var(--paper-alt);
 }
 
 .set-row-header {
@@ -203,18 +516,24 @@ h1 {
 	justify-content: space-between;
 	align-items: baseline;
 	font-size: 0.9rem;
-	margin-bottom: 0.5rem;
+	margin-bottom: var(--s2);
+	gap: var(--s3);
 }
 
 .set-row-index {
-	font-weight: 700;
+	font-weight: 600;
 }
 
 .set-row-lastweek {
-	color: color-mix(in srgb, currentColor 65%, transparent);
+	color: var(--muted);
+	font-family: var(--mono);
+	font-variant-numeric: tabular-nums;
+	font-size: 0.85rem;
+	white-space: nowrap;
 }
 
-/* Rest timer */
+/* ---- Rest timer --------------------------------------------------------------
+   Sticky, quiet by default; turns claret + a subtle indicator when over. */
 
 .rest-timer {
 	position: sticky;
@@ -223,34 +542,55 @@ h1 {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
-	gap: 1rem;
-	padding: 0.75rem 1rem;
-	margin: 0.75rem 0;
-	border-radius: 0.75rem;
-	background: var(--surface-strong);
-	backdrop-filter: blur(6px);
+	gap: var(--s4);
+	padding: var(--s3) 0;
+	margin: var(--s3) 0;
+	background: var(--paper);
+	border-bottom: 1px solid var(--rule);
 }
 
 .rest-timer--over {
-	background: color-mix(in srgb, #dc2626 25%, var(--surface-strong));
+	border-bottom-color: var(--accent);
+}
+
+.rest-timer-label {
+	font-size: 11px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.12em;
+	color: var(--muted);
+}
+
+.rest-timer--over .rest-timer-label {
+	color: var(--accent);
 }
 
 .rest-timer-clock {
+	font-family: var(--mono);
 	font-size: 1.75rem;
-	font-weight: 700;
+	font-weight: 600;
 	font-variant-numeric: tabular-nums;
+	margin-right: auto;
+	margin-left: var(--s3);
+}
+
+.rest-timer--over .rest-timer-clock {
+	color: var(--accent);
 }
 
 .rest-timer-skip {
-	border: 1px solid var(--border);
+	min-height: 44px;
+	min-width: 44px;
+	border: 1px solid var(--rule);
 	background: transparent;
-	color: inherit;
-	border-radius: 0.5rem;
-	padding: 0.5rem 0.75rem;
+	color: var(--ink);
+	border-radius: var(--radius);
+	font: 600 14px var(--sans);
+	padding: var(--s2) var(--s3);
 	cursor: pointer;
 }
 
-/* Swap sheet */
+/* ---- Swap sheet --------------------------------------------------------------- */
 
 .sheet-backdrop {
 	position: fixed;
@@ -262,41 +602,160 @@ h1 {
 }
 
 .sheet {
-	background: Canvas;
-	color: CanvasText;
+	background: var(--paper);
+	color: var(--ink);
 	width: 100%;
 	max-height: 85vh;
 	overflow-y: auto;
-	border-radius: 1rem 1rem 0 0;
-	padding: 1.5rem;
+	border-radius: var(--radius-sheet) var(--radius-sheet) 0 0;
+	padding: var(--s5) var(--s4) var(--s6);
 }
 
-/* Run session */
-
-.run-steps {
-	padding-left: 1.25rem;
+.sheet::before {
+	content: "";
+	display: block;
+	width: 36px;
+	height: 4px;
+	margin: 0 auto var(--s4);
+	background: var(--rule);
+	border-radius: 2px;
 }
+
+.sheet h2 {
+	margin: 0 0 var(--s4);
+}
+
+/* ---- Run session form ----------------------------------------------------------- */
 
 .field {
 	display: block;
-	margin: 0.75rem 0;
+	margin: var(--s4) 0;
 	font-size: 0.9rem;
-	color: color-mix(in srgb, currentColor 65%, transparent);
+	color: var(--muted);
 }
 
-.field input {
+.field input,
+.field select,
+.field textarea {
 	display: block;
 	width: 100%;
-	margin-top: 0.25rem;
-	padding: 0.75rem;
-	font-size: 1.1rem;
-	border-radius: 0.5rem;
-	border: 1px solid var(--border);
-	background: var(--surface);
-	color: CanvasText;
+	min-height: 44px;
+	margin-top: var(--s2);
+	padding: var(--s3);
+	font: 400 1.05rem var(--sans);
+	border-radius: var(--radius);
+	border: 1px solid var(--rule);
+	background: transparent;
+	color: var(--ink);
+}
+
+.field input[type="number"] {
+	font-family: var(--mono);
+	font-variant-numeric: tabular-nums;
+}
+
+.field input:focus-visible,
+.field select:focus-visible,
+.field textarea:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
 }
 
 .duration-inputs {
 	display: flex;
-	gap: 0.5rem;
+	gap: var(--s2);
+}
+
+.run-steps {
+	padding-left: 1.25rem;
+	line-height: 1.7;
+	color: var(--ink);
+}
+
+.run-steps li {
+	margin: var(--s1) 0;
+}
+
+.run-steps .num {
+	font-family: var(--mono);
+	font-variant-numeric: tabular-nums;
+}
+
+/* ---- Review / end-of-session table ------------------------------------------------
+   Not yet built, but the markup will need this: wrap the <table> in
+   .table-scroll so a narrow phone scrolls the table, not the page. */
+
+.table-scroll {
+	overflow-x: auto;
+	margin: var(--s4) 0;
+}
+
+.review-table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 0.95rem;
+}
+
+.review-table th,
+.review-table td {
+	padding: var(--s3) var(--s4) var(--s3) 0;
+	text-align: left;
+	white-space: nowrap;
+}
+
+.review-table thead th {
+	border-bottom: 1px solid var(--rule);
+	font-size: 11px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	color: var(--muted);
+}
+
+.review-table tbody tr {
+	border-bottom: 1px solid var(--rule);
+}
+
+.review-table tbody tr:last-child {
+	border-bottom: 0;
+}
+
+.review-table tbody td {
+	font-family: var(--mono);
+	font-variant-numeric: tabular-nums;
+}
+
+/* First column is assumed to be a text label (exercise name) — revert to sans */
+.review-table tbody td:first-child {
+	font-family: var(--sans);
+	font-variant-numeric: normal;
+	font-weight: 600;
+}
+
+/* ---- Loading / empty states -------------------------------------------------------- */
+
+.empty-state {
+	padding: var(--s6) var(--s4);
+	text-align: center;
+	color: var(--muted);
+	font-size: 0.95rem;
+}
+
+/* ---- Accessibility ------------------------------------------------------------------- */
+
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+[tabindex]:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	* {
+		transition: none !important;
+		animation: none !important;
+	}
 }

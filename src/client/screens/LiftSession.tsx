@@ -1,35 +1,22 @@
-import { useEffect, useState } from 'preact/hooks';
-import type { SessionDetail } from '../../types';
-import { fetchSession, logSet } from '../api';
+import { useState } from 'preact/hooks';
+import { logSet } from '../api';
 import { RestTimer } from '../components/RestTimer';
 import { SetRow } from '../components/SetRow';
 import { SwapSheet } from '../components/SwapSheet';
-import { readCachedSession, writeCachedSession } from '../sessionCache';
-import { pendingCount } from '../sync';
+import { todayIso } from '../../dates';
+import { resolveSetDefaults } from '../../setDefaults';
+import { useSession } from '../useSession';
 
 interface LiftSessionProps {
 	sessionId: number;
 	onBack: () => void;
 }
 
-function todayIso(): string {
-	return new Date().toISOString().slice(0, 10);
-}
-
 export function LiftSession({ sessionId, onBack }: LiftSessionProps) {
-	const [detail, setDetail] = useState<SessionDetail | null>(() => readCachedSession(sessionId));
+	const { detail, error, setDetail, reload } = useSession(sessionId);
 	const [exerciseIndex, setExerciseIndex] = useState(0);
 	const [rest, setRest] = useState<{ startedAt: number; seconds: number } | null>(null);
 	const [swapOpen, setSwapOpen] = useState(false);
-
-	useEffect(() => {
-		fetchSession(sessionId).then((fresh) => {
-			// A visit still has unsynced local writes — trust those over the server's stale view.
-			if (pendingCount() > 0) return;
-			setDetail(fresh);
-			writeCachedSession(sessionId, fresh);
-		});
-	}, [sessionId]);
 
 	const exercise = detail?.plannedSets[exerciseIndex];
 
@@ -39,7 +26,16 @@ export function LiftSession({ sessionId, onBack }: LiftSessionProps) {
 				<button type="button" class="back-btn" onClick={onBack}>
 					← Back
 				</button>
-				<p>Loading…</p>
+				{error ? (
+					<>
+						<p>{error}</p>
+						<button type="button" class="btn-secondary" onClick={reload}>
+							Retry
+						</button>
+					</>
+				) : (
+					<p>Loading…</p>
+				)}
 			</main>
 		);
 	}
@@ -68,10 +64,7 @@ export function LiftSession({ sessionId, onBack }: LiftSessionProps) {
 
 	function afterSwap() {
 		setSwapOpen(false);
-		fetchSession(sessionId).then((fresh) => {
-			setDetail(fresh);
-			writeCachedSession(sessionId, fresh);
-		});
+		reload();
 	}
 
 	return (
@@ -79,6 +72,8 @@ export function LiftSession({ sessionId, onBack }: LiftSessionProps) {
 			<button type="button" class="back-btn" onClick={onBack}>
 				← Back
 			</button>
+
+			{error && <p class="eyebrow">{error}</p>}
 
 			<div class="exercise-nav">
 				<button type="button" disabled={exerciseIndex === 0} onClick={() => setExerciseIndex((i) => i - 1)}>
@@ -104,25 +99,24 @@ export function LiftSession({ sessionId, onBack }: LiftSessionProps) {
 
 			{rest && <RestTimer totalSeconds={rest.seconds} startedAt={rest.startedAt} onSkip={() => setRest(null)} />}
 
-			{setIndexes.map((si) => (
-				<SetRow
-					key={si}
-					setIndex={si}
-					repLow={exercise.rep_low}
-					repHigh={exercise.rep_high}
-					incrementKg={exercise.increment_kg}
-					isBodyweight={isBodyweight}
-					defaultWeight={
-						exercise.logged.find((l) => l.set_index === si)?.weight_kg ??
-						exercise.lastWeek.find((l) => l.set_index === si)?.weight_kg ??
-						exercise.target_weight_kg ??
-						0
-					}
-					logged={exercise.logged.find((l) => l.set_index === si)}
-					lastWeek={exercise.lastWeek.find((l) => l.set_index === si)}
-					onLog={(weight, reps, rir) => handleLog(si, weight, reps, rir)}
-				/>
-			))}
+			{setIndexes.map((si) => {
+				const defaults = resolveSetDefaults(exercise, si);
+				return (
+					<SetRow
+						key={`${exercise.exercise_id}-${si}`}
+						setIndex={si}
+						repLow={exercise.rep_low}
+						repHigh={exercise.rep_high}
+						incrementKg={exercise.increment_kg}
+						isBodyweight={isBodyweight}
+						defaultWeight={defaults.weight_kg}
+						defaultReps={defaults.reps}
+						logged={exercise.logged.find((l) => l.set_index === si)}
+						lastWeek={exercise.lastWeek.find((l) => l.set_index === si)}
+						onLog={(weight, reps, rir) => handleLog(si, weight, reps, rir)}
+					/>
+				);
+			})}
 
 			{swapOpen && <SwapSheet sessionId={sessionId} fromExerciseId={exercise.exercise_id} onClose={() => setSwapOpen(false)} onSwapped={afterSwap} />}
 		</main>

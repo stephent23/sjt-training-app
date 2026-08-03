@@ -1,5 +1,11 @@
 import { env } from 'cloudflare:test';
-import type { Exercise, Loading, Modality, SessionKind, SessionStatus } from '../src/types';
+import type { Exercise, Loading, Modality, RunType, SessionKind, SessionStatus } from '../src/types';
+
+// Re-exported so callers (e.g. test/sessions.today.test.ts) compare against
+// the exact same Europe/London-based "today" the route itself computes —
+// a second, independently-computed todayIso() here would drift from the
+// route's answer right at the GMT/BST boundary and make those tests flaky.
+export { todayIso } from '../src/dates';
 
 export async function insertExercise(overrides: Partial<Omit<Exercise, 'id'>> = {}): Promise<number> {
 	const e = {
@@ -55,6 +61,28 @@ export async function insertPlannedSet(
 		.run();
 }
 
+export async function insertPlannedRun(
+	sessionId: number,
+	overrides: Partial<{ run_type: RunType; target_minutes: number | null; target_km: number | null; structure_json: string | null }> = {},
+): Promise<void> {
+	const p = { run_type: 'easy' as RunType, target_minutes: 30, target_km: null, structure_json: null, ...overrides };
+	await env.DB.prepare(`INSERT INTO planned_runs (session_id, run_type, target_minutes, target_km, structure_json) VALUES (?, ?, ?, ?, ?)`)
+		.bind(sessionId, p.run_type, p.target_minutes, p.target_km, p.structure_json)
+		.run();
+}
+
+export async function insertLoggedRun(
+	sessionId: number,
+	overrides: Partial<{ distance_km: number; duration_seconds: number; avg_hr: number | null; rpe_1_10: number | null; performed_on: string; note: string | null }> = {},
+): Promise<void> {
+	const l = { distance_km: 5, duration_seconds: 1800, avg_hr: 140, rpe_1_10: 4, performed_on: '2026-07-27', note: null, ...overrides };
+	await env.DB.prepare(
+		`INSERT INTO logged_runs (session_id, distance_km, duration_seconds, avg_hr, rpe_1_10, performed_on, note) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+	)
+		.bind(sessionId, l.distance_km, l.duration_seconds, l.avg_hr, l.rpe_1_10, l.performed_on, l.note)
+		.run();
+}
+
 export async function insertLoggedSet(
 	sessionId: number,
 	exerciseId: number,
@@ -66,8 +94,4 @@ export async function insertLoggedSet(
 	)
 		.bind(sessionId, exerciseId, l.set_index, l.weight_kg, l.reps, l.rir, l.rest_taken_seconds, l.performed_on)
 		.run();
-}
-
-export function todayIso(): string {
-	return new Date().toISOString().slice(0, 10);
 }

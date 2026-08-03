@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'preact/hooks';
 import type { SwapCandidate, SwapReason, SwapScope } from '../../types';
 import { applySwap, fetchSwapCandidates } from '../api';
 
@@ -23,12 +23,26 @@ export function SwapSheet({ sessionId, fromExerciseId, onClose, onSwapped }: Swa
 	const [chosen, setChosen] = useState<number | null>(null);
 	const [scope, setScope] = useState<SwapScope>('this_session');
 	const [confirming, setConfirming] = useState(false);
+	const sheetRef = useRef<HTMLDivElement | null>(null);
+	const previouslyFocused = useRef<HTMLElement | null>(document.activeElement as HTMLElement | null);
 
 	useEffect(() => {
 		if (!reason) return;
 		if (reason === 'pain' && !painType) return;
 		fetchSwapCandidates(fromExerciseId, reason === 'pain' ? painType : null).then(setCandidates);
 	}, [reason, painType, fromExerciseId]);
+
+	useEffect(() => {
+		sheetRef.current?.focus();
+		function onKeyDown(e: KeyboardEvent) {
+			if (e.key === 'Escape') onClose();
+		}
+		document.addEventListener('keydown', onKeyDown);
+		return () => {
+			document.removeEventListener('keydown', onKeyDown);
+			previouslyFocused.current?.focus();
+		};
+	}, []);
 
 	async function confirm() {
 		if (!reason || chosen === null) return;
@@ -43,8 +57,16 @@ export function SwapSheet({ sessionId, fromExerciseId, onClose, onSwapped }: Swa
 
 	return (
 		<div class="sheet-backdrop" onClick={onClose}>
-			<div class="sheet" onClick={(e) => e.stopPropagation()}>
-				<h2>Swap exercise</h2>
+			<div
+				class="sheet"
+				role="dialog"
+				aria-modal="true"
+				aria-labelledby="swap-sheet-title"
+				tabIndex={-1}
+				ref={sheetRef}
+				onClick={(e) => e.stopPropagation()}
+			>
+				<h2 id="swap-sheet-title">Swap exercise</h2>
 
 				{!reason && (
 					<div class="tap-row tap-row--stacked" role="group" aria-label="Reason">

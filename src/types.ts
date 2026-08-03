@@ -37,6 +37,7 @@ export interface LoggedSetEntry {
 	reps: number;
 	rir: number;
 	rest_taken_seconds: number | null;
+	performed_on: string;
 }
 
 export interface PlannedSetDetail {
@@ -63,6 +64,15 @@ export interface PlannedRunDetail {
 	target_minutes: number | null;
 	target_km: number | null;
 	structure_json: string | null;
+}
+
+// Shape of the parsed `structure_json.steps` array on PlannedRunDetail —
+// a flat list of interval steps, e.g. {"steps":[{"kind":"warmup","minutes":10,"effort":"easy"},...]}.
+export interface RunStep {
+	kind: string;
+	minutes: number;
+	effort: string;
+	repeat?: number;
 }
 
 export interface LoggedRunEntry {
@@ -98,6 +108,22 @@ export interface LogRunInput {
 	rpe_1_10: number | null;
 	performed_on: string;
 	note: string | null;
+}
+
+export interface SessionSummary {
+	id: number;
+	date: string;
+	kind: SessionKind;
+	label: string;
+	status: SessionStatus;
+	week_number: number;
+	exercise_count: number;
+	planned_set_count: number;
+	logged_set_count: number;
+	run_type: RunType | null;
+	target_minutes: number | null;
+	target_km: number | null;
+	has_logged_run: boolean;
 }
 
 export interface SwapCandidate extends Exercise {

@@ -17,7 +17,7 @@ describe('GET /api/sessions/:id', () => {
 		const res = await SELF.fetch(`https://training-app.test/api/sessions/${thisSessionId}`);
 		const body = (await res.json()) as SessionDetail;
 
-		expect(body.plannedSets[0].lastWeek).toEqual([{ set_index: 1, weight_kg: 20, reps: 8, rir: 2, rest_taken_seconds: null }]);
+		expect(body.plannedSets[0].lastWeek).toEqual([{ set_index: 1, weight_kg: 20, reps: 8, rir: 2, rest_taken_seconds: null, performed_on: '2026-07-27' }]);
 	});
 
 	it('does not pull sets logged against the current session into lastWeek', async () => {

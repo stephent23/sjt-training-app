@@ -18,7 +18,7 @@ describe('POST /api/sessions/:id/sets', () => {
 		expect(res.status).toBe(200);
 
 		const detail = (await (await SELF.fetch(`https://training-app.test/api/sessions/${sessionId}`)).json()) as SessionDetail;
-		expect(detail.plannedSets[0].logged).toEqual([{ set_index: 1, weight_kg: 20, reps: 8, rir: 2, rest_taken_seconds: 130 }]);
+		expect(detail.plannedSets[0].logged).toEqual([{ set_index: 1, weight_kg: 20, reps: 8, rir: 2, rest_taken_seconds: 130, performed_on: '2026-08-03' }]);
 	});
 
 	it('re-logging the same session/exercise/set_index updates in place rather than duplicating', async () => {
@@ -33,7 +33,7 @@ describe('POST /api/sessions/:id/sets', () => {
 		await postJson(`https://training-app.test/api/sessions/${sessionId}/sets`, second);
 
 		const detail = (await (await SELF.fetch(`https://training-app.test/api/sessions/${sessionId}`)).json()) as SessionDetail;
-		expect(detail.plannedSets[0].logged).toEqual([{ set_index: 1, weight_kg: 22.5, reps: 6, rir: 0, rest_taken_seconds: 180 }]);
+		expect(detail.plannedSets[0].logged).toEqual([{ set_index: 1, weight_kg: 22.5, reps: 6, rir: 0, rest_taken_seconds: 180, performed_on: '2026-08-03' }]);
 	});
 
 	it('logging different set_index values for the same exercise keeps both', async () => {
@@ -63,6 +63,68 @@ describe('POST /api/sessions/:id/sets', () => {
 		const detail = (await (await SELF.fetch(`https://training-app.test/api/sessions/${sessionId}`)).json()) as SessionDetail;
 		expect(detail.plannedSets[0].logged).toHaveLength(2);
 	});
+
+	it('rejects an out-of-range rir with 400 instead of letting the D1 CHECK constraint 500', async () => {
+		const exerciseId = await insertExercise();
+		const sessionId = await insertSession();
+		await insertPlannedSet(sessionId, exerciseId, { order_index: 1, target_sets: 3 });
+
+		const tooHigh = await postJson(`https://training-app.test/api/sessions/${sessionId}/sets`, {
+			exercise_id: exerciseId,
+			set_index: 1,
+			weight_kg: 20,
+			reps: 8,
+			rir: 9,
+			rest_taken_seconds: null,
+			performed_on: '2026-08-03',
+		} satisfies LogSetInput);
+		expect(tooHigh.status).toBe(400);
+
+		const negative = await postJson(`https://training-app.test/api/sessions/${sessionId}/sets`, {
+			exercise_id: exerciseId,
+			set_index: 1,
+			weight_kg: 20,
+			reps: 8,
+			rir: -1,
+			rest_taken_seconds: null,
+			performed_on: '2026-08-03',
+		} satisfies LogSetInput);
+		expect(negative.status).toBe(400);
+	});
+
+	it('rejects negative reps with 400', async () => {
+		const exerciseId = await insertExercise();
+		const sessionId = await insertSession();
+		await insertPlannedSet(sessionId, exerciseId, { order_index: 1, target_sets: 3 });
+
+		const res = await postJson(`https://training-app.test/api/sessions/${sessionId}/sets`, {
+			exercise_id: exerciseId,
+			set_index: 1,
+			weight_kg: 20,
+			reps: -1,
+			rir: 2,
+			rest_taken_seconds: null,
+			performed_on: '2026-08-03',
+		} satisfies LogSetInput);
+		expect(res.status).toBe(400);
+	});
+
+	it('rejects a non-numeric weight_kg with 400', async () => {
+		const exerciseId = await insertExercise();
+		const sessionId = await insertSession();
+		await insertPlannedSet(sessionId, exerciseId, { order_index: 1, target_sets: 3 });
+
+		const res = await postJson(`https://training-app.test/api/sessions/${sessionId}/sets`, {
+			exercise_id: exerciseId,
+			set_index: 1,
+			weight_kg: 'heavy',
+			reps: 8,
+			rir: 2,
+			rest_taken_seconds: null,
+			performed_on: '2026-08-03',
+		});
+		expect(res.status).toBe(400);
+	});
 });
 
 describe('POST /api/sessions/:id/runs', () => {
@@ -77,6 +139,32 @@ describe('POST /api/sessions/:id/runs', () => {
 
 		const detail = (await (await SELF.fetch(`https://training-app.test/api/sessions/${sessionId}`)).json()) as SessionDetail;
 		expect(detail.loggedRun).toEqual(second);
+	});
+
+	it('rejects a negative distance_km with 400', async () => {
+		const sessionId = await insertSession({ kind: 'run', label: 'Easy run' });
+		const res = await postJson(`https://training-app.test/api/sessions/${sessionId}/runs`, {
+			distance_km: -1,
+			duration_seconds: 1800,
+			avg_hr: null,
+			rpe_1_10: null,
+			performed_on: '2026-08-03',
+			note: null,
+		} satisfies LogRunInput);
+		expect(res.status).toBe(400);
+	});
+
+	it('rejects an out-of-range rpe_1_10 with 400', async () => {
+		const sessionId = await insertSession({ kind: 'run', label: 'Easy run' });
+		const res = await postJson(`https://training-app.test/api/sessions/${sessionId}/runs`, {
+			distance_km: 5,
+			duration_seconds: 1800,
+			avg_hr: null,
+			rpe_1_10: 11,
+			performed_on: '2026-08-03',
+			note: null,
+		} satisfies LogRunInput);
+		expect(res.status).toBe(400);
 	});
 });
 
