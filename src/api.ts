@@ -1,5 +1,7 @@
 import { Hono } from 'hono';
+import { generator } from './routes/generator';
 import { sessions } from './routes/sessions';
+import { settings } from './routes/settings';
 import { swaps } from './routes/swaps';
 
 // The JSON API. Routes talk to D1 directly with prepared statements — no ORM.
@@ -12,3 +14,5 @@ api.get('/health', async (c) => {
 
 api.route('/sessions', sessions);
 api.route('/swaps', swaps);
+api.route('/generator', generator);
+api.route('/settings', settings);

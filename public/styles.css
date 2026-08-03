@@ -857,6 +857,22 @@ button:disabled {
 	font-weight: 600;
 }
 
+/* ---- Copyable prompt (GenerateWeekFlow) ---------------------------------------------
+   Shown alongside the "Copy instructions" button so the clipboard contents
+   aren't a hidden surprise. pre-wrap keeps long lines from overflowing the
+   480px .screen column. */
+
+.prompt-preview {
+	white-space: pre-wrap;
+	font-family: var(--mono);
+	font-size: 0.8rem;
+	color: var(--muted);
+	background: var(--paper-alt);
+	padding: var(--s3);
+	border-radius: var(--radius);
+	margin: var(--s3) 0;
+}
+
 /* ---- Loading / empty states -------------------------------------------------------- */
 
 .empty-state {

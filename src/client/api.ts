@@ -1,4 +1,16 @@
-import type { ApplySwapInput, LogRunInput, LogSetInput, PlannedSetStatus, SessionDetail, SessionStatus, SessionSummary, SwapCandidate } from '../types';
+import type {
+	ApplySwapInput,
+	LogRunInput,
+	LogSetInput,
+	PlannedSetStatus,
+	SessionDetail,
+	SessionStatus,
+	SessionSummary,
+	Settings,
+	SwapCandidate,
+	WeekProposal,
+	WeekProposalInput,
+} from '../types';
 import { writeCachedSession } from './sessionCache';
 import { enqueue } from './sync';
 
@@ -99,5 +111,62 @@ export async function setSessionDate(sessionId: number, date: string): Promise<v
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({ date }),
 	});
+	if (!res.ok) throw new Error(`request failed: ${res.status}`);
+}
+
+export async function fetchSettings(): Promise<Settings> {
+	const res = await fetch('/api/settings');
+	if (!res.ok) throw new Error(`request failed: ${res.status}`);
+	return res.json();
+}
+
+export async function updateSettings(patch: Partial<Settings>): Promise<void> {
+	const res = await fetch('/api/settings', {
+		method: 'PATCH',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(patch),
+	});
+	if (!res.ok) throw new Error(`request failed: ${res.status}`);
+}
+
+export interface PendingProposal {
+	id: number;
+	week_number: number;
+	created_at: string;
+	plan: WeekProposal;
+}
+
+export async function fetchPendingProposal(): Promise<PendingProposal | null> {
+	const res = await fetch('/api/generator/pending');
+	if (!res.ok) throw new Error(`request failed: ${res.status}`);
+	const data = (await res.json()) as { pending: PendingProposal | null };
+	return data.pending;
+}
+
+// Unlike every other function here, a non-ok response is surfaced via its
+// own message rather than a generic "request failed" — a 422 here carries
+// the exact validation errors (bad exercise_id, weight jump too big, session
+// count mismatch, ...) that the person needs in order to go back and ask
+// their AI assistant to fix the specific problem.
+export async function importProposal(input: WeekProposalInput): Promise<{ id: number }> {
+	const res = await fetch('/api/generator/import', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(input),
+	});
+	if (!res.ok) {
+		const body = (await res.json().catch(() => null)) as { error?: string } | null;
+		throw new Error(body?.error ?? `request failed: ${res.status}`);
+	}
+	return res.json();
+}
+
+export async function acceptProposal(id: number): Promise<void> {
+	const res = await fetch(`/api/generator/${id}/accept`, { method: 'POST' });
+	if (!res.ok) throw new Error(`request failed: ${res.status}`);
+}
+
+export async function rejectProposal(id: number): Promise<void> {
+	const res = await fetch(`/api/generator/${id}/reject`, { method: 'POST' });
 	if (!res.ok) throw new Error(`request failed: ${res.status}`);
 }

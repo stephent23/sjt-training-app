@@ -141,3 +141,18 @@ export interface ApplySwapInput {
 	reason: SwapReason;
 	scope: SwapScope;
 }
+
+// Weekly generator (manual export/import) — see migrations/0004_generator.sql.
+export interface ProposedRun { run_type: RunType; target_minutes: number | null; target_km: number | null; structure_json: string | null; }
+export interface ProposedSetInput { exercise_id: number; order_index: number; target_sets: number; rep_low: number; rep_high: number; target_weight_kg: number | null; rest_seconds: number; notes: string | null; superset_group: number | null; }
+export interface ProposedSessionInput { date: string; kind: SessionKind; label: string; plannedSets: ProposedSetInput[]; plannedRun: ProposedRun | null; }
+export interface WeekProposalInput { week_number: number; sessions: ProposedSessionInput[]; }
+
+export interface ProposedSet extends ProposedSetInput { exercise_name: string; pattern: string; }
+export interface ProposedSession extends Omit<ProposedSessionInput, 'plannedSets'> { plannedSets: ProposedSet[]; }
+export interface WeekProposal extends Omit<WeekProposalInput, 'sessions'> { sessions: ProposedSession[]; }
+
+export interface Settings {
+	goals: string;
+	days_per_week: number;
+}
