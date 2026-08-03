@@ -56,18 +56,43 @@ export function SetRow({ setIndex, repLow, repHigh, incrementKg, isBodyweight, d
 				)}
 			</div>
 
-			{!isBodyweight && <Stepper value={weight} step={incrementKg} suffix="kg" onChange={setTouchedWeight} />}
+			<div class="set-field">
+				<span class="eyebrow">Weight</span>
+				{isBodyweight ? (
+					<p class="set-field-hint">Bodyweight — no added load</p>
+				) : (
+					<>
+						<p class="set-field-hint">Tap the number to type, or use ± to adjust by {incrementKg}kg</p>
+						<Stepper value={weight} step={incrementKg} suffix="kg" onChange={setTouchedWeight} />
+					</>
+				)}
+			</div>
 
-			<TapGroup
-				options={repOptions}
-				value={reps}
-				onChange={setTouchedReps}
-				label={(r) => String(r)}
-				ariaLabel="Reps"
-				isTarget={(r) => r >= repLow && r <= repHigh}
-			/>
+			<div class="set-field">
+				<span class="eyebrow">
+					Reps · target {repLow}-{repHigh}
+				</span>
+				<TapGroup
+					options={repOptions}
+					value={reps}
+					onChange={setTouchedReps}
+					label={(r) => String(r)}
+					ariaLabel={`Reps, target ${repLow} to ${repHigh}`}
+					isTarget={(r) => r >= repLow && r <= repHigh}
+				/>
+			</div>
 
-			<TapGroup options={RIR_OPTIONS} value={rir} onChange={setRir} label={(v) => `RIR ${v}`} ariaLabel="Reps in reserve" />
+			<div class="set-field">
+				<span class="eyebrow">RIR · reps in reserve</span>
+				<p class="set-field-hint">0 = couldn't do another rep · 4 = several left</p>
+				<TapGroup
+					options={RIR_OPTIONS}
+					value={rir}
+					onChange={setRir}
+					label={(v) => String(v)}
+					ariaLabel="RIR, reps in reserve: how many more reps you could have done"
+				/>
+			</div>
 
 			<button type="button" class="btn-primary" disabled={!canLog} onClick={handleLogClick}>
 				{logged ? 'Update set' : 'Log set'}
