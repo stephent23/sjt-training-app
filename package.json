@@ -1,0 +1,29 @@
+{
+	"name": "training-app",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"build:client": "esbuild src/client/main.tsx --bundle --format=esm --target=es2022 --jsx=automatic --jsx-import-source=preact --outfile=public/app.js",
+		"dev": "npm run build:client && wrangler dev",
+		"watch:client": "npm run build:client -- --watch",
+		"db:migrate:local": "wrangler d1 migrations apply training_app --local",
+		"db:seed:local": "wrangler d1 execute training_app --local --file=./seeds/exercises.sql",
+		"db:seed:week1:local": "wrangler d1 execute training_app --local --file=./seeds/week1_sessions.sql",
+		"cf-typegen": "wrangler types",
+		"test": "vitest run",
+		"test:watch": "vitest",
+		"typecheck": "tsc --noEmit && tsc -p test/tsconfig.json --noEmit"
+	},
+	"dependencies": {
+		"hono": "^4.10.6",
+		"preact": "^10.28.3"
+	},
+	"devDependencies": {
+		"@cloudflare/vitest-pool-workers": "^0.20.1",
+		"esbuild": "^0.25.12",
+		"typescript": "^5.9.3",
+		"vitest": "^4.1.10",
+		"wrangler": "^4.112.0"
+	}
+}

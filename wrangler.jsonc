@@ -1,0 +1,37 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "training-app",
+	"main": "src/index.ts",
+	"compatibility_date": "2026-08-01",
+	"compatibility_flags": ["global_fetch_strictly_public"],
+
+	// Static assets (the Preact bundle + HTML shell) are served straight from
+	// the edge. Unmatched paths fall through to the Worker, which routes /api/*
+	// and hands everything else back to ASSETS as the SPA shell.
+	"assets": {
+		"directory": "./public",
+		"binding": "ASSETS",
+		"not_found_handling": "single-page-application"
+	},
+
+	// D1 is SQLite. `database_id` is a placeholder until the database is
+	// actually created (`wrangler d1 create training_app`) — local development
+	// via `--local` works without it.
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "training_app",
+			"database_id": "PLACEHOLDER_NOT_YET_CREATED",
+			"migrations_dir": "migrations"
+		}
+	],
+
+	"observability": {
+		"enabled": true
+	},
+
+	// Provisioned automatically on deploy, as long as sjtate.co.uk is a zone
+	// on this Cloudflare account. Auth is Cloudflare Access, configured
+	// separately in the Zero Trust dashboard against this hostname.
+	"routes": [{ "pattern": "training.sjtate.co.uk", "custom_domain": true }]
+}
