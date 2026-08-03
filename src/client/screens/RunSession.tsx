@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { logRun } from '../api';
+import { logRun, setSessionStatus } from '../api';
 import { todayIso } from '../../dates';
 import { useSession } from '../useSession';
 import { TapGroup } from '../components/TapGroup';
@@ -91,6 +91,12 @@ export function RunSession({ sessionId, onBack }: RunSessionProps) {
 		setDetail(updated);
 	}
 
+	function handleComplete() {
+		setSessionStatus(sessionId, 'completed');
+		setDetail({ ...detail!, session: { ...detail!.session, status: 'completed' } });
+		location.hash = '#/';
+	}
+
 	return (
 		<main class="screen">
 			<button type="button" class="back-btn" onClick={onBack}>
@@ -141,6 +147,10 @@ export function RunSession({ sessionId, onBack }: RunSessionProps) {
 
 			<button type="button" class="btn-primary" onClick={handleLog}>
 				{detail.loggedRun ? 'Update run' : 'Log run'}
+			</button>
+
+			<button type="button" class="btn-secondary" onClick={handleComplete} disabled={detail.session.status === 'completed'}>
+				{detail.session.status === 'completed' ? 'Completed' : 'Mark complete'}
 			</button>
 		</main>
 	);

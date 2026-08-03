@@ -29,19 +29,25 @@ describe('GET /api/sessions/today', () => {
 		expect(body.session?.id).toBe(soonId);
 	});
 
-	it('ignores completed sessions when looking for what to do next', async () => {
-		await insertSession({ date: todayIso(), label: 'Already done', status: 'completed' });
-		const upcomingId = await insertSession({ date: '2026-12-31', label: 'Next up' });
+	it('still shows a completed session dated today, rather than skipping ahead to a future one', async () => {
+		// A day you've already finished should show a "tap to review" recap,
+		// not silently jump to something else — Today.tsx already renders a
+		// completed-today session that way; the route needs to actually return it.
+		const doneId = await insertSession({ date: todayIso(), label: 'Already done', status: 'completed' });
+		await insertSession({ date: '2026-12-31', label: 'Next up' });
 
 		const body = await fetchToday();
-		expect(body.session?.id).toBe(upcomingId);
+		expect(body.session?.id).toBe(doneId);
 	});
 
-	it('falls back to the most recent session when everything is completed', async () => {
+	it('returns session: null when everything is in the past and done, rather than re-showing a stale session', async () => {
+		// Previously this fell back to "the most recent session of any status,"
+		// which could re-surface something completed weeks ago as if it were
+		// still relevant. Nothing today and nothing planned ahead should read
+		// as a genuine rest day / all caught up, not a stale recap.
 		await insertSession({ date: '2026-01-01', label: 'Oldest', status: 'completed' });
-		const latestId = await insertSession({ date: '2026-06-01', label: 'Most recent', status: 'completed' });
+		await insertSession({ date: '2026-06-01', label: 'Most recent', status: 'completed' });
 
-		const body = await fetchToday();
-		expect(body.session?.id).toBe(latestId);
+		expect(await fetchToday()).toEqual({ session: null });
 	});
 });

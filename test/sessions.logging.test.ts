@@ -192,3 +192,28 @@ describe('PATCH /api/sessions/:id/status', () => {
 		expect(res.status).toBe(400);
 	});
 });
+
+describe('PATCH /api/sessions/:id/date', () => {
+	it('moves a session to a different date', async () => {
+		const sessionId = await insertSession({ date: '2026-08-03' });
+		const res = await SELF.fetch(`https://training-app.test/api/sessions/${sessionId}/date`, {
+			method: 'PATCH',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ date: '2026-08-05' }),
+		});
+		expect(res.status).toBe(200);
+
+		const detail = (await (await SELF.fetch(`https://training-app.test/api/sessions/${sessionId}`)).json()) as SessionDetail;
+		expect(detail.session.date).toBe('2026-08-05');
+	});
+
+	it('rejects a malformed date', async () => {
+		const sessionId = await insertSession();
+		const res = await SELF.fetch(`https://training-app.test/api/sessions/${sessionId}/date`, {
+			method: 'PATCH',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ date: '05/08/2026' }),
+		});
+		expect(res.status).toBe(400);
+	});
+});

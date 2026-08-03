@@ -381,6 +381,20 @@ button:disabled {
 	line-height: 1;
 }
 
+/* ---- Reschedule (Plan rows only) --------------------------------------------- */
+
+.reschedule {
+	margin: 0 0 var(--s3);
+}
+
+.reschedule-toggle {
+	width: auto;
+	min-height: 36px;
+	padding: var(--s1) var(--s3);
+	margin: 0 0 var(--s2);
+	font-size: 0.85rem;
+}
+
 /* ---- Exercise accordion (ExerciseCard) --------------------------------------
    Builds on the .row/.plan-row primitives above: a collapsible card whose
    summary reuses .plan-row layout, expanding to reveal set/actions detail. */
@@ -524,13 +538,17 @@ button:disabled {
 	box-shadow: inset 0 -3px 0 var(--ink);
 }
 
-/* Selected/pressed state — new markup should use aria-pressed; the
+/* Selected/pressed state — claret, the same accent used for the active nav
+   tab and "today" emphasis, so a chosen rep/RIR reads as unmistakably
+   selected rather than blending into the ink-bordered baseline chips.
+   Contrast-checked both directions: paper-on-accent is 7.71:1 light /
+   5.00:1 dark, well past AA. New markup should use aria-pressed; the
    .tap-btn--selected class is kept for the markup that exists today. */
 .tap[aria-pressed="true"],
 .tap-btn--selected {
-	background: var(--ink);
+	background: var(--accent);
 	color: var(--paper);
-	border-color: var(--ink);
+	border-color: var(--accent);
 }
 
 .tap-row--stacked .tap,

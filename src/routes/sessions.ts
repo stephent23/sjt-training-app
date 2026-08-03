@@ -99,18 +99,20 @@ sessions.get('/', async (c) => {
 sessions.get('/today', async (c) => {
 	const today = todayIso();
 
-	let session = await c.env.DB.prepare(`SELECT * FROM sessions WHERE date = ? AND status = 'planned' LIMIT 1`).bind(today).first<SessionRow>();
+	// Today's own session, whatever its status — a completed or skipped day
+	// still shows a "tap to review" recap instead of silently jumping ahead.
+	let session = await c.env.DB.prepare(`SELECT * FROM sessions WHERE date = ? LIMIT 1`).bind(today).first<SessionRow>();
 
+	// Nothing today — the next planned session in the future, if any.
 	if (!session) {
-		session = await c.env.DB.prepare(`SELECT * FROM sessions WHERE date >= ? AND status = 'planned' ORDER BY date LIMIT 1`)
+		session = await c.env.DB.prepare(`SELECT * FROM sessions WHERE date > ? AND status = 'planned' ORDER BY date LIMIT 1`)
 			.bind(today)
 			.first<SessionRow>();
 	}
 
-	if (!session) {
-		session = await c.env.DB.prepare(`SELECT * FROM sessions ORDER BY date DESC LIMIT 1`).first<SessionRow>();
-	}
-
+	// Genuinely nothing left (no session today, nothing planned ahead) — a
+	// real rest day or the whole plan is done, not a stale re-show of
+	// whatever was last completed days ago.
 	if (!session) return c.json({ session: null }, 200);
 
 	return c.json(await loadSessionDetail(c.env.DB, session));
@@ -128,6 +130,17 @@ sessions.patch('/:id/status', async (c) => {
 	const { status } = await c.req.json<{ status: SessionRow['status'] }>();
 	if (!['planned', 'completed', 'skipped'].includes(status)) return c.json({ error: 'invalid status' }, 400);
 	await c.env.DB.prepare(`UPDATE sessions SET status = ? WHERE id = ?`).bind(status, id).run();
+	return c.json({ ok: true });
+});
+
+// Move a session to a different day — a planning-time action (done at home,
+// not mid-workout), so unlike logSet/setSessionStatus this isn't routed
+// through the offline sync queue; the client awaits it directly.
+sessions.patch('/:id/date', async (c) => {
+	const id = Number(c.req.param('id'));
+	const { date } = await c.req.json<{ date: string }>();
+	if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return c.json({ error: 'invalid date' }, 400);
+	await c.env.DB.prepare(`UPDATE sessions SET date = ? WHERE id = ?`).bind(date, id).run();
 	return c.json({ ok: true });
 });
 

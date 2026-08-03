@@ -96,3 +96,15 @@ export async function applySwap(input: ApplySwapInput): Promise<void> {
 	});
 	if (!res.ok) throw new Error(`request failed: ${res.status}`);
 }
+
+// Moves a session to a different date — a planning-time action done at home,
+// not mid-workout, so unlike logSet/setSessionStatus this is a direct
+// awaited call rather than going through the offline sync queue.
+export async function setSessionDate(sessionId: number, date: string): Promise<void> {
+	const res = await fetch(`/api/sessions/${sessionId}/date`, {
+		method: 'PATCH',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ date }),
+	});
+	if (!res.ok) throw new Error(`request failed: ${res.status}`);
+}

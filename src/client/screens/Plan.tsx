@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'preact/hooks';
 import type { SessionSummary } from '../../types';
 import { todayIso } from '../../dates';
-import { fetchSessions } from '../api';
+import { fetchSessions, setSessionDate } from '../api';
 import { SessionList } from '../components/SessionRow';
 
 // Completed sessions should be reviewed, not re-logged — even on the Plan
@@ -54,10 +54,23 @@ export function Plan() {
 		);
 	}
 
+	async function handleReschedule(session: SessionSummary, date: string) {
+		// Refetch afterward rather than re-sorting locally — moving a date can
+		// change both sort order and which week a session groups under, and
+		// getting that right server-side (already sorted/filtered by the same
+		// query Plan always uses) is simpler than duplicating that logic here.
+		try {
+			await setSessionDate(session.id, date);
+			setRetryToken((t) => t + 1);
+		} catch {
+			setError('Could not move that session — try again.');
+		}
+	}
+
 	return (
 		<main class="screen">
 			<h1>Plan</h1>
-			<SessionList sessions={sessions} linkFor={linkFor} emptyMessage="Nothing planned." />
+			<SessionList sessions={sessions} linkFor={linkFor} emptyMessage="Nothing planned." onReschedule={handleReschedule} />
 		</main>
 	);
 }
