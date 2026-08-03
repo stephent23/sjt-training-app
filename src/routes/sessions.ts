@@ -96,28 +96,6 @@ sessions.get('/', async (c) => {
 	return c.json({ sessions: sessions_ });
 });
 
-sessions.get('/today', async (c) => {
-	const today = todayIso();
-
-	// Today's own session, whatever its status — a completed or skipped day
-	// still shows a "tap to review" recap instead of silently jumping ahead.
-	let session = await c.env.DB.prepare(`SELECT * FROM sessions WHERE date = ? LIMIT 1`).bind(today).first<SessionRow>();
-
-	// Nothing today — the next planned session in the future, if any.
-	if (!session) {
-		session = await c.env.DB.prepare(`SELECT * FROM sessions WHERE date > ? AND status = 'planned' ORDER BY date LIMIT 1`)
-			.bind(today)
-			.first<SessionRow>();
-	}
-
-	// Genuinely nothing left (no session today, nothing planned ahead) — a
-	// real rest day or the whole plan is done, not a stale re-show of
-	// whatever was last completed days ago.
-	if (!session) return c.json({ session: null }, 200);
-
-	return c.json(await loadSessionDetail(c.env.DB, session));
-});
-
 sessions.get('/:id', async (c) => {
 	const id = Number(c.req.param('id'));
 	const session = await c.env.DB.prepare(`SELECT * FROM sessions WHERE id = ?`).bind(id).first<SessionRow>();

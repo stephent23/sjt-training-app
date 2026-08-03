@@ -11,6 +11,15 @@ function capitalize(s: string): string {
 	return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
+// Planned is the default, unremarkable state — no badge needed. Completed
+// and skipped are both worth calling out explicitly so a row's status is
+// visible without opening it, especially once more than one row can share
+// a day.
+function statusBadge(s: SessionSummary) {
+	if (s.status === 'planned') return null;
+	return <span class="eyebrow--accent"> · {capitalize(s.status)}</span>;
+}
+
 function metaLine(s: SessionSummary): string {
 	if (s.kind === 'lift') {
 		const exercises = `${s.exercise_count} exercise${s.exercise_count === 1 ? '' : 's'}`;
@@ -59,7 +68,10 @@ export function SessionList({ sessions, linkFor, emptyMessage, onReschedule }: S
 						<div key={s.id}>
 							<a class="row plan-row" href={linkFor(s)}>
 								<div class="plan-row-main">
-									<span class="eyebrow">{s.date}</span>
+									<span class="eyebrow">
+										{s.date}
+										{statusBadge(s)}
+									</span>
 									<span class="plan-row-title">{s.label}</span>
 									<span class="plan-row-meta">{metaLine(s)}</span>
 								</div>

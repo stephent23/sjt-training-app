@@ -4,11 +4,13 @@ import { todayIso } from '../../dates';
 import { fetchSessions, setSessionDate } from '../api';
 import { SessionList } from '../components/SessionRow';
 
-// Completed sessions should be reviewed, not re-logged — even on the Plan
-// screen, which otherwise links into live logging.
+// Plan is a preview of what's coming, not a place to log from — a planned
+// session here is read-only (#/preview/:id). Logging happens on the day
+// itself, via Today. Completed/skipped sessions go to Review, same as
+// everywhere else that links to a resolved session.
 function linkFor(s: SessionSummary): string {
-	if (s.status === 'completed') return `#/review/${s.id}`;
-	return `#/${s.kind}/${s.id}`;
+	if (s.status === 'planned') return `#/preview/${s.id}`;
+	return `#/review/${s.id}`;
 }
 
 export function Plan() {

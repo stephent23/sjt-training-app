@@ -3,6 +3,7 @@ import { Shell } from './components/Shell';
 import { LiftSession } from './screens/LiftSession';
 import { Plan } from './screens/Plan';
 import { History } from './screens/History';
+import { Preview } from './screens/Preview';
 import { Review } from './screens/Review';
 import { RunSession } from './screens/RunSession';
 import { Today } from './screens/Today';
@@ -13,15 +14,16 @@ type View =
 	| { name: 'history' }
 	| { name: 'lift'; sessionId: number }
 	| { name: 'run'; sessionId: number }
-	| { name: 'review'; sessionId: number };
+	| { name: 'review'; sessionId: number }
+	| { name: 'preview'; sessionId: number };
 
-const SESSION_ROUTE = /^#\/(lift|run|review)\/(\d+)$/;
+const SESSION_ROUTE = /^#\/(lift|run|review|preview)\/(\d+)$/;
 
 function viewFromHash(): View {
 	if (location.hash === '#/plan') return { name: 'plan' };
 	if (location.hash === '#/history') return { name: 'history' };
 	const match = location.hash.match(SESSION_ROUTE);
-	if (match) return { name: match[1] as 'lift' | 'run' | 'review', sessionId: Number(match[2]) };
+	if (match) return { name: match[1] as 'lift' | 'run' | 'review' | 'preview', sessionId: Number(match[2]) };
 	return { name: 'today' };
 }
 
@@ -34,10 +36,6 @@ export function App() {
 		return () => window.removeEventListener('hashchange', onHashChange);
 	}, []);
 
-	function openSession(id: number, kind: 'lift' | 'run') {
-		location.hash = `#/${kind}/${id}`;
-	}
-
 	// Real back navigation — pops history instead of pushing a new empty-hash
 	// entry, which is what `location.hash = ''` used to do (so the browser
 	// back button walked a growing stack instead of actually going back).
@@ -48,6 +46,7 @@ export function App() {
 	if (view.name === 'lift') return <LiftSession sessionId={view.sessionId} onBack={goBack} />;
 	if (view.name === 'run') return <RunSession sessionId={view.sessionId} onBack={goBack} />;
 	if (view.name === 'review') return <Review sessionId={view.sessionId} />;
+	if (view.name === 'preview') return <Preview sessionId={view.sessionId} onBack={goBack} />;
 
 	if (view.name === 'plan')
 		return (
@@ -65,7 +64,7 @@ export function App() {
 
 	return (
 		<Shell active="today">
-			<Today onOpenSession={openSession} />
+			<Today />
 		</Shell>
 	);
 }

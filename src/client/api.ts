@@ -2,13 +2,6 @@ import type { ApplySwapInput, LogRunInput, LogSetInput, PlannedSetStatus, Sessio
 import { writeCachedSession } from './sessionCache';
 import { enqueue } from './sync';
 
-export async function fetchToday(): Promise<SessionDetail | null> {
-	const res = await fetch('/api/sessions/today');
-	if (!res.ok) throw new Error(`request failed: ${res.status}`);
-	const data = (await res.json()) as SessionDetail | { session: null };
-	return data.session ? (data as SessionDetail) : null;
-}
-
 export async function fetchSession(sessionId: number): Promise<SessionDetail> {
 	const res = await fetch(`/api/sessions/${sessionId}`);
 	if (!res.ok) throw new Error(`request failed: ${res.status}`);
