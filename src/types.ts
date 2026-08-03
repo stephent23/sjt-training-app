@@ -8,6 +8,7 @@ export type SwapScope = 'this_session' | 'permanent';
 export type SessionKind = 'lift' | 'run';
 export type SessionStatus = 'planned' | 'completed' | 'skipped';
 export type RunType = 'easy' | 'tempo' | 'intervals' | 'long';
+export type PlannedSetStatus = 'planned' | 'skipped';
 
 export interface Exercise {
 	id: number;
@@ -54,6 +55,8 @@ export interface PlannedSetDetail {
 	target_weight_kg: number | null;
 	rest_seconds: number;
 	notes: string | null;
+	status: PlannedSetStatus;
+	superset_group: number | null;
 	lastWeek: LoggedSetEntry[];
 	logged: LoggedSetEntry[];
 }
@@ -132,6 +135,7 @@ export interface SwapCandidate extends Exercise {
 
 export interface ApplySwapInput {
 	session_id: number;
+	planned_set_id: number;
 	from_exercise_id: number;
 	to_exercise_id: number;
 	reason: SwapReason;

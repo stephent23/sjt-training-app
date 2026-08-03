@@ -1,10 +1,10 @@
 import { useState } from 'preact/hooks';
-import { logSet } from '../api';
+import type { PlannedSetDetail } from '../../types';
+import { logSet, setExerciseStatus } from '../api';
+import { ExerciseCard } from '../components/ExerciseCard';
 import { RestTimer } from '../components/RestTimer';
-import { SetRow } from '../components/SetRow';
 import { SwapSheet } from '../components/SwapSheet';
 import { todayIso } from '../../dates';
-import { resolveSetDefaults } from '../../setDefaults';
 import { useSession } from '../useSession';
 
 interface LiftSessionProps {
@@ -14,13 +14,11 @@ interface LiftSessionProps {
 
 export function LiftSession({ sessionId, onBack }: LiftSessionProps) {
 	const { detail, error, setDetail, reload } = useSession(sessionId);
-	const [exerciseIndex, setExerciseIndex] = useState(0);
-	const [rest, setRest] = useState<{ startedAt: number; seconds: number } | null>(null);
-	const [swapOpen, setSwapOpen] = useState(false);
+	const [expandedId, setExpandedId] = useState<number | null>(null);
+	const [rest, setRest] = useState<{ startedAt: number; seconds: number; plannedSetId: number } | null>(null);
+	const [swapFor, setSwapFor] = useState<{ plannedSetId: number; exerciseId: number } | null>(null);
 
-	const exercise = detail?.plannedSets[exerciseIndex];
-
-	if (!detail || !exercise) {
+	if (!detail) {
 		return (
 			<main class="screen">
 				<button type="button" class="back-btn" onClick={onBack}>
@@ -40,15 +38,12 @@ export function LiftSession({ sessionId, onBack }: LiftSessionProps) {
 		);
 	}
 
-	const setIndexes = Array.from({ length: exercise.target_sets }, (_, i) => i + 1);
-	const isBodyweight = exercise.loading === 'bodyweight';
-
-	function handleLog(setIndex: number, weight: number, reps: number, rir: number) {
+	function handleLog(exercise: PlannedSetDetail, setIndex: number, weight: number, reps: number, rir: number) {
 		const restTaken = rest ? Math.round((Date.now() - rest.startedAt) / 1000) : null;
 		const updated = logSet(
 			sessionId,
 			{
-				exercise_id: exercise!.exercise_id,
+				exercise_id: exercise.exercise_id,
 				set_index: setIndex,
 				weight_kg: weight,
 				reps,
@@ -59,11 +54,29 @@ export function LiftSession({ sessionId, onBack }: LiftSessionProps) {
 			detail!,
 		);
 		setDetail(updated);
-		setRest({ startedAt: Date.now(), seconds: exercise!.rest_seconds });
+
+		const partner =
+			exercise.superset_group == null ? null : updated.plannedSets.find((p) => p.id !== exercise.id && p.superset_group === exercise.superset_group);
+		if (partner) {
+			const partnerLoggedThisRound = partner.logged.some((l) => l.set_index === setIndex);
+			if (!partnerLoggedThisRound) {
+				setRest(null);
+				setExpandedId(partner.id);
+				return;
+			}
+			setRest({ startedAt: Date.now(), seconds: Math.max(exercise.rest_seconds, partner.rest_seconds), plannedSetId: exercise.id });
+			return;
+		}
+
+		setRest({ startedAt: Date.now(), seconds: exercise.rest_seconds, plannedSetId: exercise.id });
+	}
+
+	function handleSkipToggle(exercise: PlannedSetDetail) {
+		setDetail(setExerciseStatus(sessionId, exercise.id, exercise.status === 'skipped' ? 'planned' : 'skipped', detail!));
 	}
 
 	function afterSwap() {
-		setSwapOpen(false);
+		setSwapFor(null);
 		reload();
 	}
 
@@ -75,50 +88,30 @@ export function LiftSession({ sessionId, onBack }: LiftSessionProps) {
 
 			{error && <p class="eyebrow">{error}</p>}
 
-			<div class="exercise-nav">
-				<button type="button" disabled={exerciseIndex === 0} onClick={() => setExerciseIndex((i) => i - 1)}>
-					‹
-				</button>
-				<span>
-					{exerciseIndex + 1} / {detail.plannedSets.length}
-				</span>
-				<button type="button" disabled={exerciseIndex === detail.plannedSets.length - 1} onClick={() => setExerciseIndex((i) => i + 1)}>
-					›
-				</button>
-			</div>
+			{detail.plannedSets.map((exercise) => (
+				<ExerciseCard
+					key={exercise.id}
+					exercise={exercise}
+					expanded={expandedId === exercise.id}
+					onToggle={() => setExpandedId((id) => (id === exercise.id ? null : exercise.id))}
+					onLog={(si, w, r, rir) => handleLog(exercise, si, w, r, rir)}
+					onSwap={() => setSwapFor({ plannedSetId: exercise.id, exerciseId: exercise.exercise_id })}
+					onSkipToggle={() => handleSkipToggle(exercise)}
+					restNode={
+						rest && rest.plannedSetId === exercise.id ? <RestTimer totalSeconds={rest.seconds} startedAt={rest.startedAt} onSkip={() => setRest(null)} /> : null
+					}
+				/>
+			))}
 
-			<h1>{exercise.exercise_name}</h1>
-			<p class="exercise-target">
-				{exercise.target_sets} × {exercise.rep_low}-{exercise.rep_high}
-				{exercise.notes ? ` — ${exercise.notes}` : ''}
-			</p>
-
-			<button type="button" class="btn-secondary" onClick={() => setSwapOpen(true)}>
-				Swap exercise
-			</button>
-
-			{rest && <RestTimer totalSeconds={rest.seconds} startedAt={rest.startedAt} onSkip={() => setRest(null)} />}
-
-			{setIndexes.map((si) => {
-				const defaults = resolveSetDefaults(exercise, si);
-				return (
-					<SetRow
-						key={`${exercise.exercise_id}-${si}`}
-						setIndex={si}
-						repLow={exercise.rep_low}
-						repHigh={exercise.rep_high}
-						incrementKg={exercise.increment_kg}
-						isBodyweight={isBodyweight}
-						defaultWeight={defaults.weight_kg}
-						defaultReps={defaults.reps}
-						logged={exercise.logged.find((l) => l.set_index === si)}
-						lastWeek={exercise.lastWeek.find((l) => l.set_index === si)}
-						onLog={(weight, reps, rir) => handleLog(si, weight, reps, rir)}
-					/>
-				);
-			})}
-
-			{swapOpen && <SwapSheet sessionId={sessionId} fromExerciseId={exercise.exercise_id} onClose={() => setSwapOpen(false)} onSwapped={afterSwap} />}
+			{swapFor && (
+				<SwapSheet
+					sessionId={sessionId}
+					fromExerciseId={swapFor.exerciseId}
+					plannedSetId={swapFor.plannedSetId}
+					onClose={() => setSwapFor(null)}
+					onSwapped={afterSwap}
+				/>
+			)}
 		</main>
 	);
 }

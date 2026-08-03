@@ -381,6 +381,63 @@ button:disabled {
 	line-height: 1;
 }
 
+/* ---- Exercise accordion (ExerciseCard) --------------------------------------
+   Builds on the .row/.plan-row primitives above: a collapsible card whose
+   summary reuses .plan-row layout, expanding to reveal set/actions detail. */
+
+.exercise-card {
+	padding: 0;
+}
+
+.exercise-card-summary {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--s3);
+	width: 100%;
+	padding: var(--s4) 0;
+	background: none;
+	border: none;
+	color: inherit;
+	font: inherit;
+	text-align: left;
+	cursor: pointer;
+}
+
+.exercise-card-body {
+	padding: 0 0 var(--s4);
+}
+
+.exercise-card-actions {
+	display: flex;
+	gap: var(--s3);
+	margin-bottom: var(--s3);
+}
+
+.exercise-card-actions .btn-secondary {
+	width: auto;
+	flex: 1 1 0;
+	margin: 0;
+}
+
+.exercise-card--skipped .plan-row-title,
+.exercise-card--skipped .plan-row-meta {
+	color: var(--muted);
+	text-decoration: line-through;
+	text-decoration-color: var(--rule);
+}
+
+.exercise-card--expanded .exercise-card-summary {
+	border-bottom: 1px solid var(--rule);
+}
+
+/* Superset pairing: a shared left rule connecting the two cards. */
+.exercise-card--superset {
+	border-left: 3px solid var(--ink);
+	padding-left: var(--s3);
+	margin-left: calc(-1 * var(--s3) - 3px);
+}
+
 .plan-row--today .eyebrow {
 	color: var(--accent);
 }
@@ -411,7 +468,7 @@ button:disabled {
 
 .btn-secondary {
 	background: transparent;
-	border: 1px solid var(--rule);
+	border: 1.5px solid var(--ink);
 	color: var(--ink);
 }
 
@@ -440,11 +497,11 @@ button:disabled {
 
 .tap,
 .tap-btn {
-	min-height: 44px;
-	min-width: 44px;
+	min-height: 48px;
+	min-width: 48px;
 	flex: 1 1 2.75rem;
-	background: transparent;
-	border: 1px solid var(--rule);
+	background: var(--paper-alt);
+	border: 1.5px solid var(--ink);
 	color: var(--ink);
 	border-radius: var(--radius);
 	font: 600 15px var(--sans);
@@ -463,16 +520,17 @@ button:disabled {
    this with !important. */
 .tap--target,
 .tap-btn--target {
-	border-color: var(--ink);
 	font-weight: 700;
+	box-shadow: inset 0 -3px 0 var(--ink);
 }
 
 /* Selected/pressed state — new markup should use aria-pressed; the
    .tap-btn--selected class is kept for the markup that exists today. */
 .tap[aria-pressed="true"],
 .tap-btn--selected {
+	background: var(--ink);
+	color: var(--paper);
 	border-color: var(--ink);
-	background: var(--paper-alt);
 }
 
 .tap-row--stacked .tap,
@@ -493,28 +551,28 @@ button:disabled {
 }
 
 .stepper-btn {
-	min-width: 44px;
-	min-height: 44px;
-	width: 3rem;
-	height: 3rem;
+	min-width: 48px;
+	min-height: 48px;
+	width: 3.25rem;
+	height: 3.25rem;
 	border-radius: var(--radius);
-	border: 1px solid var(--rule);
-	background: transparent;
+	border: 1.5px solid var(--ink);
+	background: var(--paper-alt);
 	color: var(--ink);
-	font-size: 1.5rem;
+	font-size: 1.6rem;
 	line-height: 1;
 	cursor: pointer;
 }
 
 .stepper-input {
 	width: 4.75rem;
-	min-height: 44px;
+	min-height: 48px;
 	text-align: center;
 	font: 600 1.4rem var(--mono);
 	font-variant-numeric: tabular-nums;
-	border: 1px solid var(--rule);
+	border: 1.5px solid var(--ink);
 	border-radius: var(--radius);
-	background: transparent;
+	background: var(--paper-alt);
 	color: var(--ink);
 	padding: var(--s1) var(--s2);
 	appearance: textfield;

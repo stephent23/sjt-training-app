@@ -9,14 +9,16 @@ INSERT INTO sessions (date, kind, label, status, week_number) VALUES
 ('2026-08-06', 'run', 'Intervals', 'planned', 1),
 ('2026-08-08', 'run', 'Long run', 'planned', 1);
 
--- Lift A: squat pattern, horizontal + vertical push, lateral raise, triceps, core
-INSERT INTO planned_sets (session_id, exercise_id, order_index, target_sets, rep_low, rep_high, target_weight_kg, rest_seconds, notes) VALUES
-((SELECT id FROM sessions WHERE date = '2026-08-03' AND label = 'Lift A'), (SELECT id FROM exercises WHERE name = 'Goblet squat'), 1, 3, 8, 10, NULL, 150, 'Calibration — no history yet; log a weight you can hit for the target reps at ~2 RIR.'),
-((SELECT id FROM sessions WHERE date = '2026-08-03' AND label = 'Lift A'), (SELECT id FROM exercises WHERE name = 'Neutral-grip DB press'), 2, 3, 6, 10, NULL, 150, 'Calibration — no history yet; log a weight you can hit for the target reps at ~2 RIR.'),
-((SELECT id FROM sessions WHERE date = '2026-08-03' AND label = 'Lift A'), (SELECT id FROM exercises WHERE name = 'Machine shoulder press'), 3, 3, 10, 12, NULL, 100, 'Calibration — no history yet; log a weight you can hit for the target reps at ~2 RIR.'),
-((SELECT id FROM sessions WHERE date = '2026-08-03' AND label = 'Lift A'), (SELECT id FROM exercises WHERE name = 'Lateral raise'), 4, 3, 12, 15, NULL, 60, 'Calibration — no history yet; log a weight you can hit for the target reps at ~2 RIR.'),
-((SELECT id FROM sessions WHERE date = '2026-08-03' AND label = 'Lift A'), (SELECT id FROM exercises WHERE name = 'Triceps pushdown'), 5, 3, 12, 15, NULL, 60, 'Calibration — no history yet; log a weight you can hit for the target reps at ~2 RIR.'),
-((SELECT id FROM sessions WHERE date = '2026-08-03' AND label = 'Lift A'), (SELECT id FROM exercises WHERE name = 'Dead bug'), 6, 3, 10, 12, NULL, 45, 'Bodyweight — reps per side.');
+-- Lift A: squat pattern, horizontal + vertical push, lateral raise, triceps, core.
+-- Lateral raise + Triceps pushdown are paired as a superset (superset_group 1):
+-- short rest after the first half, normal rest after the second, before moving on.
+INSERT INTO planned_sets (session_id, exercise_id, order_index, target_sets, rep_low, rep_high, target_weight_kg, rest_seconds, notes, superset_group) VALUES
+((SELECT id FROM sessions WHERE date = '2026-08-03' AND label = 'Lift A'), (SELECT id FROM exercises WHERE name = 'Goblet squat'), 1, 3, 8, 10, NULL, 150, 'Calibration — no history yet; log a weight you can hit for the target reps at ~2 RIR.', NULL),
+((SELECT id FROM sessions WHERE date = '2026-08-03' AND label = 'Lift A'), (SELECT id FROM exercises WHERE name = 'Neutral-grip DB press'), 2, 3, 6, 10, NULL, 150, 'Calibration — no history yet; log a weight you can hit for the target reps at ~2 RIR.', NULL),
+((SELECT id FROM sessions WHERE date = '2026-08-03' AND label = 'Lift A'), (SELECT id FROM exercises WHERE name = 'Machine shoulder press'), 3, 3, 10, 12, NULL, 100, 'Calibration — no history yet; log a weight you can hit for the target reps at ~2 RIR.', NULL),
+((SELECT id FROM sessions WHERE date = '2026-08-03' AND label = 'Lift A'), (SELECT id FROM exercises WHERE name = 'Lateral raise'), 4, 3, 12, 15, NULL, 15, 'Calibration — no history yet; log a weight you can hit for the target reps at ~2 RIR. Superset with triceps pushdown — short rest, then go straight into the next exercise.', 1),
+((SELECT id FROM sessions WHERE date = '2026-08-03' AND label = 'Lift A'), (SELECT id FROM exercises WHERE name = 'Triceps pushdown'), 5, 3, 12, 15, NULL, 60, 'Calibration — no history yet; log a weight you can hit for the target reps at ~2 RIR. Superset with lateral raise — full rest after this before the next exercise.', 1),
+((SELECT id FROM sessions WHERE date = '2026-08-03' AND label = 'Lift A'), (SELECT id FROM exercises WHERE name = 'Dead bug'), 6, 3, 10, 12, NULL, 45, 'Bodyweight — reps per side.', NULL);
 
 -- Lift B: hinge, vertical + horizontal pull, single-leg, hamstring curl, biceps
 INSERT INTO planned_sets (session_id, exercise_id, order_index, target_sets, rep_low, rep_high, target_weight_kg, rest_seconds, notes) VALUES

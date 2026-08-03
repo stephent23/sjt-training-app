@@ -29,6 +29,8 @@ function planned(overrides: Partial<PlannedSetDetail> = {}): PlannedSetDetail {
 		target_weight_kg: null,
 		rest_seconds: 120,
 		notes: null,
+		status: 'planned',
+		superset_group: null,
 		lastWeek: [],
 		logged: [],
 		...overrides,

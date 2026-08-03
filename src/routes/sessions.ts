@@ -8,7 +8,8 @@ async function loadSessionDetail(db: D1Database, session: SessionRow): Promise<S
 	const { results: plannedSetRows } = await db
 		.prepare(
 			`SELECT ps.id, ps.exercise_id, e.name AS exercise_name, e.pattern, e.loading, e.increment_kg,
-			        ps.order_index, ps.target_sets, ps.rep_low, ps.rep_high, ps.target_weight_kg, ps.rest_seconds, ps.notes
+			        ps.order_index, ps.target_sets, ps.rep_low, ps.rep_high, ps.target_weight_kg, ps.rest_seconds, ps.notes,
+			        ps.status, ps.superset_group
 			 FROM planned_sets ps JOIN exercises e ON e.id = ps.exercise_id
 			 WHERE ps.session_id = ?
 			 ORDER BY ps.order_index`,
@@ -127,6 +128,15 @@ sessions.patch('/:id/status', async (c) => {
 	const { status } = await c.req.json<{ status: SessionRow['status'] }>();
 	if (!['planned', 'completed', 'skipped'].includes(status)) return c.json({ error: 'invalid status' }, 400);
 	await c.env.DB.prepare(`UPDATE sessions SET status = ? WHERE id = ?`).bind(status, id).run();
+	return c.json({ ok: true });
+});
+
+sessions.patch('/:id/exercises/:plannedSetId/status', async (c) => {
+	const sessionId = Number(c.req.param('id'));
+	const plannedSetId = Number(c.req.param('plannedSetId'));
+	const { status } = await c.req.json<{ status: PlannedSetDetail['status'] }>();
+	if (!['planned', 'skipped'].includes(status)) return c.json({ error: 'invalid status' }, 400);
+	await c.env.DB.prepare(`UPDATE planned_sets SET status = ? WHERE id = ? AND session_id = ?`).bind(status, plannedSetId, sessionId).run();
 	return c.json({ ok: true });
 });
 

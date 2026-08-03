@@ -39,7 +39,10 @@ describe('POST /api/swaps', () => {
 		const sessionId = await insertSession();
 		await insertPlannedSet(sessionId, from, { order_index: 1, target_weight_kg: 24 });
 
-		const input: ApplySwapInput = { session_id: sessionId, from_exercise_id: from, to_exercise_id: to, reason: 'equipment_busy', scope: 'this_session' };
+		const before = (await (await SELF.fetch(`https://training-app.test/api/sessions/${sessionId}`)).json()) as SessionDetail;
+		const plannedSetId = before.plannedSets[0].id;
+
+		const input: ApplySwapInput = { session_id: sessionId, planned_set_id: plannedSetId, from_exercise_id: from, to_exercise_id: to, reason: 'equipment_busy', scope: 'this_session' };
 		const res = await SELF.fetch('https://training-app.test/api/swaps', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
@@ -50,5 +53,23 @@ describe('POST /api/swaps', () => {
 		const detail = (await (await SELF.fetch(`https://training-app.test/api/sessions/${sessionId}`)).json()) as SessionDetail;
 		expect(detail.plannedSets[0].exercise_name).toBe('Leg press');
 		expect(detail.plannedSets[0].target_weight_kg).toBeNull();
+	});
+
+	it('with two planned_sets rows sharing the same exercise in one session, only the targeted row is repointed', async () => {
+		const shared = await insertExercise({ name: 'Cable fly', pattern: 'isolation_push' });
+		const to = await insertExercise({ name: 'Pec deck', pattern: 'isolation_push' });
+		const sessionId = await insertSession();
+		await insertPlannedSet(sessionId, shared, { order_index: 1 });
+		await insertPlannedSet(sessionId, shared, { order_index: 2 }); // e.g. two superset halves sharing an isolation move
+
+		const before = (await (await SELF.fetch(`https://training-app.test/api/sessions/${sessionId}`)).json()) as SessionDetail;
+		const targetId = before.plannedSets[0].id;
+
+		const input: ApplySwapInput = { session_id: sessionId, planned_set_id: targetId, from_exercise_id: shared, to_exercise_id: to, reason: 'preference', scope: 'this_session' };
+		await SELF.fetch('https://training-app.test/api/swaps', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) });
+
+		const after = (await (await SELF.fetch(`https://training-app.test/api/sessions/${sessionId}`)).json()) as SessionDetail;
+		expect(after.plannedSets.find((p) => p.id === targetId)?.exercise_name).toBe('Pec deck');
+		expect(after.plannedSets.find((p) => p.id !== targetId)?.exercise_name).toBe('Cable fly'); // untouched
 	});
 });

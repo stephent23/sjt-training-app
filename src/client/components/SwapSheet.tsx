@@ -5,6 +5,7 @@ import { applySwap, fetchSwapCandidates } from '../api';
 interface SwapSheetProps {
 	sessionId: number;
 	fromExerciseId: number;
+	plannedSetId: number;
 	onClose: () => void;
 	onSwapped: () => void;
 }
@@ -16,7 +17,7 @@ const REASONS: { value: SwapReason; label: string }[] = [
 	{ value: 'unavailable', label: "Doesn't exist here" },
 ];
 
-export function SwapSheet({ sessionId, fromExerciseId, onClose, onSwapped }: SwapSheetProps) {
+export function SwapSheet({ sessionId, fromExerciseId, plannedSetId, onClose, onSwapped }: SwapSheetProps) {
 	const [reason, setReason] = useState<SwapReason | null>(null);
 	const [painType, setPainType] = useState<'shoulder' | 'back' | null>(null);
 	const [candidates, setCandidates] = useState<SwapCandidate[]>([]);
@@ -48,7 +49,7 @@ export function SwapSheet({ sessionId, fromExerciseId, onClose, onSwapped }: Swa
 		if (!reason || chosen === null) return;
 		setConfirming(true);
 		try {
-			await applySwap({ session_id: sessionId, from_exercise_id: fromExerciseId, to_exercise_id: chosen, reason, scope });
+			await applySwap({ session_id: sessionId, planned_set_id: plannedSetId, from_exercise_id: fromExerciseId, to_exercise_id: chosen, reason, scope });
 			onSwapped();
 		} finally {
 			setConfirming(false);

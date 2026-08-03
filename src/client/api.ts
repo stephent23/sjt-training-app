@@ -1,4 +1,4 @@
-import type { ApplySwapInput, LogRunInput, LogSetInput, SessionDetail, SessionStatus, SessionSummary, SwapCandidate } from '../types';
+import type { ApplySwapInput, LogRunInput, LogSetInput, PlannedSetStatus, SessionDetail, SessionStatus, SessionSummary, SwapCandidate } from '../types';
 import { writeCachedSession } from './sessionCache';
 import { enqueue } from './sync';
 
@@ -51,6 +51,19 @@ export function logRun(sessionId: number, input: LogRunInput, detail: SessionDet
 // beyond what the caller already holds.
 export function setSessionStatus(sessionId: number, status: SessionStatus): void {
 	enqueue(`/api/sessions/${sessionId}/status`, { status }, 'PATCH');
+}
+
+// Marks one exercise within a session planned/skipped — independent of the
+// session-level status. Optimistically patches the local plannedSets array
+// (same find-and-replace shape as logSet) so the accordion reflects the
+// change immediately; the actual write goes through the same offline-safe
+// queue as everything else.
+export function setExerciseStatus(sessionId: number, plannedSetId: number, status: PlannedSetStatus, detail: SessionDetail): SessionDetail {
+	const plannedSets = detail.plannedSets.map((ps) => (ps.id === plannedSetId ? { ...ps, status } : ps));
+	const updated: SessionDetail = { ...detail, plannedSets };
+	writeCachedSession(sessionId, updated);
+	enqueue(`/api/sessions/${sessionId}/exercises/${plannedSetId}/status`, { status }, 'PATCH');
+	return updated;
 }
 
 export async function fetchSessions(params: { from?: string; to?: string; order?: 'asc' | 'desc'; limit?: number } = {}): Promise<SessionSummary[]> {

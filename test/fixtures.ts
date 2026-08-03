@@ -1,5 +1,5 @@
 import { env } from 'cloudflare:test';
-import type { Exercise, Loading, Modality, RunType, SessionKind, SessionStatus } from '../src/types';
+import type { Exercise, Loading, Modality, PlannedSetStatus, RunType, SessionKind, SessionStatus } from '../src/types';
 
 // Re-exported so callers (e.g. test/sessions.today.test.ts) compare against
 // the exact same Europe/London-based "today" the route itself computes —
@@ -50,14 +50,39 @@ export async function insertPlannedSet(
 		target_weight_kg: number | null;
 		rest_seconds: number;
 		notes: string | null;
+		status: PlannedSetStatus;
+		superset_group: number | null;
 	}> = {},
 ): Promise<void> {
-	const p = { order_index: 1, target_sets: 3, rep_low: 8, rep_high: 10, target_weight_kg: null, rest_seconds: 120, notes: null, ...overrides };
+	const p = {
+		order_index: 1,
+		target_sets: 3,
+		rep_low: 8,
+		rep_high: 10,
+		target_weight_kg: null,
+		rest_seconds: 120,
+		notes: null,
+		status: 'planned' as PlannedSetStatus,
+		superset_group: null,
+		...overrides,
+	};
 	await env.DB.prepare(
-		`INSERT INTO planned_sets (session_id, exercise_id, order_index, target_sets, rep_low, rep_high, target_weight_kg, rest_seconds, notes)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO planned_sets (session_id, exercise_id, order_index, target_sets, rep_low, rep_high, target_weight_kg, rest_seconds, notes, status, superset_group)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 	)
-		.bind(sessionId, exerciseId, p.order_index, p.target_sets, p.rep_low, p.rep_high, p.target_weight_kg, p.rest_seconds, p.notes)
+		.bind(
+			sessionId,
+			exerciseId,
+			p.order_index,
+			p.target_sets,
+			p.rep_low,
+			p.rep_high,
+			p.target_weight_kg,
+			p.rest_seconds,
+			p.notes,
+			p.status,
+			p.superset_group,
+		)
 		.run();
 }
 

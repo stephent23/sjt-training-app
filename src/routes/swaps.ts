@@ -38,8 +38,8 @@ swaps.post('/', async (c) => {
 
 	// Never carry a target weight across a swap — per-hand and total-stack
 	// numbers aren't comparable, so the substitute starts from its own history.
-	await c.env.DB.prepare(`UPDATE planned_sets SET exercise_id = ?, target_weight_kg = NULL WHERE session_id = ? AND exercise_id = ?`)
-		.bind(body.to_exercise_id, body.session_id, body.from_exercise_id)
+	await c.env.DB.prepare(`UPDATE planned_sets SET exercise_id = ?, target_weight_kg = NULL WHERE id = ? AND session_id = ?`)
+		.bind(body.to_exercise_id, body.planned_set_id, body.session_id)
 		.run();
 
 	return c.json({ ok: true });
