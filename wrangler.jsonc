@@ -27,14 +27,11 @@
 	],
 	"observability": {
 		"enabled": true
-	},
-	// Provisioned automatically on deploy, as long as sjtate.co.uk is a zone
-	// on this Cloudflare account. Auth is Cloudflare Access, configured
-	// separately in the Zero Trust dashboard against this hostname.
-	"routes": [
-		{
-			"pattern": "training.sjtate.co.uk",
-			"custom_domain": true
-		}
-	]
+	}
+
+	// No custom domain for now — sjtate.co.uk is on GoDaddy nameservers, and
+	// Cloudflare only supports zone-based routing for domains it's authoritative
+	// for. Self-serve subdomain-only delegation isn't available, and migrating
+	// the whole zone is a separate decision. Running on the default *.workers.dev
+	// URL in the meantime; Cloudflare Access protects that identically.
 }
