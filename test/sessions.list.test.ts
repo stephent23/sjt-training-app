@@ -20,6 +20,13 @@ describe('GET /api/sessions', () => {
 		expect(sessions[0].id).toBe(inRangeId);
 	});
 
+	it('omitting from includes sessions from before today, not just today onward — this is how History queries', async () => {
+		const pastId = await insertSession({ date: '2026-07-01', label: 'Yesterday-ish' });
+
+		const { sessions } = await fetchSessions('?to=2026-08-01&order=desc');
+		expect(sessions.map((s) => s.id)).toContain(pastId);
+	});
+
 	it('order=desc reverses the default ascending order', async () => {
 		const firstId = await insertSession({ date: '2026-07-01', label: 'First' });
 		const secondId = await insertSession({ date: '2026-07-08', label: 'Second' });

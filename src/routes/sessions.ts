@@ -1,5 +1,4 @@
 import { Hono } from 'hono';
-import { todayIso } from '../dates';
 import type { LoggedRunEntry, LoggedSetEntry, LogRunInput, LogSetInput, PlannedSetDetail, SessionDetail, SessionRow, SessionSummary } from '../types';
 
 export const sessions = new Hono<{ Bindings: Env }>();
@@ -65,7 +64,7 @@ interface SessionSummaryRow extends Omit<SessionSummary, 'has_logged_run'> {
 }
 
 sessions.get('/', async (c) => {
-	const from = c.req.query('from') ?? todayIso();
+	const from = c.req.query('from') ?? '0000-01-01';
 	const to = c.req.query('to') ?? '9999-12-31';
 	const order = c.req.query('order') === 'desc' ? 'DESC' : 'ASC';
 	const limitParam = Number(c.req.query('limit'));
