@@ -1,8 +1,22 @@
 import { Hono } from 'hono';
-import type { LoggedRunEntry, LoggedSetEntry, LogRunInput, LogSetInput, PlannedSetDetail, SessionDetail, SessionRow, SessionSummary } from '../types';
+import { sqlIn } from '../sql';
+import type {
+	LoggedRunEntry,
+	LoggedSetEntry,
+	LogRunInput,
+	LogSetInput,
+	PlannedSetDetail,
+	SessionDetail,
+	SessionFeedback,
+	SessionRow,
+	SessionSummary,
+} from '../types';
 
 export const sessions = new Hono<{ Bindings: Env }>();
 
+// Three queries total, regardless of how many exercises a session has. This
+// used to run two per planned set (logged + lastWeek), so an 11-exercise
+// session cost 23 D1 round-trips to render one screen.
 async function loadSessionDetail(db: D1Database, session: SessionRow): Promise<SessionDetail> {
 	const { results: plannedSetRows } = await db
 		.prepare(
@@ -16,29 +30,58 @@ async function loadSessionDetail(db: D1Database, session: SessionRow): Promise<S
 		.bind(session.id)
 		.all<Omit<PlannedSetDetail, 'lastWeek' | 'logged'>>();
 
-	const plannedSets: PlannedSetDetail[] = [];
-	for (const row of plannedSetRows) {
-		const { results: logged } = await db
-			.prepare(
-				`SELECT set_index, weight_kg, reps, rir, rest_taken_seconds, performed_on FROM logged_sets
-				 WHERE session_id = ? AND exercise_id = ? ORDER BY set_index`,
-			)
-			.bind(session.id, row.exercise_id)
-			.all<LoggedSetEntry>();
+	const exerciseIds = [...new Set(plannedSetRows.map((row) => row.exercise_id))];
 
-		const { results: lastWeek } = await db
-			.prepare(
-				`SELECT set_index, weight_kg, reps, rir, rest_taken_seconds, performed_on FROM logged_sets
-				 WHERE exercise_id = ? AND session_id != ? AND performed_on = (
-				   SELECT MAX(performed_on) FROM logged_sets WHERE exercise_id = ? AND session_id != ?
-				 )
-				 ORDER BY set_index`,
-			)
-			.bind(row.exercise_id, session.id, row.exercise_id, session.id)
-			.all<LoggedSetEntry>();
+	// Everything logged against THIS session, for every exercise at once.
+	const { results: loggedRows } = exerciseIds.length
+		? await db
+				.prepare(
+					`SELECT exercise_id, set_index, weight_kg, reps, rir, rest_taken_seconds, performed_on FROM logged_sets
+					 WHERE session_id = ? ORDER BY exercise_id, set_index`,
+				)
+				.bind(session.id)
+				.all<LoggedSetEntry & { exercise_id: number }>()
+		: { results: [] as (LoggedSetEntry & { exercise_id: number })[] };
 
-		plannedSets.push({ ...row, logged, lastWeek });
+	// "Last week" per exercise = every set from the most recent performed_on
+	// that exercise has, ignoring this session. DENSE_RANK partitioned by
+	// exercise reproduces the old per-exercise `performed_on = (SELECT MAX(...))`
+	// subquery exactly — all rows sharing that latest date rank 1 — but for
+	// every exercise in one pass instead of one query each.
+	const { results: lastWeekRows } = exerciseIds.length
+		? await db
+				.prepare(
+					`WITH ranked AS (
+					   SELECT exercise_id, set_index, weight_kg, reps, rir, rest_taken_seconds, performed_on,
+					          DENSE_RANK() OVER (PARTITION BY exercise_id ORDER BY performed_on DESC) AS rnk
+					   FROM logged_sets
+					   WHERE exercise_id IN (${sqlIn(exerciseIds.length)}) AND session_id != ?
+					 )
+					 SELECT exercise_id, set_index, weight_kg, reps, rir, rest_taken_seconds, performed_on
+					 FROM ranked WHERE rnk = 1 ORDER BY exercise_id, set_index`,
+				)
+				.bind(...exerciseIds, session.id)
+				.all<LoggedSetEntry & { exercise_id: number }>()
+		: { results: [] as (LoggedSetEntry & { exercise_id: number })[] };
+
+	function groupByExercise(rows: (LoggedSetEntry & { exercise_id: number })[]): Map<number, LoggedSetEntry[]> {
+		const grouped = new Map<number, LoggedSetEntry[]>();
+		for (const { exercise_id, ...entry } of rows) {
+			const list = grouped.get(exercise_id) ?? [];
+			list.push(entry);
+			grouped.set(exercise_id, list);
+		}
+		return grouped;
 	}
+
+	const loggedByExercise = groupByExercise(loggedRows);
+	const lastWeekByExercise = groupByExercise(lastWeekRows);
+
+	const plannedSets: PlannedSetDetail[] = plannedSetRows.map((row) => ({
+		...row,
+		logged: loggedByExercise.get(row.exercise_id) ?? [],
+		lastWeek: lastWeekByExercise.get(row.exercise_id) ?? [],
+	}));
 
 	const plannedRun = await db
 		.prepare(`SELECT id, run_type, target_minutes, target_km, structure_json FROM planned_runs WHERE session_id = ?`)
@@ -50,7 +93,18 @@ async function loadSessionDetail(db: D1Database, session: SessionRow): Promise<S
 		.bind(session.id)
 		.first<LoggedRunEntry>();
 
-	return { session, plannedSets, plannedRun: (plannedRun as SessionDetail['plannedRun']) ?? null, loggedRun: loggedRun ?? null };
+	const feedback = await db
+		.prepare(`SELECT back_pain_0_3, shoulder_pain_0_3, energy_1_5, note FROM session_feedback WHERE session_id = ?`)
+		.bind(session.id)
+		.first<SessionFeedback>();
+
+	return {
+		session,
+		plannedSets,
+		plannedRun: (plannedRun as SessionDetail['plannedRun']) ?? null,
+		loggedRun: loggedRun ?? null,
+		feedback: feedback ?? null,
+	};
 }
 
 // One aggregate query for the whole list — no N+1 per-session lookups.
@@ -153,6 +207,38 @@ sessions.post('/:id/sets', async (c) => {
 		   logged_at = datetime('now')`,
 	)
 		.bind(sessionId, body.exercise_id, body.set_index, body.weight_kg, body.reps, body.rir, body.rest_taken_seconds, body.performed_on)
+		.run();
+
+	return c.json({ ok: true });
+});
+
+// How the session felt. Upserts on session_id (which is the PK), so this goes
+// through the same offline-safe queue as set/run logging without ever
+// double-inserting on a retry. Every field is optional — someone may only
+// want to flag pain, or only energy — but a present value has to be in range,
+// rejected with a 400 rather than falling through to a D1 CHECK 500 (which
+// the sync queue would then retry forever).
+sessions.put('/:id/feedback', async (c) => {
+	const sessionId = Number(c.req.param('id'));
+	const body = await c.req.json<SessionFeedback>();
+
+	const inRange = (value: number | null | undefined, low: number, high: number): boolean =>
+		value === null || value === undefined || (Number.isInteger(value) && value >= low && value <= high);
+
+	if (!inRange(body.back_pain_0_3, 0, 3)) return c.json({ error: 'invalid back_pain_0_3' }, 400);
+	if (!inRange(body.shoulder_pain_0_3, 0, 3)) return c.json({ error: 'invalid shoulder_pain_0_3' }, 400);
+	if (!inRange(body.energy_1_5, 1, 5)) return c.json({ error: 'invalid energy_1_5' }, 400);
+
+	await c.env.DB.prepare(
+		`INSERT INTO session_feedback (session_id, back_pain_0_3, shoulder_pain_0_3, energy_1_5, note)
+		 VALUES (?, ?, ?, ?, ?)
+		 ON CONFLICT (session_id) DO UPDATE SET
+		   back_pain_0_3 = excluded.back_pain_0_3,
+		   shoulder_pain_0_3 = excluded.shoulder_pain_0_3,
+		   energy_1_5 = excluded.energy_1_5,
+		   note = excluded.note`,
+	)
+		.bind(sessionId, body.back_pain_0_3 ?? null, body.shoulder_pain_0_3 ?? null, body.energy_1_5 ?? null, body.note ?? null)
 		.run();
 
 	return c.json({ ok: true });

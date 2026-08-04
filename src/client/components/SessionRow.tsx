@@ -1,15 +1,12 @@
 import { useState } from 'preact/hooks';
 import type { SessionSummary } from '../../types';
+import { capitalize } from '../format';
 import { weekDatesFor, WEEKDAY_LABELS } from '../weekDates';
 
 // Shared list-row rendering used by both Plan (upcoming) and History (past)
 // — the two screens differ only in which date range they fetch, where a row
 // links to, and whether rescheduling is offered (Plan only — moving a past
 // session doesn't make sense), not in how a row looks.
-
-function capitalize(s: string): string {
-	return s.charAt(0).toUpperCase() + s.slice(1);
-}
 
 // Planned is the default, unremarkable state — no badge needed. Completed
 // and skipped are both worth calling out explicitly so a row's status is

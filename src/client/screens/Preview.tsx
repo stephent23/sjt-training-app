@@ -1,19 +1,11 @@
+import { RunStructure } from '../components/RunStructure';
+import { SessionScreenFallback } from '../components/SessionScreenFallback';
+import { runSummary } from '../format';
 import { useSession } from '../useSession';
-import type { RunStep } from '../../types';
 
 interface PreviewProps {
 	sessionId: number;
 	onBack: () => void;
-}
-
-function parseStructure(json: string | null): RunStep[] | null {
-	if (!json) return null;
-	try {
-		const parsed = JSON.parse(json);
-		return Array.isArray(parsed?.steps) ? parsed.steps : null;
-	} catch {
-		return null;
-	}
 }
 
 // Read-only look at a session that hasn't happened yet, reached from Plan.
@@ -23,25 +15,7 @@ function parseStructure(json: string | null): RunStep[] | null {
 export function Preview({ sessionId, onBack }: PreviewProps) {
 	const { detail, error, reload } = useSession(sessionId);
 
-	if (!detail) {
-		return (
-			<main class="screen">
-				<button type="button" class="back-btn" onClick={onBack}>
-					← Back
-				</button>
-				{error ? (
-					<>
-						<p>{error}</p>
-						<button type="button" class="btn-secondary" onClick={reload}>
-							Retry
-						</button>
-					</>
-				) : (
-					<p>Loading…</p>
-				)}
-			</main>
-		);
-	}
+	if (!detail) return <SessionScreenFallback error={error} onBack={onBack} onRetry={reload} />;
 
 	const { session, plannedSets, plannedRun } = detail;
 
@@ -71,21 +45,8 @@ export function Preview({ sessionId, onBack }: PreviewProps) {
 					))
 				: plannedRun && (
 						<div class="row">
-							<p class="exercise-target">
-								{plannedRun.run_type.charAt(0).toUpperCase() + plannedRun.run_type.slice(1)}
-								{plannedRun.target_minutes ? ` · ${plannedRun.target_minutes} min` : ''}
-								{plannedRun.target_km ? ` · ${plannedRun.target_km} km` : ''}
-							</p>
-							{parseStructure(plannedRun.structure_json) && (
-								<ol class="run-steps">
-									{parseStructure(plannedRun.structure_json)!.map((s, i) => (
-										<li key={i}>
-											{s.repeat ? `${s.repeat} × ` : ''}
-											{s.minutes} min {s.kind} ({s.effort.replace('_', ' ')})
-										</li>
-									))}
-								</ol>
-							)}
+							<p class="exercise-target">{runSummary(plannedRun.run_type, plannedRun.target_minutes, plannedRun.target_km)}</p>
+							<RunStructure structureJson={plannedRun.structure_json} />
 						</div>
 					)}
 		</main>

@@ -6,6 +6,9 @@
 		<meta name="theme-color" content="#fafafa" media="(prefers-color-scheme: light)" />
 		<meta name="theme-color" content="#16181d" media="(prefers-color-scheme: dark)" />
 		<title>Training log</title>
+		<link rel="manifest" href="/manifest.webmanifest" />
+		<link rel="icon" href="/icon.svg" type="image/svg+xml" />
+		<link rel="apple-touch-icon" href="/icon.svg" />
 		<link rel="preload" href="/fonts/ibm-plex-sans-var-latin.woff2" as="font" type="font/woff2" crossorigin />
 		<link rel="preload" href="/fonts/ibm-plex-mono-latin.woff2" as="font" type="font/woff2" crossorigin />
 		<link rel="stylesheet" href="/styles.css" />
@@ -13,5 +16,15 @@
 	<body>
 		<div id="root"></div>
 		<script type="module" src="/app.js"></script>
+		<script>
+			// Registered after load so it never competes with the first render.
+			// Failure is non-fatal: without a service worker the app still works
+			// exactly as before, it just can't open offline.
+			if ('serviceWorker' in navigator) {
+				window.addEventListener('load', () => {
+					navigator.serviceWorker.register('/sw.js').catch(() => {});
+				});
+			}
+		</script>
 	</body>
 </html>

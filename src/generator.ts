@@ -6,6 +6,7 @@
 // persists whatever comes back.
 
 import { addDaysIso } from './dates';
+import { sqlIn } from './sql';
 import { progressExercise, type ExercisePrescription, type LoggedSetForProgression } from './progression';
 import { MAX_WEEKLY_RUN_GROWTH, progressRun, type LoggedRunForProgression } from './runProgression';
 import type {
@@ -67,10 +68,6 @@ export interface ExportContext {
 
 export type ImportResult = { ok: true; id: number } | { ok: false; errors: string[] };
 
-function sqlIn(n: number): string {
-	return n > 0 ? Array(n).fill('?').join(',') : 'NULL';
-}
-
 interface PlannedSetJoinRow {
 	id: number;
 	session_id: number;
@@ -129,11 +126,11 @@ interface LoggedRunRow {
  * plain copies and the pasted-back prompt asks the AI reviewer to apply real
  * periodization judgement across them instead.
  *
- * Five bulk queries regardless of week count — sessions, planned_sets+
- * exercises joined, logged_sets, planned_runs, logged_runs, all via
- * `WHERE id IN (...)` — never N+1 per exercise (this is a 2-week window, not
- * a single session); the speculative weeks are pure in-memory copies, no
- * further queries.
+ * Six bulk queries regardless of week count — sessions, planned_sets+
+ * exercises joined, logged_sets, planned_runs, logged_runs, session_feedback,
+ * all via `WHERE id IN (...)` — never N+1 per exercise (this is a 2-week
+ * window, not a single session); the speculative weeks are pure in-memory
+ * copies, no further queries.
  */
 export async function buildExportContext(db: D1Database, weekCount: number): Promise<ExportContext> {
 	const settingsRow = await db.prepare(`SELECT * FROM settings WHERE id = 1`).first<{ id: number; goals: string; days_per_week: number }>();
@@ -145,9 +142,8 @@ export async function buildExportContext(db: D1Database, weekCount: number): Pro
 	const maxWeekRow = await db.prepare(`SELECT MAX(week_number) AS w FROM sessions`).first<{ w: number | null }>();
 	const lastWeekNumber = maxWeekRow?.w ?? null;
 
-	const painFlags: PainFlags = { shoulder: false, back: false }; // no feedback-capture UI yet — see plan risk #5
-
 	if (lastWeekNumber === null) {
+		const painFlags: PainFlags = { shoulder: false, back: false }; // no sessions => no feedback to read
 		// No sessions exist at all yet — nothing to progress from for week 1,
 		// and with no week-1 baseline there's nothing to flat-copy for weeks
 		// 2..N either. We still respect the requested weekCount by returning
@@ -206,10 +202,27 @@ export async function buildExportContext(db: D1Database, weekCount: number): Pro
 		? await db.prepare(`SELECT * FROM planned_runs WHERE session_id IN (${sqlIn(lastWeekSessionIds.length)})`).bind(...lastWeekSessionIds).all<PlannedRunRow>()
 		: { results: [] as PlannedRunRow[] };
 
-	// Bulk query 5/5: logged_runs across the full 2-week window.
+	// Bulk query 5/6: logged_runs across the full 2-week window.
 	const { results: loggedRunRows } = windowSessionIds.length
 		? await db.prepare(`SELECT * FROM logged_runs WHERE session_id IN (${sqlIn(windowSessionIds.length)})`).bind(...windowSessionIds).all<LoggedRunRow>()
 		: { results: [] as LoggedRunRow[] };
+
+	// Bulk query 6/6: session feedback across the window — this is what makes
+	// the shoulder_safe/back_safe checks in validateWeekAgainstBaseline able to
+	// fire at all. A flag trips at 2+ on the 0-3 scale: 1 is "noticed it",
+	// which shouldn't start banning exercises, whereas 2-3 is real pain worth
+	// programming around.
+	const { results: feedbackRows } = windowSessionIds.length
+		? await db
+				.prepare(`SELECT back_pain_0_3, shoulder_pain_0_3 FROM session_feedback WHERE session_id IN (${sqlIn(windowSessionIds.length)})`)
+				.bind(...windowSessionIds)
+				.all<{ back_pain_0_3: number | null; shoulder_pain_0_3: number | null }>()
+		: { results: [] as { back_pain_0_3: number | null; shoulder_pain_0_3: number | null }[] };
+
+	const painFlags: PainFlags = {
+		shoulder: feedbackRows.some((f) => (f.shoulder_pain_0_3 ?? 0) >= 2),
+		back: feedbackRows.some((f) => (f.back_pain_0_3 ?? 0) >= 2),
+	};
 
 	const reasons: Record<string, string> = {};
 	const skippedSessions: SessionRow[] = lastWeekSessions.filter((s) => s.status === 'skipped');
@@ -362,6 +375,128 @@ export async function generateNextWeeks(db: D1Database, weekCount: number): Prom
 	return buildExportContext(db, weekCount);
 }
 
+const RUN_TYPES: readonly RunType[] = ['easy', 'tempo', 'intervals', 'long'];
+
+/** True only for a real calendar date in YYYY-MM-DD form. The regex alone
+ * would accept 2026-02-31 / 2026-13-01, which insert happily (sessions.date
+ * has no CHECK constraint) and then never match a Today/History query again —
+ * silent data corruption rather than a loud failure. Round-tripping through
+ * Date.UTC catches the overflow. */
+function isRealIsoDate(value: unknown): value is string {
+	if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+	const [year, month, day] = value.split('-').map(Number);
+	const parsed = new Date(Date.UTC(year, month - 1, day));
+	return parsed.getUTCFullYear() === year && parsed.getUTCMonth() === month - 1 && parsed.getUTCDate() === day;
+}
+
+function isPositiveInt(value: unknown): value is number {
+	return Number.isInteger(value) && (value as number) > 0;
+}
+
+function isNonNegativeInt(value: unknown): value is number {
+	return Number.isInteger(value) && (value as number) >= 0;
+}
+
+/** Optional numeric field: null/undefined is fine, but a present value must be a finite non-negative number. */
+function isNullableNonNegativeNumber(value: unknown): boolean {
+	return value === null || value === undefined || (typeof value === 'number' && Number.isFinite(value) && value >= 0);
+}
+
+/**
+ * Structural/type validation for one week, independent of any baseline.
+ *
+ * This exists because validateWeekAgainstBaseline only ever checked *weights*
+ * (jump caps, pain flags, exercise existence). Everything else in a
+ * pasted-back proposal — dates, kind, run_type, rep ranges, set counts — went
+ * unchecked straight into insertWeek, where a bad `kind`/`run_type` hits a D1
+ * CHECK constraint and 500s PARTWAY THROUGH the insert loop, and a bad date
+ * inserts silently and disappears from every date-ranged query. Catching all
+ * of it here means a malformed proposal is rejected at import time with a
+ * useful message, before anything is persisted.
+ */
+function validateWeekStructure(week: WeekProposalInput, weekIndex: number): string[] {
+	const errors: string[] = [];
+	const where = (extra = '') => `week at index ${weekIndex}${extra}`;
+
+	if (!isPositiveInt(week.week_number)) {
+		errors.push(`${where()} has an invalid week_number (${JSON.stringify(week.week_number)}) — must be a positive integer`);
+	}
+	if (!Array.isArray(week.sessions)) {
+		errors.push(`${where()} has no sessions array`);
+		return errors; // nothing further is inspectable
+	}
+
+	week.sessions.forEach((session, sessionIndex) => {
+		const at = where(`, session ${sessionIndex}`);
+
+		if (!isRealIsoDate(session.date)) {
+			errors.push(`${at} has an invalid date (${JSON.stringify(session.date)}) — must be a real calendar date as YYYY-MM-DD`);
+		}
+		if (session.kind !== 'lift' && session.kind !== 'run') {
+			errors.push(`${at} has an invalid kind (${JSON.stringify(session.kind)}) — must be 'lift' or 'run'`);
+		}
+		if (typeof session.label !== 'string' || session.label.trim() === '') {
+			errors.push(`${at} has an empty label`);
+		}
+
+		if (!Array.isArray(session.plannedSets)) {
+			errors.push(`${at} has no plannedSets array`);
+		} else {
+			// insertWeek writes plannedSets regardless of kind, so a run session
+			// carrying them would silently attach lift rows to a run.
+			if (session.kind === 'run' && session.plannedSets.length > 0) {
+				errors.push(`${at} is a run but carries ${session.plannedSets.length} plannedSets`);
+			}
+
+			session.plannedSets.forEach((set, setIndex) => {
+				const setAt = `${at}, set ${setIndex}`;
+				if (!isPositiveInt(set.exercise_id)) errors.push(`${setAt} has an invalid exercise_id (${JSON.stringify(set.exercise_id)})`);
+				if (!isNonNegativeInt(set.order_index)) errors.push(`${setAt} has an invalid order_index (${JSON.stringify(set.order_index)})`);
+				if (!isPositiveInt(set.target_sets)) errors.push(`${setAt} has an invalid target_sets (${JSON.stringify(set.target_sets)}) — must be a positive integer`);
+				if (!isNonNegativeInt(set.rep_low)) errors.push(`${setAt} has an invalid rep_low (${JSON.stringify(set.rep_low)})`);
+				if (!isNonNegativeInt(set.rep_high)) errors.push(`${setAt} has an invalid rep_high (${JSON.stringify(set.rep_high)})`);
+				if (isNonNegativeInt(set.rep_low) && isNonNegativeInt(set.rep_high) && set.rep_high < set.rep_low) {
+					errors.push(`${setAt} has rep_high (${set.rep_high}) below rep_low (${set.rep_low})`);
+				}
+				if (!isNullableNonNegativeNumber(set.target_weight_kg)) {
+					errors.push(`${setAt} has an invalid target_weight_kg (${JSON.stringify(set.target_weight_kg)}) — must be null or a non-negative number`);
+				}
+				if (!isNonNegativeInt(set.rest_seconds)) errors.push(`${setAt} has an invalid rest_seconds (${JSON.stringify(set.rest_seconds)})`);
+				if (set.superset_group !== null && set.superset_group !== undefined && !Number.isInteger(set.superset_group)) {
+					errors.push(`${setAt} has an invalid superset_group (${JSON.stringify(set.superset_group)}) — must be null or an integer`);
+				}
+			});
+		}
+
+		const run = session.plannedRun;
+		if (run !== null && run !== undefined) {
+			if (session.kind === 'lift') {
+				errors.push(`${at} is a lift but carries a plannedRun`);
+			}
+			if (!RUN_TYPES.includes(run.run_type)) {
+				errors.push(`${at} has an invalid run_type (${JSON.stringify(run.run_type)}) — must be one of ${RUN_TYPES.join(', ')}`);
+			}
+			if (!isNullableNonNegativeNumber(run.target_minutes)) errors.push(`${at} has an invalid target_minutes (${JSON.stringify(run.target_minutes)})`);
+			if (!isNullableNonNegativeNumber(run.target_km)) errors.push(`${at} has an invalid target_km (${JSON.stringify(run.target_km)})`);
+			if (run.structure_json !== null && run.structure_json !== undefined) {
+				if (typeof run.structure_json !== 'string') {
+					errors.push(`${at} has a non-string structure_json`);
+				} else {
+					try {
+						JSON.parse(run.structure_json);
+					} catch {
+						// Stored as an opaque TEXT blob and parsed by the client at
+						// render time, so bad JSON here fails silently in the UI later.
+						errors.push(`${at} has a structure_json that is not valid JSON`);
+					}
+				}
+			}
+		}
+	});
+
+	return errors;
+}
+
 /**
  * Checks one week of a pasted-back (or hand-crafted) proposal against
  * whichever week's values are its baseline — either the true deterministic
@@ -477,6 +612,18 @@ function validateWeekAgainstBaseline(
  * Empty array = valid.
  */
 export function validateProposal(proposal: MultiWeekProposalInput, context: ExportContext): string[] {
+	if (!Array.isArray(proposal?.weeks)) {
+		return ['proposal has no weeks array'];
+	}
+
+	// Structure first, and bail before the baseline pass if anything is
+	// malformed: validateWeekAgainstBaseline indexes into sessions/plannedSets
+	// assuming they're well-formed arrays, so running it over garbage produces
+	// misleading errors (or throws) on top of the real ones. A caller gets the
+	// structural problems on their own, which are the ones worth fixing first.
+	const structuralErrors = proposal.weeks.flatMap((week, index) => validateWeekStructure(week, index));
+	if (structuralErrors.length > 0) return structuralErrors;
+
 	const errors: string[] = [];
 
 	proposal.weeks.forEach((week, index) => {
@@ -548,58 +695,74 @@ export async function importProposal(db: D1Database, input: MultiWeekProposalInp
 }
 
 /**
- * Plain sequential INSERTs into sessions/planned_sets/planned_runs for one
- * week — same shape as seeds/week1_sessions.sql. Not atomic across the whole
- * week (D1 batch() can't chain a generated id into a dependent insert — plan
- * risk #3); low-probability/low-severity, fixable by hand if it ever bites.
+ * Writes every session (and its planned_sets/planned_runs children) across
+ * every week of an accepted plan, in two batches.
+ *
+ * This used to be a plain sequential await-loop, on the grounds that D1's
+ * batch() can't feed a generated id into a dependent insert. That's true, but
+ * it doesn't force full sequencing — it only forces a split:
+ *
+ *   Batch 1: every session INSERT ... RETURNING id, in a fixed order.
+ *   Batch 2: every planned_sets/planned_runs insert, using the ids batch 1
+ *            handed back (results come back positionally, in statement order).
+ *
+ * Each batch runs inside its own implicit transaction, so a failure part-way
+ * through either one rolls that batch back rather than leaving a half-written
+ * week behind. That matters here specifically because accept is retryable:
+ * the old loop could 500 with N sessions already inserted while leaving the
+ * generated_plans row still 'pending', so retrying duplicated everything
+ * before the failure point. The remaining (much smaller) window is a failure
+ * *between* the two batches, which orphans sessions that have no planned
+ * sets — visible and hand-fixable, rather than silently duplicated data.
  */
-async function insertWeek(db: D1Database, week: WeekProposal): Promise<void> {
-	for (const session of week.sessions) {
-		const sessionRow = await db
-			.prepare(`INSERT INTO sessions (date, kind, label, status, week_number) VALUES (?, ?, ?, 'planned', ?) RETURNING id`)
-			.bind(session.date, session.kind, session.label, week.week_number)
-			.first<{ id: number }>();
-		const sessionId = sessionRow!.id;
+export async function insertWeeksFromProposal(db: D1Database, plan: MultiWeekProposal): Promise<void> {
+	const flattened = plan.weeks.flatMap((week) => week.sessions.map((session) => ({ session, week_number: week.week_number })));
+	if (flattened.length === 0) return;
+
+	const sessionRows = await db.batch<{ id: number }>(
+		flattened.map(({ session, week_number }) =>
+			db
+				.prepare(`INSERT INTO sessions (date, kind, label, status, week_number) VALUES (?, ?, ?, 'planned', ?) RETURNING id`)
+				.bind(session.date, session.kind, session.label, week_number),
+		),
+	);
+
+	const children: D1PreparedStatement[] = [];
+	flattened.forEach(({ session }, index) => {
+		// batch() returns one result per statement, in the order submitted.
+		const sessionId = sessionRows[index]?.results?.[0]?.id;
+		if (sessionId === undefined) throw new Error(`session insert returned no id (index ${index})`);
 
 		for (const set of session.plannedSets) {
-			await db
-				.prepare(
-					`INSERT INTO planned_sets (session_id, exercise_id, order_index, target_sets, rep_low, rep_high, target_weight_kg, rest_seconds, notes, superset_group)
-					 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-				)
-				.bind(
-					sessionId,
-					set.exercise_id,
-					set.order_index,
-					set.target_sets,
-					set.rep_low,
-					set.rep_high,
-					set.target_weight_kg,
-					set.rest_seconds,
-					set.notes,
-					set.superset_group,
-				)
-				.run();
+			children.push(
+				db
+					.prepare(
+						`INSERT INTO planned_sets (session_id, exercise_id, order_index, target_sets, rep_low, rep_high, target_weight_kg, rest_seconds, notes, superset_group)
+						 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+					)
+					.bind(
+						sessionId,
+						set.exercise_id,
+						set.order_index,
+						set.target_sets,
+						set.rep_low,
+						set.rep_high,
+						set.target_weight_kg,
+						set.rest_seconds,
+						set.notes,
+						set.superset_group,
+					),
+			);
 		}
 
 		if (session.plannedRun) {
-			await db
-				.prepare(`INSERT INTO planned_runs (session_id, run_type, target_minutes, target_km, structure_json) VALUES (?, ?, ?, ?, ?)`)
-				.bind(sessionId, session.plannedRun.run_type, session.plannedRun.target_minutes, session.plannedRun.target_km, session.plannedRun.structure_json)
-				.run();
+			children.push(
+				db
+					.prepare(`INSERT INTO planned_runs (session_id, run_type, target_minutes, target_km, structure_json) VALUES (?, ?, ?, ?, ?)`)
+					.bind(sessionId, session.plannedRun.run_type, session.plannedRun.target_minutes, session.plannedRun.target_km, session.plannedRun.structure_json),
+			);
 		}
-	}
-}
+	});
 
-/**
- * Loops plan.weeks, reusing the exact per-week sequential-INSERT logic
- * (insertWeek) once per week. The "not atomic across a whole week" risk
- * already documented gets proportionally wider (more sequential awaited
- * statements for more weeks) but is the same low-probability/low-severity
- * class of risk, not a new one — not solved here, same as before.
- */
-export async function insertWeeksFromProposal(db: D1Database, plan: MultiWeekProposal): Promise<void> {
-	for (const week of plan.weeks) {
-		await insertWeek(db, week);
-	}
+	if (children.length > 0) await db.batch(children);
 }

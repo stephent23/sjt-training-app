@@ -1,0 +1,19 @@
+{
+	"name": "Training log",
+	"short_name": "Training",
+	"description": "Personal lifting and running log",
+	"start_url": "/",
+	"scope": "/",
+	"display": "standalone",
+	"orientation": "portrait",
+	"background_color": "#fafafa",
+	"theme_color": "#fafafa",
+	"icons": [
+		{
+			"src": "/icon.svg",
+			"sizes": "any",
+			"type": "image/svg+xml",
+			"purpose": "any maskable"
+		}
+	]
+}

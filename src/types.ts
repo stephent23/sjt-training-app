@@ -87,11 +87,22 @@ export interface LoggedRunEntry {
 	note: string | null;
 }
 
+// How a session actually felt. Pain scores here are what drive the
+// generator's shoulder_safe/back_safe validation — before this was captured,
+// those checks could never fire because the flags were hardcoded false.
+export interface SessionFeedback {
+	back_pain_0_3: number | null;
+	shoulder_pain_0_3: number | null;
+	energy_1_5: number | null;
+	note: string | null;
+}
+
 export interface SessionDetail {
 	session: SessionRow;
 	plannedSets: PlannedSetDetail[];
 	plannedRun: PlannedRunDetail | null;
 	loggedRun: LoggedRunEntry | null;
+	feedback: SessionFeedback | null;
 }
 
 export interface LogSetInput {

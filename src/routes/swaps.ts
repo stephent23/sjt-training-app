@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { sqlIn } from '../sql';
 import { rankSwapCandidates, type PainType } from '../swaps';
 import type { ApplySwapInput, Exercise } from '../types';
 
@@ -15,7 +16,7 @@ swaps.get('/candidates/:exerciseId', async (c) => {
 	const { results: samePatternExercises } = await c.env.DB.prepare(`SELECT * FROM exercises WHERE pattern = ?`).bind(from.pattern).all<Exercise>();
 
 	const { results: historyRows } = await c.env.DB.prepare(
-		`SELECT DISTINCT exercise_id FROM logged_sets WHERE exercise_id IN (${samePatternExercises.map(() => '?').join(',') || 'NULL'})`,
+		`SELECT DISTINCT exercise_id FROM logged_sets WHERE exercise_id IN (${sqlIn(samePatternExercises.length)})`,
 	)
 		.bind(...samePatternExercises.map((e) => e.id))
 		.all<{ exercise_id: number }>();

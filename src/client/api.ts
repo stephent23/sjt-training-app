@@ -4,6 +4,7 @@ import type {
 	LogSetInput,
 	PlannedSetStatus,
 	SessionDetail,
+	SessionFeedback,
 	SessionStatus,
 	SessionSummary,
 	Settings,
@@ -68,6 +69,15 @@ export function setExerciseStatus(sessionId: number, plannedSetId: number, statu
 	const updated: SessionDetail = { ...detail, plannedSets };
 	writeCachedSession(sessionId, updated);
 	enqueue(`/api/sessions/${sessionId}/exercises/${plannedSetId}/status`, { status }, 'PATCH');
+	return updated;
+}
+
+// Same optimistic + queued shape as logSet/logRun. The route upserts on
+// session_id, so a retry can never create a second feedback row.
+export function saveFeedback(sessionId: number, feedback: SessionFeedback, detail: SessionDetail): SessionDetail {
+	const updated: SessionDetail = { ...detail, feedback };
+	writeCachedSession(sessionId, updated);
+	enqueue(`/api/sessions/${sessionId}/feedback`, feedback, 'PUT');
 	return updated;
 }
 

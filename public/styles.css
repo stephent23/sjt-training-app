@@ -900,3 +900,19 @@ select:focus-visible,
 		animation: none !important;
 	}
 }
+
+/* ---- Session feedback card -------------------------------------------------
+   Sits at the bottom of Review, after the sets/run table. Ruled off above so
+   it reads as a distinct question rather than more of the same logging form —
+   it's the one part of Review that feeds next week's plan (the pain flags)
+   rather than the training log itself. */
+
+.feedback-card {
+	margin-top: var(--s6);
+	padding-top: var(--s5);
+	border-top: 1px solid var(--rule);
+}
+
+.feedback-card .section-heading {
+	margin-top: 0;
+}

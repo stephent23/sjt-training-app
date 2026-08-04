@@ -1,14 +1,13 @@
 import { useEffect, useState } from 'preact/hooks';
-import type { LoggedRunEntry, LoggedSetEntry, PlannedSetDetail } from '../../types';
-import { logRun, logSet, setSessionStatus } from '../api';
+import type { LoggedRunEntry, LoggedSetEntry, PlannedSetDetail, SessionFeedback } from '../../types';
+import { logRun, logSet, saveFeedback, setSessionStatus } from '../api';
+import { FeedbackCard } from '../components/FeedbackCard';
+import { SessionScreenFallback } from '../components/SessionScreenFallback';
+import { runSummary } from '../format';
 import { useSession } from '../useSession';
 
 interface ReviewProps {
 	sessionId: number;
-}
-
-function capitalize(s: string): string {
-	return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
 interface ReviewSetRowProps {
@@ -123,13 +122,25 @@ function ReviewRun({ loggedRun, onCommit }: ReviewRunProps) {
 		setRpe(loggedRun?.rpe_1_10 != null ? String(loggedRun.rpe_1_10) : '');
 	}, [loggedRun?.distance_km, loggedRun?.duration_seconds, loggedRun?.avg_hr, loggedRun?.rpe_1_10]);
 
+	// A run is only worth writing once BOTH distance and duration are real —
+	// otherwise filling in the first field alone would log a run with
+	// duration 0 (or distance 0), which is not just cosmetic: progressRun
+	// only checks whether a long run was logged at all, so a junk row counts
+	// as a real one and earns the 10% weekly growth. Partial input simply
+	// isn't committed, matching ReviewSetRow's refuse-to-commit-garbage rule.
 	function commit() {
-		onCommit({
-			distance_km: Number(distance) || 0,
-			duration_seconds: (Number(minutes) || 0) * 60 + (Number(seconds) || 0),
-			avg_hr: avgHr ? Number(avgHr) : null,
-			rpe_1_10: rpe ? Number(rpe) : null,
-		});
+		const distanceKm = Number(distance);
+		const durationSeconds = (Number(minutes) || 0) * 60 + (Number(seconds) || 0);
+		if (!Number.isFinite(distanceKm) || distanceKm <= 0) return;
+		if (durationSeconds <= 0) return;
+
+		const avgHrValue = avgHr === '' ? null : Number(avgHr);
+		if (avgHrValue !== null && (!Number.isInteger(avgHrValue) || avgHrValue <= 0)) return;
+
+		const rpeValue = rpe === '' ? null : Number(rpe);
+		if (rpeValue !== null && (!Number.isInteger(rpeValue) || rpeValue < 1 || rpeValue > 10)) return;
+
+		onCommit({ distance_km: distanceKm, duration_seconds: durationSeconds, avg_hr: avgHrValue, rpe_1_10: rpeValue });
 	}
 
 	return (
@@ -186,25 +197,7 @@ function ReviewRun({ loggedRun, onCommit }: ReviewRunProps) {
 export function Review({ sessionId }: ReviewProps) {
 	const { detail, error, setDetail, reload } = useSession(sessionId);
 
-	if (!detail) {
-		return (
-			<main class="screen">
-				<button type="button" class="back-btn" onClick={() => history.back()}>
-					← Back
-				</button>
-				{error ? (
-					<>
-						<p>{error}</p>
-						<button type="button" class="btn-secondary" onClick={reload}>
-							Retry
-						</button>
-					</>
-				) : (
-					<p>Loading…</p>
-				)}
-			</main>
-		);
-	}
+	if (!detail) return <SessionScreenFallback error={error} onBack={() => history.back()} onRetry={reload} />;
 
 	const { session, plannedSets, loggedRun } = detail;
 
@@ -250,6 +243,11 @@ export function Review({ sessionId }: ReviewProps) {
 		setDetail(updated);
 	}
 
+	function handleSaveFeedback(feedback: SessionFeedback) {
+		if (!detail) return;
+		setDetail(saveFeedback(sessionId, feedback, detail));
+	}
+
 	function finish(status: 'completed' | 'skipped') {
 		if (!detail) return;
 		setSessionStatus(sessionId, status);
@@ -275,23 +273,20 @@ export function Review({ sessionId }: ReviewProps) {
 			<h1>{session.label}</h1>
 			<p class="exercise-target">{progressLine}</p>
 
-			{session.kind === 'lift'
-				? plannedSets.map((ps) => <ReviewExercise key={ps.id} exercise={ps} onCommitSet={handleCommitSet} />)
-				: (() => {
-						const run = detail.plannedRun;
-						return (
-							<>
-								{run && (
-									<p class="exercise-target">
-										{capitalize(run.run_type)}
-										{run.target_minutes ? ` · ${run.target_minutes} min` : ''}
-										{run.target_km ? ` · ${run.target_km} km` : ''}
-									</p>
-								)}
-								<ReviewRun loggedRun={loggedRun} onCommit={handleCommitRun} />
-							</>
-						);
-					})()}
+			{session.kind === 'lift' ? (
+				plannedSets.map((ps) => <ReviewExercise key={ps.id} exercise={ps} onCommitSet={handleCommitSet} />)
+			) : (
+				<>
+					{detail.plannedRun && (
+						<p class="exercise-target">
+							{runSummary(detail.plannedRun.run_type, detail.plannedRun.target_minutes, detail.plannedRun.target_km)}
+						</p>
+					)}
+					<ReviewRun loggedRun={loggedRun} onCommit={handleCommitRun} />
+				</>
+			)}
+
+			<FeedbackCard feedback={detail.feedback} onSave={handleSaveFeedback} />
 
 			<button type="button" class="btn-primary" onClick={() => finish('completed')} disabled={session.status === 'completed'}>
 				Mark session complete

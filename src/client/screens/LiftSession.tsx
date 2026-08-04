@@ -1,8 +1,9 @@
 import { useState } from 'preact/hooks';
-import type { PlannedSetDetail } from '../../types';
+import type { PlannedSetDetail, SessionDetail } from '../../types';
 import { logSet, setExerciseStatus } from '../api';
 import { ExerciseCard } from '../components/ExerciseCard';
 import { RestTimer } from '../components/RestTimer';
+import { SessionScreenFallback } from '../components/SessionScreenFallback';
 import { SwapSheet } from '../components/SwapSheet';
 import { todayIso } from '../../dates';
 import { useSession } from '../useSession';
@@ -14,29 +15,29 @@ interface LiftSessionProps {
 
 export function LiftSession({ sessionId, onBack }: LiftSessionProps) {
 	const { detail, error, setDetail, reload } = useSession(sessionId);
+
+	if (!detail) return <SessionScreenFallback error={error} onBack={onBack} onRetry={reload} />;
+
+	return <LoadedLiftSession sessionId={sessionId} detail={detail} error={error} setDetail={setDetail} reload={reload} onBack={onBack} />;
+}
+
+interface LoadedLiftSessionProps {
+	sessionId: number;
+	detail: SessionDetail;
+	error: string | null;
+	setDetail: (detail: SessionDetail) => void;
+	reload: () => void;
+	onBack: () => void;
+}
+
+// Split out from LiftSession purely so `detail` is non-null by type rather
+// than by a `detail!` assertion in every handler — the parent's early return
+// proves it's loaded, but that narrowing doesn't survive into the callbacks
+// closed over below.
+function LoadedLiftSession({ sessionId, detail, error, setDetail, reload, onBack }: LoadedLiftSessionProps) {
 	const [expandedId, setExpandedId] = useState<number | null>(null);
 	const [rest, setRest] = useState<{ startedAt: number; seconds: number; plannedSetId: number } | null>(null);
 	const [swapFor, setSwapFor] = useState<{ plannedSetId: number; exerciseId: number } | null>(null);
-
-	if (!detail) {
-		return (
-			<main class="screen">
-				<button type="button" class="back-btn" onClick={onBack}>
-					← Back
-				</button>
-				{error ? (
-					<>
-						<p>{error}</p>
-						<button type="button" class="btn-secondary" onClick={reload}>
-							Retry
-						</button>
-					</>
-				) : (
-					<p>Loading…</p>
-				)}
-			</main>
-		);
-	}
 
 	function handleLog(exercise: PlannedSetDetail, setIndex: number, weight: number, reps: number, rir: number) {
 		const restTaken = rest ? Math.round((Date.now() - rest.startedAt) / 1000) : null;
@@ -51,7 +52,7 @@ export function LiftSession({ sessionId, onBack }: LiftSessionProps) {
 				rest_taken_seconds: restTaken,
 				performed_on: todayIso(),
 			},
-			detail!,
+			detail,
 		);
 		setDetail(updated);
 
@@ -72,7 +73,7 @@ export function LiftSession({ sessionId, onBack }: LiftSessionProps) {
 	}
 
 	function handleSkipToggle(exercise: PlannedSetDetail) {
-		setDetail(setExerciseStatus(sessionId, exercise.id, exercise.status === 'skipped' ? 'planned' : 'skipped', detail!));
+		setDetail(setExerciseStatus(sessionId, exercise.id, exercise.status === 'skipped' ? 'planned' : 'skipped', detail));
 	}
 
 	function afterSwap() {

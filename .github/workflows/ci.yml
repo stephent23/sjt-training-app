@@ -1,0 +1,34 @@
+name: CI
+
+# Deploys happen via Cloudflare Workers Builds on push to main, which does not
+# run these checks itself — so this workflow is the only thing standing between
+# a broken commit and production. Runs on PRs too, for the same reason.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typecheck (worker + tests)
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      # public/app.js is gitignored and produced at deploy time, so there's no
+      # committed artefact to compare against — this just proves the client
+      # sources still bundle cleanly before the deploy tries the same thing.
+      - name: Build client bundle
+        run: npm run build:client

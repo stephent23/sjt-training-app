@@ -4,15 +4,16 @@
 	"private": true,
 	"type": "module",
 	"scripts": {
-		"build:client": "esbuild src/client/main.tsx --bundle --format=esm --target=es2022 --jsx=automatic --jsx-import-source=preact --outfile=public/app.js",
+		"build:client": "esbuild src/client/main.tsx --bundle --minify --format=esm --target=es2022 --jsx=automatic --jsx-import-source=preact --outfile=public/app.js",
 		"dev": "npm run build:client && wrangler dev",
 		"watch:client": "npm run build:client -- --watch",
 		"db:migrate:local": "wrangler d1 migrations apply sjt-training-db --local",
+		"db:migrate:remote": "wrangler d1 migrations apply sjt-training-db --remote",
 		"db:seed:local": "wrangler d1 execute sjt-training-db --local --file=./seeds/exercises.sql",
 		"db:seed:week1:local": "wrangler d1 execute sjt-training-db --local --file=./seeds/week1_sessions.sql",
 		"cf-typegen": "wrangler types",
-		"test": "vitest run",
-		"test:watch": "vitest",
+		"test": "vitest run --no-file-parallelism",
+		"test:watch": "vitest --no-file-parallelism",
 		"typecheck": "tsc --noEmit && tsc -p test/tsconfig.json --noEmit"
 	},
 	"dependencies": {
@@ -22,6 +23,7 @@
 	"devDependencies": {
 		"@cloudflare/vitest-pool-workers": "^0.19.1",
 		"esbuild": "^0.25.12",
+		"jsdom": "^30.0.1",
 		"typescript": "^5.9.3",
 		"vitest": "^4.1.10",
 		"wrangler": "^4.112.0"
