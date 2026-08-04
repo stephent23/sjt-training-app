@@ -1,8 +1,9 @@
 // src/generator.ts — weekly generator orchestration (manual export/import, see
-// migrations/0004_generator.sql and the approved plan). No AI call lives
-// here: buildExportContext/generateNextWeek produce the deterministic pass
-// as plain JSON for a human to paste into whatever AI assistant they have;
-// importProposal validates and persists whatever comes back.
+// migrations/0004_generator.sql, migrations/0005_generator_multiweek.sql, and
+// the approved plan). No AI call lives here: buildExportContext/
+// generateNextWeeks produce the deterministic pass as plain JSON for a human
+// to paste into whatever AI assistant they have; importProposal validates and
+// persists whatever comes back.
 
 import { addDaysIso } from './dates';
 import { progressExercise, type ExercisePrescription, type LoggedSetForProgression } from './progression';
@@ -11,6 +12,8 @@ import type {
 	Exercise,
 	LoggedRunEntry,
 	LoggedSetEntry,
+	MultiWeekProposal,
+	MultiWeekProposalInput,
 	ProposedRun,
 	ProposedSessionInput,
 	ProposedSetInput,
@@ -40,7 +43,19 @@ export interface PainFlags {
  * prompt — here it's just returned as JSON for download instead.
  */
 export interface ExportContext {
-	deterministicProposal: WeekProposalInput;
+	deterministicProposal: MultiWeekProposalInput;
+	/**
+	 * Convention: weeks at index >= speculativeFromWeek - 1 in
+	 * deterministicProposal.weeks (i.e. week_number >= the first week's
+	 * week_number + (speculativeFromWeek - 1)) are speculative flat copies,
+	 * not real deterministic output. Always 2 — week 1 is always the one real
+	 * (or genuinely-empty) week; when weekCount === 1 there simply are no
+	 * weeks past it, so the value is moot but kept at 2 for consistency
+	 * rather than becoming conditional. Callers (the client) should check
+	 * `weekCount > 1` before showing any "speculative" badge, or compare an
+	 * index against `speculativeFromWeek - 1`.
+	 */
+	speculativeFromWeek: number;
 	reasons: Record<string, string>;
 	historyWindow: HistoryWindow;
 	skippedSessions: SessionRow[];
@@ -105,13 +120,22 @@ interface LoggedRunRow {
 
 /**
  * Runs the deterministic progression pass over the most recently scheduled
- * week and returns the full bundle a live AI review call would have been
- * sent. Five bulk queries regardless of week count — sessions,
- * planned_sets+exercises joined, logged_sets, planned_runs, logged_runs, all
- * via `WHERE id IN (...)` — never N+1 per exercise (this is a 2-week window,
- * not a single session).
+ * week to produce week 1, then — for weekCount > 1 — appends flat copies of
+ * week 1 (same sessions/plannedSets/plannedRun values, dates shifted forward
+ * an additional 7 days per extra week) as weeks 2..weekCount. Weeks beyond
+ * the first are inherently speculative: nobody has logged anything against
+ * them yet, and mechanically chaining progressExercise forward on assumed
+ * data would dress up a guess as arithmetic (see plan §1) — so they start as
+ * plain copies and the pasted-back prompt asks the AI reviewer to apply real
+ * periodization judgement across them instead.
+ *
+ * Five bulk queries regardless of week count — sessions, planned_sets+
+ * exercises joined, logged_sets, planned_runs, logged_runs, all via
+ * `WHERE id IN (...)` — never N+1 per exercise (this is a 2-week window, not
+ * a single session); the speculative weeks are pure in-memory copies, no
+ * further queries.
  */
-export async function buildExportContext(db: D1Database): Promise<ExportContext> {
+export async function buildExportContext(db: D1Database, weekCount: number): Promise<ExportContext> {
 	const settingsRow = await db.prepare(`SELECT * FROM settings WHERE id = 1`).first<{ id: number; goals: string; days_per_week: number }>();
 	const goals = settingsRow?.goals ?? '';
 	const daysPerWeek = settingsRow?.days_per_week ?? 5;
@@ -124,9 +148,18 @@ export async function buildExportContext(db: D1Database): Promise<ExportContext>
 	const painFlags: PainFlags = { shoulder: false, back: false }; // no feedback-capture UI yet — see plan risk #5
 
 	if (lastWeekNumber === null) {
-		// No sessions exist at all yet — nothing to progress from.
+		// No sessions exist at all yet — nothing to progress from for week 1,
+		// and with no week-1 baseline there's nothing to flat-copy for weeks
+		// 2..N either. We still respect the requested weekCount by returning
+		// that many empty weeks (numbered 1..weekCount) rather than collapsing
+		// to a single empty week — the caller asked for N weeks, and an empty
+		// N-week shape is more useful/consistent for it to render than a
+		// silently-truncated 1-week one, even though every week is empty.
 		return {
-			deterministicProposal: { week_number: 1, sessions: [] },
+			deterministicProposal: {
+				weeks: Array.from({ length: weekCount }, (_, i) => ({ week_number: i + 1, sessions: [] })),
+			},
+			speculativeFromWeek: 2,
 			reasons: {},
 			historyWindow: { loggedSets: [], loggedRuns: [] },
 			skippedSessions: [],
@@ -254,6 +287,36 @@ export async function buildExportContext(db: D1Database): Promise<ExportContext>
 		}
 	}
 
+	const week1: WeekProposalInput = { week_number: lastWeekNumber + 1, sessions: proposedSessions };
+
+	// Weeks 2..weekCount: flat copies of week 1 — structurally identical
+	// sessions/plannedSets/plannedRun values, dates shifted an additional 7
+	// days per extra week, week_number incremented. No new reasons are
+	// recorded for these (see the comment above the `reasons` return below) —
+	// they're not a new deterministic judgement, just week 1's numbers moved
+	// out in time.
+	const weeks: WeekProposalInput[] = [week1];
+	for (let w = 2; w <= weekCount; w++) {
+		const extraDays = (w - 1) * 7;
+		const sessions: ProposedSessionInput[] = proposedSessions.map((session) => ({
+			date: addDaysIso(session.date, extraDays),
+			kind: session.kind,
+			label: session.label,
+			plannedSets: session.plannedSets.map((set) => ({ ...set })),
+			plannedRun: session.plannedRun ? { ...session.plannedRun } : null,
+		}));
+		weeks.push({ week_number: lastWeekNumber + w, sessions });
+	}
+
+	// `reasons` is only ever populated for week 1 (above). Weeks 2..N are flat
+	// copies with no new logged data behind them, so there's nothing genuine
+	// to explain for them; reusing week 1's text under a different date would
+	// read as a justification that doesn't actually exist for a speculative
+	// week. Left unpopulated — the exported prompt tells the AI reviewer
+	// directly that weeks past 1 are speculative and to apply its own
+	// periodization judgement (plan §6), which covers this better than a
+	// copy-pasted "reason" string would.
+
 	const historyWindow: HistoryWindow = {
 		loggedSets: loggedSetRows.map((l) => ({
 			session_id: l.session_id,
@@ -277,7 +340,8 @@ export async function buildExportContext(db: D1Database): Promise<ExportContext>
 	};
 
 	return {
-		deterministicProposal: { week_number: lastWeekNumber + 1, sessions: proposedSessions },
+		deterministicProposal: { weeks },
+		speculativeFromWeek: 2,
 		reasons,
 		historyWindow,
 		skippedSessions,
@@ -294,82 +358,143 @@ export async function buildExportContext(db: D1Database): Promise<ExportContext>
  * seam where Phase 2 would swap this for a live API call stays obvious;
  * nothing is persisted here since nothing has been reviewed yet.
  */
-export async function generateNextWeek(db: D1Database): Promise<ExportContext> {
-	return buildExportContext(db);
+export async function generateNextWeeks(db: D1Database, weekCount: number): Promise<ExportContext> {
+	return buildExportContext(db, weekCount);
 }
 
 /**
- * Checks a pasted-back (or hand-crafted) WeekProposalInput against the
- * context that produced it. Empty array = valid.
+ * Checks one week of a pasted-back (or hand-crafted) proposal against
+ * whichever week's values are its baseline — either the true deterministic
+ * week 1, or (for week k>0 in a chain) the preceding week in the SAME pasted
+ * back proposal. `baselineDescription` only affects error-message wording.
+ *
+ * `dateKeyed` controls how baseline values are looked up:
+ *  - true (week 0 vs the true deterministic baseline): keyed by
+ *    `${date}:${exercise_id}`, exactly like today's single-week logic —
+ *    the pasted-back week is expected to keep the same calendar dates the
+ *    export handed out, so date+exercise_id pins down "the same slot".
+ *  - false (week k>0 vs the previous week in the chain): the two weeks
+ *    being compared are, by construction, 7 calendar days apart (that's the
+ *    whole point of them being different weeks), so a date-keyed lookup
+ *    would never match anything and every chain check would silently pass
+ *    as "unconstrained". Baselines are keyed by exercise_id alone instead
+ *    (and by mere presence of a 'long' run, for the run-growth check) —
+ *    matching wherever that exercise/long-run appears in the previous week,
+ *    regardless of date. This assumes an exercise (or long run) appears at
+ *    most once per week, which holds for every case this app actually
+ *    produces; a week with the same exercise programmed twice would have
+ *    the later occurrence's value win the lookup — an edge case not
+ *    currently exercised anywhere in this app.
  */
-export function validateProposal(proposal: WeekProposalInput, context: ExportContext): string[] {
+function validateWeekAgainstBaseline(
+	week: WeekProposalInput,
+	baselineWeek: WeekProposalInput,
+	context: ExportContext,
+	baselineDescription: string,
+	dateKeyed: boolean,
+): string[] {
 	const errors: string[] = [];
 	const exerciseById = new Map(context.exerciseCatalogue.map((e) => [e.id, e]));
 
-	// Baselines keyed exactly like `reasons` — the deterministic proposal's
-	// own values for the same slot are the reference point for "how big a
-	// jump is this", not last week's actual logged numbers.
+	// Baselines keyed exactly like `reasons` when dateKeyed — the baseline
+	// week's own values for the same slot are the reference point for "how
+	// big a jump is this". See the dateKeyed doc comment above for the
+	// chain (non-date-keyed) case.
 	const weightBaselineByKey = new Map<string, number | null>();
+	const weightBaselineByExercise = new Map<number, number | null>();
 	const longRunBaselineByDate = new Map<string, number | null>();
-	for (const session of context.deterministicProposal.sessions) {
+	let longRunBaseline: number | null | undefined;
+	for (const session of baselineWeek.sessions) {
 		for (const set of session.plannedSets) {
 			weightBaselineByKey.set(`${session.date}:${set.exercise_id}`, set.target_weight_kg);
+			weightBaselineByExercise.set(set.exercise_id, set.target_weight_kg);
 		}
 		if (session.plannedRun?.run_type === 'long') {
 			longRunBaselineByDate.set(session.date, session.plannedRun.target_km);
+			longRunBaseline = session.plannedRun.target_km;
 		}
 	}
 
-	for (const session of proposal.sessions) {
+	for (const session of week.sessions) {
 		for (const set of session.plannedSets) {
 			const exercise = exerciseById.get(set.exercise_id);
 			if (!exercise) {
-				errors.push(`Unknown exercise_id ${set.exercise_id} (${session.date})`);
+				errors.push(`Unknown exercise_id ${set.exercise_id} (week ${week.week_number}, ${session.date})`);
 				continue;
 			}
 
 			if (context.painFlags.shoulder && exercise.shoulder_safe === 0) {
-				errors.push(`${exercise.name} is flagged shoulder-unsafe but a shoulder pain flag is active (${session.date})`);
+				errors.push(`${exercise.name} is flagged shoulder-unsafe but a shoulder pain flag is active (week ${week.week_number}, ${session.date})`);
 			}
 			if (context.painFlags.back && exercise.back_safe === 0) {
-				errors.push(`${exercise.name} is flagged back-unsafe but a back pain flag is active (${session.date})`);
+				errors.push(`${exercise.name} is flagged back-unsafe but a back pain flag is active (week ${week.week_number}, ${session.date})`);
 			}
 
-			// Weight jump vs the deterministic baseline, capped at 10% — only on
-			// increases; a decrease (e.g. a deload) is never rejected here.
-			const baseline = weightBaselineByKey.get(`${session.date}:${set.exercise_id}`);
+			// Weight jump vs the baseline week, capped at 10% — only on
+			// increases; a decrease (e.g. a deload) is never rejected here. A
+			// substituted exercise_id with no matching baseline entry in the
+			// baseline week is unconstrained on weight — nothing to compare
+			// against.
+			const baseline = dateKeyed ? weightBaselineByKey.get(`${session.date}:${set.exercise_id}`) : weightBaselineByExercise.get(set.exercise_id);
 			if (baseline !== undefined && baseline !== null && baseline > 0 && set.target_weight_kg !== null && set.target_weight_kg > baseline) {
 				const jump = (set.target_weight_kg - baseline) / baseline;
 				if (jump > 0.1) {
 					errors.push(
-						`Weight jump for exercise_id ${set.exercise_id} on ${session.date} exceeds 10% vs the deterministic proposal (${baseline}kg -> ${set.target_weight_kg}kg)`,
+						`Weight jump for exercise_id ${set.exercise_id} on ${session.date} (week ${week.week_number}) exceeds 10% vs ${baselineDescription} (${baseline}kg -> ${set.target_weight_kg}kg)`,
 					);
 				}
 			}
 		}
 
 		if (session.plannedRun?.run_type === 'long') {
-			const baselineKm = longRunBaselineByDate.get(session.date) ?? null;
+			const baselineKm = (dateKeyed ? longRunBaselineByDate.get(session.date) : longRunBaseline) ?? null;
 			if (baselineKm !== null && baselineKm > 0 && session.plannedRun.target_km !== null && session.plannedRun.target_km > baselineKm) {
 				const growth = (session.plannedRun.target_km - baselineKm) / baselineKm;
 				if (growth > MAX_WEEKLY_RUN_GROWTH) {
 					errors.push(
-						`Long run growth on ${session.date} exceeds the ${MAX_WEEKLY_RUN_GROWTH * 100}% cap vs the deterministic proposal (${baselineKm}km -> ${session.plannedRun.target_km}km)`,
+						`Long run growth on ${session.date} (week ${week.week_number}) exceeds the ${MAX_WEEKLY_RUN_GROWTH * 100}% cap vs ${baselineDescription} (${baselineKm}km -> ${session.plannedRun.target_km}km)`,
 					);
 				}
 			}
 		}
 	}
 
-	if (proposal.sessions.length !== context.daysPerWeek) {
-		errors.push(`Session count (${proposal.sessions.length}) does not match days_per_week (${context.daysPerWeek})`);
+	if (week.sessions.length !== context.daysPerWeek) {
+		errors.push(`Session count (${week.sessions.length}) does not match days_per_week (${context.daysPerWeek}) (week ${week.week_number})`);
 	}
 
 	return errors;
 }
 
+/**
+ * Checks a pasted-back (or hand-crafted) MultiWeekProposalInput against the
+ * context that produced it. Walks proposal.weeks in order: week 0 is checked
+ * against the TRUE deterministic baseline (context.deterministicProposal.
+ * weeks[0]); week k>0 is checked against week k-1 of the SAME proposal — a
+ * chain, not a fixed baseline — so a person (or AI) applying real
+ * periodization judgement across weeks is validated against what they
+ * actually proposed for the previous week, not against week 1 forever.
+ * Empty array = valid.
+ */
+export function validateProposal(proposal: MultiWeekProposalInput, context: ExportContext): string[] {
+	const errors: string[] = [];
+
+	proposal.weeks.forEach((week, index) => {
+		if (index === 0) {
+			errors.push(...validateWeekAgainstBaseline(week, context.deterministicProposal.weeks[0], context, 'the deterministic proposal', true));
+		} else {
+			const previousWeek = proposal.weeks[index - 1];
+			errors.push(...validateWeekAgainstBaseline(week, previousWeek, context, `week ${previousWeek.week_number}`, false));
+		}
+	});
+
+	return errors;
+}
+
 /** Joins exercise names/patterns back onto an id-only proposal after
- * validation has already confirmed every exercise_id is real. */
+ * validation has already confirmed every exercise_id is real. Called once
+ * per week in a loop by importProposal — unchanged from the single-week
+ * version. */
 export function hydrateProposal(input: WeekProposalInput, exercises: Exercise[]): WeekProposal {
 	const exerciseById = new Map(exercises.map((e) => [e.id, e]));
 	return {
@@ -390,43 +515,49 @@ export function hydrateProposal(input: WeekProposalInput, exercises: Exercise[])
 /**
  * Validates and persists a pasted-back proposal as a pending `generated_plans`
  * row. Rebuilds the deterministic baseline fresh via buildExportContext
- * rather than trying to persist/reload the exact one the export handed out —
- * keeps this function self-contained and avoids needing the client to
- * round-trip extra state it has no reason to keep.
+ * (sized to match the pasted-back proposal's week count so chain validation
+ * has the right number of weeks to compare against) rather than trying to
+ * persist/reload the exact one the export handed out — keeps this function
+ * self-contained and avoids needing the client to round-trip extra state it
+ * has no reason to keep.
  */
-export async function importProposal(db: D1Database, input: WeekProposalInput): Promise<ImportResult> {
+export async function importProposal(db: D1Database, input: MultiWeekProposalInput): Promise<ImportResult> {
+	if (input.weeks.length === 0) {
+		return { ok: false, errors: ['proposal must include at least one week'] };
+	}
+
 	const existingPending = await db.prepare(`SELECT id FROM generated_plans WHERE status = 'pending' LIMIT 1`).first<{ id: number }>();
 	if (existingPending) {
 		return { ok: false, errors: ['A plan is already pending review — accept or reject it before importing another.'] };
 	}
 
-	const context = await buildExportContext(db);
+	const context = await buildExportContext(db, input.weeks.length);
 	const errors = validateProposal(input, context);
 	if (errors.length > 0) {
 		return { ok: false, errors };
 	}
 
-	const hydrated = hydrateProposal(input, context.exerciseCatalogue);
+	const hydrated: MultiWeekProposal = { weeks: input.weeks.map((week) => hydrateProposal(week, context.exerciseCatalogue)) };
 
 	const row = await db
-		.prepare(`INSERT INTO generated_plans (week_number, plan_json, deterministic_json) VALUES (?, ?, ?) RETURNING id`)
-		.bind(input.week_number, JSON.stringify(hydrated), JSON.stringify(context.deterministicProposal))
+		.prepare(`INSERT INTO generated_plans (first_week_number, week_count, plan_json, deterministic_json) VALUES (?, ?, ?, ?) RETURNING id`)
+		.bind(input.weeks[0].week_number, input.weeks.length, JSON.stringify(hydrated), JSON.stringify(context.deterministicProposal))
 		.first<{ id: number }>();
 
 	return { ok: true, id: row!.id };
 }
 
 /**
- * Plain sequential INSERTs into sessions/planned_sets/planned_runs — same
- * shape as seeds/week1_sessions.sql. Not atomic across the whole week (D1
- * batch() can't chain a generated id into a dependent insert — plan risk #3);
- * low-probability/low-severity, fixable by hand if it ever bites.
+ * Plain sequential INSERTs into sessions/planned_sets/planned_runs for one
+ * week — same shape as seeds/week1_sessions.sql. Not atomic across the whole
+ * week (D1 batch() can't chain a generated id into a dependent insert — plan
+ * risk #3); low-probability/low-severity, fixable by hand if it ever bites.
  */
-export async function insertWeekFromProposal(db: D1Database, plan: WeekProposal): Promise<void> {
-	for (const session of plan.sessions) {
+async function insertWeek(db: D1Database, week: WeekProposal): Promise<void> {
+	for (const session of week.sessions) {
 		const sessionRow = await db
 			.prepare(`INSERT INTO sessions (date, kind, label, status, week_number) VALUES (?, ?, ?, 'planned', ?) RETURNING id`)
-			.bind(session.date, session.kind, session.label, plan.week_number)
+			.bind(session.date, session.kind, session.label, week.week_number)
 			.first<{ id: number }>();
 		const sessionId = sessionRow!.id;
 
@@ -457,5 +588,18 @@ export async function insertWeekFromProposal(db: D1Database, plan: WeekProposal)
 				.bind(sessionId, session.plannedRun.run_type, session.plannedRun.target_minutes, session.plannedRun.target_km, session.plannedRun.structure_json)
 				.run();
 		}
+	}
+}
+
+/**
+ * Loops plan.weeks, reusing the exact per-week sequential-INSERT logic
+ * (insertWeek) once per week. The "not atomic across a whole week" risk
+ * already documented gets proportionally wider (more sequential awaited
+ * statements for more weeks) but is the same low-probability/low-severity
+ * class of risk, not a new one — not solved here, same as before.
+ */
+export async function insertWeeksFromProposal(db: D1Database, plan: MultiWeekProposal): Promise<void> {
+	for (const week of plan.weeks) {
+		await insertWeek(db, week);
 	}
 }

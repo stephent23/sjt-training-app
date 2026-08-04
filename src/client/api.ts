@@ -8,8 +8,8 @@ import type {
 	SessionSummary,
 	Settings,
 	SwapCandidate,
-	WeekProposal,
-	WeekProposalInput,
+	MultiWeekProposal,
+	MultiWeekProposalInput,
 } from '../types';
 import { writeCachedSession } from './sessionCache';
 import { enqueue } from './sync';
@@ -131,9 +131,10 @@ export async function updateSettings(patch: Partial<Settings>): Promise<void> {
 
 export interface PendingProposal {
 	id: number;
-	week_number: number;
+	first_week_number: number;
+	week_count: number;
 	created_at: string;
-	plan: WeekProposal;
+	plan: MultiWeekProposal;
 }
 
 export async function fetchPendingProposal(): Promise<PendingProposal | null> {
@@ -148,7 +149,7 @@ export async function fetchPendingProposal(): Promise<PendingProposal | null> {
 // the exact validation errors (bad exercise_id, weight jump too big, session
 // count mismatch, ...) that the person needs in order to go back and ask
 // their AI assistant to fix the specific problem.
-export async function importProposal(input: WeekProposalInput): Promise<{ id: number }> {
+export async function importProposal(input: MultiWeekProposalInput): Promise<{ id: number }> {
 	const res = await fetch('/api/generator/import', {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },

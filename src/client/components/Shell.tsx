@@ -1,7 +1,7 @@
 import type { ComponentChildren } from 'preact';
 
 interface ShellProps {
-	active: 'today' | 'plan' | 'history';
+	active: 'today' | 'plan' | 'history' | 'generate';
 	children: ComponentChildren;
 }
 
@@ -18,6 +18,9 @@ export function Shell({ active, children }: ShellProps) {
 				</a>
 				<a href="#/history" class="tabbar-item" aria-current={active === 'history' ? 'page' : undefined}>
 					History
+				</a>
+				<a href="#/generate" class="tabbar-item" aria-current={active === 'generate' ? 'page' : undefined}>
+					Generate
 				</a>
 			</nav>
 		</div>

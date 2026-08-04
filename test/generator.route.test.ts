@@ -1,6 +1,6 @@
 import { SELF } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
-import type { WeekProposalInput } from '../src/types';
+import type { MultiWeekProposalInput } from '../src/types';
 import { insertExercise, insertLoggedSet, insertPlannedSet, insertSession } from './fixtures';
 
 function postJson(url: string, body?: unknown) {
@@ -27,15 +27,52 @@ async function seedOneSessionWeek() {
 	return { exerciseId, sessionId };
 }
 
-describe('generator export -> import -> pending -> accept/reject flow', () => {
-	it('export -> import -> pending -> accept lands real sessions/planned_sets with week_number incremented', async () => {
+describe('GET /export', () => {
+	it('returns 3 weeks when ?weeks=3, with correct +7/+14 date shifts', async () => {
 		await seedOneSessionWeek();
 
-		const exportRes = await SELF.fetch('https://training-app.test/api/generator/export');
+		const res = await SELF.fetch('https://training-app.test/api/generator/export?weeks=3');
+		expect(res.status).toBe(200);
+		const body = (await res.json()) as { deterministicProposal: MultiWeekProposalInput; speculativeFromWeek: number };
+
+		expect(body.deterministicProposal.weeks).toHaveLength(3);
+		const [week1, week2, week3] = body.deterministicProposal.weeks;
+		expect(week1.week_number).toBe(2);
+		expect(week2.week_number).toBe(3);
+		expect(week3.week_number).toBe(4);
+		expect(week1.sessions[0].date).toBe('2026-08-10');
+		expect(week2.sessions[0].date).toBe('2026-08-17');
+		expect(week3.sessions[0].date).toBe('2026-08-24');
+		expect(body.speculativeFromWeek).toBe(2);
+	});
+
+	it('clamps an out-of-range ?weeks=50 to the default of 1 week (not 50, not an error)', async () => {
+		await seedOneSessionWeek();
+
+		const res = await SELF.fetch('https://training-app.test/api/generator/export?weeks=50');
+		expect(res.status).toBe(200);
+		const body = (await res.json()) as { deterministicProposal: MultiWeekProposalInput };
+		expect(body.deterministicProposal.weeks).toHaveLength(1);
+	});
+
+	it('defaults to 1 week when ?weeks is omitted', async () => {
+		await seedOneSessionWeek();
+
+		const res = await SELF.fetch('https://training-app.test/api/generator/export');
+		expect(res.status).toBe(200);
+		const body = (await res.json()) as { deterministicProposal: MultiWeekProposalInput };
+		expect(body.deterministicProposal.weeks).toHaveLength(1);
+	});
+});
+
+describe('generator export -> import -> pending -> accept/reject flow', () => {
+	it('export -> import -> pending -> accept (multi-week) lands real sessions across all N weeks with incrementing week_number', async () => {
+		await seedOneSessionWeek();
+
+		const exportRes = await SELF.fetch('https://training-app.test/api/generator/export?weeks=3');
 		expect(exportRes.status).toBe(200);
-		const exportBody = (await exportRes.json()) as { deterministicProposal: WeekProposalInput };
-		expect(exportBody.deterministicProposal.week_number).toBe(2);
-		expect(exportBody.deterministicProposal.sessions[0].date).toBe('2026-08-10');
+		const exportBody = (await exportRes.json()) as { deterministicProposal: MultiWeekProposalInput };
+		expect(exportBody.deterministicProposal.weeks).toHaveLength(3);
 
 		const importRes = await postJson('https://training-app.test/api/generator/import', exportBody.deterministicProposal);
 		expect(importRes.status).toBe(200);
@@ -43,19 +80,30 @@ describe('generator export -> import -> pending -> accept/reject flow', () => {
 		expect(typeof id).toBe('number');
 
 		const pendingRes = await SELF.fetch('https://training-app.test/api/generator/pending');
-		const pendingBody = (await pendingRes.json()) as { pending: { id: number; week_number: number } | null };
+		const pendingBody = (await pendingRes.json()) as {
+			pending: { id: number; first_week_number: number; week_count: number; plan: MultiWeekProposalInput } | null;
+		};
 		expect(pendingBody.pending?.id).toBe(id);
-		expect(pendingBody.pending?.week_number).toBe(2);
+		expect(pendingBody.pending?.first_week_number).toBe(2);
+		expect(pendingBody.pending?.week_count).toBe(3);
+		expect(pendingBody.pending?.plan.weeks).toHaveLength(3);
 
 		const acceptRes = await postJson(`https://training-app.test/api/generator/${id}/accept`);
 		expect(acceptRes.status).toBe(200);
 
 		const sessionsRes = await SELF.fetch('https://training-app.test/api/sessions?from=2026-01-01&to=2026-12-31&limit=200');
 		const sessionsBody = (await sessionsRes.json()) as { sessions: { week_number: number; date: string; label: string }[] };
-		const week2 = sessionsBody.sessions.filter((s) => s.week_number === 2);
-		expect(week2).toHaveLength(1);
-		expect(week2[0].date).toBe('2026-08-10');
-		expect(week2[0].label).toBe('Lift A');
+
+		for (const [weekNumber, date] of [
+			[2, '2026-08-10'],
+			[3, '2026-08-17'],
+			[4, '2026-08-24'],
+		] as const) {
+			const matches = sessionsBody.sessions.filter((s) => s.week_number === weekNumber);
+			expect(matches).toHaveLength(1);
+			expect(matches[0].date).toBe(date);
+			expect(matches[0].label).toBe('Lift A');
+		}
 
 		const nowPendingRes = await SELF.fetch('https://training-app.test/api/generator/pending');
 		expect(((await nowPendingRes.json()) as { pending: unknown }).pending).toBeNull();
@@ -63,7 +111,9 @@ describe('generator export -> import -> pending -> accept/reject flow', () => {
 
 	it('reject leaves no new session/planned_set rows behind', async () => {
 		await seedOneSessionWeek();
-		const exportBody = (await (await SELF.fetch('https://training-app.test/api/generator/export')).json()) as { deterministicProposal: WeekProposalInput };
+		const exportBody = (await (await SELF.fetch('https://training-app.test/api/generator/export?weeks=2')).json()) as {
+			deterministicProposal: MultiWeekProposalInput;
+		};
 		const { id } = (await (await postJson('https://training-app.test/api/generator/import', exportBody.deterministicProposal)).json()) as { id: number };
 
 		const rejectRes = await postJson(`https://training-app.test/api/generator/${id}/reject`);
@@ -74,12 +124,14 @@ describe('generator export -> import -> pending -> accept/reject flow', () => {
 
 		const sessionsRes = await SELF.fetch('https://training-app.test/api/sessions?from=2026-01-01&to=2026-12-31&limit=200');
 		const sessionsBody = (await sessionsRes.json()) as { sessions: { week_number: number }[] };
-		expect(sessionsBody.sessions.filter((s) => s.week_number === 2)).toHaveLength(0);
+		expect(sessionsBody.sessions.filter((s) => s.week_number === 2 || s.week_number === 3)).toHaveLength(0);
 	});
 
 	it('rejects a second import while one is already pending with a 422', async () => {
 		await seedOneSessionWeek();
-		const exportBody = (await (await SELF.fetch('https://training-app.test/api/generator/export')).json()) as { deterministicProposal: WeekProposalInput };
+		const exportBody = (await (await SELF.fetch('https://training-app.test/api/generator/export')).json()) as {
+			deterministicProposal: MultiWeekProposalInput;
+		};
 
 		const first = await postJson('https://training-app.test/api/generator/import', exportBody.deterministicProposal);
 		expect(first.status).toBe(200);

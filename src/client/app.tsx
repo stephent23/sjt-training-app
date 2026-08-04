@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'preact/hooks';
 import { Shell } from './components/Shell';
 import { LiftSession } from './screens/LiftSession';
+import { Generate } from './screens/Generate';
 import { Plan } from './screens/Plan';
 import { History } from './screens/History';
 import { Preview } from './screens/Preview';
@@ -12,6 +13,7 @@ type View =
 	| { name: 'today' }
 	| { name: 'plan' }
 	| { name: 'history' }
+	| { name: 'generate' }
 	| { name: 'lift'; sessionId: number }
 	| { name: 'run'; sessionId: number }
 	| { name: 'review'; sessionId: number }
@@ -22,6 +24,7 @@ const SESSION_ROUTE = /^#\/(lift|run|review|preview)\/(\d+)$/;
 function viewFromHash(): View {
 	if (location.hash === '#/plan') return { name: 'plan' };
 	if (location.hash === '#/history') return { name: 'history' };
+	if (location.hash === '#/generate') return { name: 'generate' };
 	const match = location.hash.match(SESSION_ROUTE);
 	if (match) return { name: match[1] as 'lift' | 'run' | 'review' | 'preview', sessionId: Number(match[2]) };
 	return { name: 'today' };
@@ -59,6 +62,13 @@ export function App() {
 		return (
 			<Shell active="history">
 				<History />
+			</Shell>
+		);
+
+	if (view.name === 'generate')
+		return (
+			<Shell active="generate">
+				<Generate />
 			</Shell>
 		);
 

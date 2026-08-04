@@ -152,6 +152,12 @@ export interface ProposedSet extends ProposedSetInput { exercise_name: string; p
 export interface ProposedSession extends Omit<ProposedSessionInput, 'plannedSets'> { plannedSets: ProposedSet[]; }
 export interface WeekProposal extends Omit<WeekProposalInput, 'sessions'> { sessions: ProposedSession[]; }
 
+// Multi-week wrapper (generate-many-weeks-at-once) — thin reuse of the
+// per-week shapes above so hydrateProposal/insert logic loop rather than
+// duplicate. See migrations/0005_generator_multiweek.sql.
+export interface MultiWeekProposalInput { weeks: WeekProposalInput[]; }
+export interface MultiWeekProposal { weeks: WeekProposal[]; }
+
 export interface Settings {
 	goals: string;
 	days_per_week: number;
