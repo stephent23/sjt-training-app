@@ -445,11 +445,75 @@ button:disabled {
 	border-bottom: 1px solid var(--rule);
 }
 
-/* Superset pairing: a shared left rule connecting the two cards. */
+/* Superset: one card holding every member, so this left rule now spans the
+   whole group as a single unbroken line. It used to be applied per-card, which
+   meant .row's border-bottom cut straight through it between partners. */
 .exercise-card--superset {
 	border-left: 3px solid var(--ink);
 	padding-left: var(--s3);
 	margin-left: calc(-1 * var(--s3) - 3px);
+}
+
+/* Member names stack in the summary, so they must wrap rather than inherit
+   .plan-row-title's nowrap+ellipsis — two names truncate on a phone. */
+.exercise-card--superset .plan-row-title {
+	white-space: normal;
+}
+
+/* A round = one set of each member, in the order you perform them. */
+.superset-round + .superset-round {
+	margin-top: var(--s4);
+	padding-top: var(--s3);
+	border-top: 1px solid var(--rule);
+}
+
+.superset-round-label {
+	margin-bottom: var(--s2);
+}
+
+/* Per-member Swap/Skip, since a superset card has more than one exercise to
+   act on. Solo cards keep the full-width .exercise-card-actions pair. */
+.exercise-card-members {
+	margin-bottom: var(--s3);
+}
+
+.exercise-card-member {
+	display: flex;
+	align-items: center;
+	gap: var(--s3);
+	margin-bottom: var(--s2);
+}
+
+.exercise-card-member-name {
+	flex: 1 1 auto;
+	min-width: 0;
+	font-size: 0.9rem;
+	font-weight: 600;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.exercise-card-member .btn-secondary {
+	width: auto;
+	flex: 0 0 auto;
+	margin: 0;
+	min-height: 44px;
+	padding: 0 var(--s3);
+	font-size: 0.85rem;
+}
+
+.exercise-card-member--skipped .exercise-card-member-name {
+	color: var(--muted);
+	text-decoration: line-through;
+	text-decoration-color: var(--rule);
+}
+
+/* Review: a skipped exercise should read as skipped, not as an empty table. */
+.review-exercise--skipped .section-heading {
+	color: var(--muted);
+	text-decoration: line-through;
+	text-decoration-color: var(--rule);
 }
 
 .plan-row--today .eyebrow {
@@ -632,8 +696,53 @@ button:disabled {
 
 /* ---- Set row internals ------------------------------------------------------- */
 
-.set-row--logged {
-	background: var(--paper-alt);
+/* A finished set collapses to one line. That collapse IS the "done" signal —
+   there is deliberately no fill. The obvious candidate, --paper-alt, sits at
+   ~1.03:1 against --paper (and ~1.2:1 dark), i.e. invisible, and it's the same
+   colour .tap-btn already uses, so chips inside a tinted row lost their own
+   contrast. Claret is reserved from whole-control fills (see the header note).
+   48px of mono summary next to a ~400px live row is the contrast that
+   actually reads mid-workout. */
+.set-row--collapsed {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: var(--s3);
+	min-height: 48px;
+	padding: var(--s3) 0;
+	cursor: pointer;
+}
+
+.set-row--collapsed .set-row-index {
+	flex: 0 0 auto;
+}
+
+/* Mono + tabular-nums so the finished sets stack into a scannable column:
+   60kg × 8 / 60kg × 8 / 60kg × 7 line up digit-for-digit. */
+.set-row-summary {
+	flex: 1 1 auto;
+	text-align: right;
+	font-family: var(--mono);
+	font-variant-numeric: tabular-nums;
+	font-size: 0.9rem;
+}
+
+.set-row-edit {
+	flex: 0 0 auto;
+	font-size: 11px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.12em;
+	color: var(--accent);
+}
+
+/* A logged set reopened for editing — claret rule, not a fill: this is the
+   same "active" budget spent on focus and today. Distinct from the --ink rule
+   on .exercise-card--superset, which never appears on a .set-row. */
+.set-row--editing {
+	border-left: 3px solid var(--accent);
+	padding-left: var(--s3);
+	margin-left: calc(-1 * var(--s3) - 3px);
 }
 
 .set-row-header {

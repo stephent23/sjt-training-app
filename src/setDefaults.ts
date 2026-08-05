@@ -18,6 +18,12 @@ export interface SetDefaults {
  * single most important field in the schema (drives every progression
  * decision) and a stale default would get confirmed without thought,
  * quietly corrupting the signal. Every set always starts with RIR unset.
+ *
+ * One thing that is NOT a violation of that rule: SetRow echoes back a set's
+ * OWN already-logged rir, so the chip you picked stays visible (and the row
+ * stays editable) after logging. That's displaying what you recorded, not
+ * suggesting a value from last week or from the previous set — neither of
+ * which is ever consulted for RIR, here or there.
  */
 export function resolveSetDefaults(planned: PlannedSetDetail, setIndex: number): SetDefaults {
 	const isBodyweight = planned.loading === 'bodyweight';

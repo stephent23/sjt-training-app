@@ -125,11 +125,22 @@ sessions.get('/', async (c) => {
 	const limit = Number.isFinite(limitParam) && limitParam > 0 ? limitParam : 60;
 
 	const { results } = await c.env.DB.prepare(
+		// Skipped exercises are excluded from all three counts, so a list row
+		// shows the volume you still intend to do rather than the volume
+		// originally planned. COUNT(DISTINCT CASE ...) ignores NULLs, so a run
+		// session with no planned_sets at all still reports 0 rather than 1.
+		// logged_sets has no status column of its own, hence the correlation
+		// back to planned_sets on (session_id, exercise_id).
 		`SELECT
 		   s.id, s.date, s.kind, s.label, s.status, s.week_number,
-		   COUNT(DISTINCT ps.id) AS exercise_count,
-		   COALESCE(SUM(ps.target_sets), 0) AS planned_set_count,
-		   (SELECT COUNT(*) FROM logged_sets ls WHERE ls.session_id = s.id) AS logged_set_count,
+		   COUNT(DISTINCT CASE WHEN ps.status <> 'skipped' THEN ps.id END) AS exercise_count,
+		   COALESCE(SUM(CASE WHEN ps.status <> 'skipped' THEN ps.target_sets END), 0) AS planned_set_count,
+		   (SELECT COUNT(*) FROM logged_sets ls
+		      WHERE ls.session_id = s.id
+		        AND EXISTS (SELECT 1 FROM planned_sets ps2
+		                     WHERE ps2.session_id = s.id
+		                       AND ps2.exercise_id = ls.exercise_id
+		                       AND ps2.status <> 'skipped')) AS logged_set_count,
 		   pr.run_type, pr.target_minutes, pr.target_km,
 		   (lr.id IS NOT NULL) AS has_logged_run
 		 FROM sessions s

@@ -118,6 +118,46 @@ describe('GET /api/sessions', () => {
 		expect(byId.get(threeId)?.planned_set_count).toBe(6);
 	});
 
+	// A list row should show the volume still intended, not the volume
+	// originally planned — otherwise a session with skipped work can never
+	// read as done.
+	it('excludes a skipped exercise from exercise_count and planned_set_count', async () => {
+		const sessionId = await insertSession({ date: '2026-07-01', label: 'Lift' });
+		const ex1 = await insertExercise({ name: 'Squat' });
+		const ex2 = await insertExercise({ name: 'Bench' });
+		await insertPlannedSet(sessionId, ex1, { order_index: 1, target_sets: 3 });
+		await insertPlannedSet(sessionId, ex2, { order_index: 2, target_sets: 4, status: 'skipped' });
+
+		const { sessions } = await fetchSessions('?from=2026-07-01&to=2026-07-01');
+		expect(sessions[0].exercise_count).toBe(1);
+		expect(sessions[0].planned_set_count).toBe(3);
+	});
+
+	it('reports zero counts when every exercise was skipped', async () => {
+		const sessionId = await insertSession({ date: '2026-07-01', label: 'Lift' });
+		const exerciseId = await insertExercise();
+		await insertPlannedSet(sessionId, exerciseId, { order_index: 1, target_sets: 3, status: 'skipped' });
+
+		const { sessions } = await fetchSessions('?from=2026-07-01&to=2026-07-01');
+		expect(sessions[0].exercise_count).toBe(0);
+		expect(sessions[0].planned_set_count).toBe(0);
+	});
+
+	// Skipping doesn't delete sets logged before the skip, so logged_set_count
+	// has to correlate back to planned_sets or it would exceed planned_set_count.
+	it('excludes sets logged against an exercise that was later skipped', async () => {
+		const sessionId = await insertSession({ date: '2026-07-01', label: 'Lift' });
+		const kept = await insertExercise({ name: 'Squat' });
+		const dropped = await insertExercise({ name: 'Bench' });
+		await insertPlannedSet(sessionId, kept, { order_index: 1, target_sets: 3 });
+		await insertPlannedSet(sessionId, dropped, { order_index: 2, target_sets: 3, status: 'skipped' });
+		await insertLoggedSet(sessionId, kept, { set_index: 1 });
+		await insertLoggedSet(sessionId, dropped, { set_index: 1 });
+
+		const { sessions } = await fetchSessions('?from=2026-07-01&to=2026-07-01');
+		expect(sessions[0].logged_set_count).toBe(1);
+	});
+
 	it('defaults to a limit of 60, truncating a longer list', async () => {
 		for (let i = 0; i < 65; i++) {
 			await insertSession({ date: `2026-01-${String((i % 28) + 1).padStart(2, '0')}`, week_number: Math.floor(i / 7) + 1, label: `Session ${i}` });

@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'preact/hooks';
 import type { LoggedRunEntry, LoggedSetEntry, PlannedSetDetail, SessionFeedback } from '../../types';
-import { logRun, logSet, saveFeedback, setSessionStatus } from '../api';
+import { logRun, logSet, saveFeedback, setExerciseStatus, setSessionStatus } from '../api';
 import { FeedbackCard } from '../components/FeedbackCard';
 import { SessionScreenFallback } from '../components/SessionScreenFallback';
 import { runSummary } from '../format';
+import { sessionSetTotals } from '../../sessionProgress';
 import { useSession } from '../useSession';
 
 interface ReviewProps {
@@ -65,39 +66,59 @@ function ReviewSetRow({ setIndex, entry, onCommit }: ReviewSetRowProps) {
 interface ReviewExerciseProps {
 	exercise: PlannedSetDetail;
 	onCommitSet: (exercise: PlannedSetDetail, setIndex: number, weightKg: number, reps: number, rir: number) => void;
+	onUnskip: (exercise: PlannedSetDetail) => void;
 }
 
-function ReviewExercise({ exercise, onCommitSet }: ReviewExerciseProps) {
+function ReviewExercise({ exercise, onCommitSet, onUnskip }: ReviewExerciseProps) {
+	const skipped = exercise.status === 'skipped';
 	const setIndexes = Array.from({ length: exercise.target_sets }, (_, i) => i + 1);
 
+	// A skipped exercise used to render as a normal, empty table — identical to
+	// one you simply hadn't got to yet. Show the table only if something was
+	// actually logged before the skip, so a mis-skip stays inspectable and
+	// repairable without hiding real data.
+	const showTable = !skipped || exercise.logged.length > 0;
+
 	return (
-		<section>
+		<section class={skipped ? 'review-exercise--skipped' : undefined}>
 			<h2 class="section-heading">{exercise.exercise_name}</h2>
 			<p class="exercise-target">
-				{exercise.target_sets} × {exercise.rep_low}-{exercise.rep_high}
+				{skipped ? 'Skipped' : `${exercise.target_sets} × ${exercise.rep_low}-${exercise.rep_high}`}
 			</p>
-			<div class="table-scroll">
-				<table class="review-table">
-					<thead>
-						<tr>
-							<th>Set</th>
-							<th>Weight</th>
-							<th>Reps</th>
-							<th>RIR</th>
-						</tr>
-					</thead>
-					<tbody>
-						{setIndexes.map((si) => (
-							<ReviewSetRow
-								key={si}
-								setIndex={si}
-								entry={exercise.logged.find((l) => l.set_index === si)}
-								onCommit={(setIndex, weightKg, reps, rir) => onCommitSet(exercise, setIndex, weightKg, reps, rir)}
-							/>
-						))}
-					</tbody>
-				</table>
-			</div>
+
+			{skipped && (
+				// Without this an accidental skip is unreachable: once the session
+				// is completed, Today routes to Review rather than back into the
+				// lift screen, which is the only other place with a skip toggle.
+				<button type="button" class="btn-secondary" onClick={() => onUnskip(exercise)}>
+					Unskip
+				</button>
+			)}
+
+			{showTable && (
+				<div class="table-scroll">
+					<table class="review-table">
+						<thead>
+							<tr>
+								<th>Set</th>
+								<th>Weight</th>
+								<th>Reps</th>
+								<th>RIR</th>
+							</tr>
+						</thead>
+						<tbody>
+							{setIndexes.map((si) => (
+								<ReviewSetRow
+									key={si}
+									setIndex={si}
+									entry={exercise.logged.find((l) => l.set_index === si)}
+									onCommit={(setIndex, weightKg, reps, rir) => onCommitSet(exercise, setIndex, weightKg, reps, rir)}
+								/>
+							))}
+						</tbody>
+					</table>
+				</div>
+			)}
 		</section>
 	);
 }
@@ -248,6 +269,11 @@ export function Review({ sessionId }: ReviewProps) {
 		setDetail(saveFeedback(sessionId, feedback, detail));
 	}
 
+	function handleUnskip(exercise: PlannedSetDetail) {
+		if (!detail) return;
+		setDetail(setExerciseStatus(sessionId, exercise.id, 'planned', detail));
+	}
+
 	function finish(status: 'completed' | 'skipped') {
 		if (!detail) return;
 		setSessionStatus(sessionId, status);
@@ -255,9 +281,11 @@ export function Review({ sessionId }: ReviewProps) {
 		location.hash = '#/';
 	}
 
-	const totalTarget = plannedSets.reduce((sum, ps) => sum + ps.target_sets, 0);
-	const totalLogged = plannedSets.reduce((sum, ps) => sum + ps.logged.length, 0);
-	const progressLine = session.kind === 'lift' ? `${totalLogged} of ${totalTarget} sets logged` : loggedRun ? 'Run logged' : 'Not yet logged';
+	// Shared with LiftSession so the two screens can't disagree about what
+	// "done" means — and it excludes skipped exercises, which is what stopped
+	// a session with skipped work ever reading as finished.
+	const totals = sessionSetTotals(plannedSets);
+	const progressLine = session.kind === 'lift' ? `${totals.logged} of ${totals.target} sets logged` : loggedRun ? 'Run logged' : 'Not yet logged';
 
 	return (
 		<main class="screen">
@@ -274,7 +302,7 @@ export function Review({ sessionId }: ReviewProps) {
 			<p class="exercise-target">{progressLine}</p>
 
 			{session.kind === 'lift' ? (
-				plannedSets.map((ps) => <ReviewExercise key={ps.id} exercise={ps} onCommitSet={handleCommitSet} />)
+				plannedSets.map((ps) => <ReviewExercise key={ps.id} exercise={ps} onCommitSet={handleCommitSet} onUnskip={handleUnskip} />)
 			) : (
 				<>
 					{detail.plannedRun && (

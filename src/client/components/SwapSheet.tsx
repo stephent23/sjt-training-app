@@ -6,6 +6,14 @@ interface SwapSheetProps {
 	sessionId: number;
 	fromExerciseId: number;
 	plannedSetId: number;
+	/** Exercise ids already used by OTHER planned sets in this session. They're
+	 *  filtered out of the candidate list: two planned_sets rows sharing an
+	 *  exercise_id would share one `logged` array (logSet and loadSessionDetail
+	 *  both key on exercise_id), and logged_sets' unique index on
+	 *  (session_id, exercise_id, set_index) would make their sets overwrite
+	 *  each other. Most reachable inside a superset, where the members usually
+	 *  share a movement pattern and so appear in each other's candidate list. */
+	excludeExerciseIds: number[];
 	onClose: () => void;
 	onSwapped: () => void;
 }
@@ -17,7 +25,7 @@ const REASONS: { value: SwapReason; label: string }[] = [
 	{ value: 'unavailable', label: "Doesn't exist here" },
 ];
 
-export function SwapSheet({ sessionId, fromExerciseId, plannedSetId, onClose, onSwapped }: SwapSheetProps) {
+export function SwapSheet({ sessionId, fromExerciseId, plannedSetId, excludeExerciseIds, onClose, onSwapped }: SwapSheetProps) {
 	const [reason, setReason] = useState<SwapReason | null>(null);
 	const [painType, setPainType] = useState<'shoulder' | 'back' | null>(null);
 	const [candidates, setCandidates] = useState<SwapCandidate[]>([]);
@@ -30,8 +38,10 @@ export function SwapSheet({ sessionId, fromExerciseId, plannedSetId, onClose, on
 	useEffect(() => {
 		if (!reason) return;
 		if (reason === 'pain' && !painType) return;
-		fetchSwapCandidates(fromExerciseId, reason === 'pain' ? painType : null).then(setCandidates);
-	}, [reason, painType, fromExerciseId]);
+		fetchSwapCandidates(fromExerciseId, reason === 'pain' ? painType : null).then((found) =>
+			setCandidates(found.filter((c) => !excludeExerciseIds.includes(c.id))),
+		);
+	}, [reason, painType, fromExerciseId, excludeExerciseIds.join(',')]);
 
 	useEffect(() => {
 		sheetRef.current?.focus();

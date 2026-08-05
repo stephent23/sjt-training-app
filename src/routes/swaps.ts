@@ -30,6 +30,16 @@ swaps.get('/candidates/:exerciseId', async (c) => {
 swaps.post('/', async (c) => {
 	const body = await c.req.json<ApplySwapInput>();
 
+	// Refuse to point two planned_sets rows in one session at the same
+	// exercise. logSet and loadSessionDetail both key logged sets by
+	// exercise_id, and logged_sets has a unique index on
+	// (session_id, exercise_id, set_index) — so duplicates would silently
+	// share one set history and overwrite each other's numbers.
+	const clash = await c.env.DB.prepare(`SELECT id FROM planned_sets WHERE session_id = ? AND exercise_id = ? AND id != ? LIMIT 1`)
+		.bind(body.session_id, body.to_exercise_id, body.planned_set_id)
+		.first<{ id: number }>();
+	if (clash) return c.json({ error: 'that exercise is already in this session' }, 409);
+
 	await c.env.DB.prepare(
 		`INSERT INTO exercise_swaps (session_id, from_exercise_id, to_exercise_id, reason, scope, created_at)
 		 VALUES (?, ?, ?, ?, ?, datetime('now'))`,

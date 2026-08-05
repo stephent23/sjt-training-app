@@ -55,6 +55,39 @@ describe('POST /api/swaps', () => {
 		expect(detail.plannedSets[0].target_weight_kg).toBeNull();
 	});
 
+	// Two planned_sets rows pointing at one exercise would share a single
+	// logged-set history and overwrite each other, because logged_sets is
+	// unique on (session_id, exercise_id, set_index).
+	it('rejects a swap onto an exercise already present in the session', async () => {
+		const sessionId = await insertSession({ date: '2026-08-05' });
+		const from = await insertExercise({ name: 'DB curl', pattern: 'elbow_flexion' });
+		const alreadyThere = await insertExercise({ name: 'Cable curl', pattern: 'elbow_flexion' });
+		await insertPlannedSet(sessionId, from, { order_index: 1 });
+		await insertPlannedSet(sessionId, alreadyThere, { order_index: 2 });
+
+		const before = (await (await SELF.fetch(`https://training-app.test/api/sessions/${sessionId}`)).json()) as SessionDetail;
+		const fromSetId = before.plannedSets[0].id;
+
+		const input: ApplySwapInput = {
+			session_id: sessionId,
+			planned_set_id: fromSetId,
+			from_exercise_id: from,
+			to_exercise_id: alreadyThere,
+			reason: 'preference',
+			scope: 'this_session',
+		};
+		const res = await SELF.fetch('https://training-app.test/api/swaps', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify(input),
+		});
+
+		expect(res.status).toBe(409);
+
+		const after = (await (await SELF.fetch(`https://training-app.test/api/sessions/${sessionId}`)).json()) as SessionDetail;
+		expect(after.plannedSets[0].exercise_name).toBe('DB curl');
+	});
+
 	it('with two planned_sets rows sharing the same exercise in one session, only the targeted row is repointed', async () => {
 		const shared = await insertExercise({ name: 'Cable fly', pattern: 'isolation_push' });
 		const to = await insertExercise({ name: 'Pec deck', pattern: 'isolation_push' });
