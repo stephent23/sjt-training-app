@@ -66,6 +66,23 @@ export interface ExportContext {
 	painFlags: PainFlags;
 }
 
+/**
+ * What GET /export actually returns: the pure ExportContext plus the two
+ * clock-derived fields. They are typed here but filled in by the route, not by
+ * buildExportContext — that function stays clock-free so every generator test
+ * can assert exact dates without stubbing time.
+ *
+ * Without an anchor, a cold-start export contains no date at all (empty weeks,
+ * empty history, empty skipped list). An assistant writing a plan from scratch
+ * then has to invent dates, and isRealIsoDate accepts any real calendar date —
+ * so a plan dated last year imports cleanly and then never matches a
+ * Today/Plan query again.
+ */
+export interface ExportPayload extends ExportContext {
+	today: string;
+	weekStartDate: string;
+}
+
 export type ImportResult = { ok: true; id: number } | { ok: false; errors: string[] };
 
 interface PlannedSetJoinRow {

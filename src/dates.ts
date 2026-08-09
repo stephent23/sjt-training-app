@@ -16,6 +16,19 @@ export function todayIso(): string {
 	}).format(new Date());
 }
 
+/** The Monday on or after `dateIso` — where a plan written from scratch should
+ * start. Same UTC-millis arithmetic as addDaysIso below, for the same reason.
+ *
+ * `(8 - weekday) % 7` rather than the more obvious `1 - weekday`: getUTCDay()
+ * numbers Sunday as 0, so the naive form sends a Sunday six days *backwards*
+ * into the week that has already happened. Adding 8 first keeps every offset
+ * non-negative — Monday maps to 0, Sunday to 1. */
+export function weekStartOnOrAfter(dateIso: string): string {
+	const [year, month, day] = dateIso.split('-').map(Number);
+	const weekday = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+	return addDaysIso(dateIso, (8 - weekday) % 7);
+}
+
 /** Pure calendar-day offset on a YYYY-MM-DD string — used by the generator to
  * shift last week's sessions forward by 7 days. Deliberately does the
  * arithmetic via UTC millis on the date parts (not a timezone-aware Date),

@@ -24,10 +24,10 @@ Design rationale lives in [generator-design.md](generator-design.md).
 
 - [x] **0 · Ledger and design doc.** This file plus `generator-design.md`, capturing the decisions
       the code comments cite. *Done: the `plan doc §N` comments now resolve to something in-repo.*
-- [ ] **1 · Date anchor.** `weekStartOnOrAfter` in `src/dates.ts`; `/export` returns `today` and
+- [x] **1 · Date anchor.** `weekStartOnOrAfter` in `src/dates.ts`; `/export` returns `today` and
       `weekStartDate` via a new `ExportPayload`. `buildExportContext` stays clock-free.
-      *Acceptance: a cold-start export carries a Monday to build from; generator tests still assert
-      exact dates.*
+      *Done: a cold-start export now carries a Monday to build from, and the generator tests still
+      assert exact dates because the clock lives in the route.*
 - [ ] **2 · Constraint review.** Reject a duplicate `exercise_id` within a session; require dates
       unique and ascending within a week and strictly increasing between weeks; reject collision
       with sessions already in the database; validate `structure_json` step shape and harden
