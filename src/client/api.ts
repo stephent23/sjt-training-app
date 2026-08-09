@@ -139,6 +139,33 @@ export async function updateSettings(patch: Partial<Settings>): Promise<void> {
 	if (!res.ok) throw new Error(`request failed: ${res.status}`);
 }
 
+// A plain `<a href="/api/generator/export" download>` produced an empty file:
+// the app runs as an installed standalone PWA (manifest display: standalone),
+// where handing a same-origin navigation off to the browser's download manager
+// is unreliable, and a failed export gave no feedback at all. Fetching the
+// bytes ourselves and saving them from a blob keeps the download inside the
+// page, and lets a non-ok response surface as an error instead of a 0-byte
+// file.
+export async function downloadExport(weeks: number, filename = 'training-export.json'): Promise<void> {
+	const res = await fetch(`/api/generator/export?weeks=${weeks}`);
+	if (!res.ok) throw new Error(`request failed: ${res.status}`);
+
+	const text = await res.text();
+	if (text.trim() === '') throw new Error('the export came back empty');
+
+	const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+	try {
+		const anchor = document.createElement('a');
+		anchor.href = url;
+		anchor.download = filename;
+		document.body.appendChild(anchor);
+		anchor.click();
+		anchor.remove();
+	} finally {
+		URL.revokeObjectURL(url);
+	}
+}
+
 export interface PendingProposal {
 	id: number;
 	first_week_number: number;

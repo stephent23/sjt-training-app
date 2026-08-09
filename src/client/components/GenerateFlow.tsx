@@ -1,6 +1,6 @@
 import { useState } from 'preact/hooks';
 import type { MultiWeekProposalInput } from '../../types';
-import { importProposal } from '../api';
+import { downloadExport, importProposal } from '../api';
 
 // Kept verbatim in sync with the plan doc's section 6 — tool-agnostic on
 // purpose: this gets pasted into whatever AI assistant the person has
@@ -83,6 +83,20 @@ export function GenerateFlow({ onImported }: GenerateFlowProps) {
 	const [pasted, setPasted] = useState('');
 	const [importError, setImportError] = useState<string | null>(null);
 	const [busy, setBusy] = useState(false);
+	const [downloading, setDownloading] = useState(false);
+	const [downloadError, setDownloadError] = useState<string | null>(null);
+
+	async function handleDownload() {
+		setDownloadError(null);
+		setDownloading(true);
+		try {
+			await downloadExport(weeks);
+		} catch (e) {
+			setDownloadError(e instanceof Error ? e.message : 'Download failed.');
+		} finally {
+			setDownloading(false);
+		}
+	}
 
 	async function copyPrompt() {
 		setCopyError(null);
@@ -134,9 +148,10 @@ export function GenerateFlow({ onImported }: GenerateFlowProps) {
 					/>
 				</label>
 				<p>Download your training data as a JSON file.</p>
-				<a class="btn-secondary" href={`/api/generator/export?weeks=${weeks}`} download="training-export.json">
-					Download your training data
-				</a>
+				<button type="button" class="btn-secondary" onClick={handleDownload} disabled={downloading}>
+					{downloading ? 'Preparing…' : 'Download your training data'}
+				</button>
+				{downloadError && <p class="eyebrow--accent">{downloadError}</p>}
 			</div>
 
 			<div class="row">
