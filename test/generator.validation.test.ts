@@ -167,4 +167,202 @@ describe('validateProposal — structural checks', () => {
 		const row = await env.DB.prepare(`SELECT COUNT(*) AS n FROM generated_plans`).first<{ n: number }>();
 		expect(row?.n).toBe(0);
 	});
+
+	// logged_sets is unique on (session_id, exercise_id, set_index), and both
+	// logSet and loadSessionDetail key by exercise_id — so two planned rows
+	// sharing one exercise in a session make the second one unloggable. POST
+	// /api/swaps already 409s on exactly this; import let it straight through.
+	it('rejects the same exercise appearing twice in one session', async () => {
+		const { exerciseId } = await seedBaseline();
+		const context = await buildExportContext(env.DB, 1);
+
+		const session = liftSession(exerciseId);
+		session.plannedSets.push({ ...session.plannedSets[0], order_index: 2 });
+
+		expect(validateProposal(proposalOf(session), context).join(' ')).toMatch(/appears twice/);
+	});
+
+	it('rejects two sessions sharing a date within one week', async () => {
+		const { exerciseId } = await seedBaseline();
+		const context = await buildExportContext(env.DB, 1);
+
+		const proposal: MultiWeekProposalInput = {
+			weeks: [{ week_number: 2, sessions: [liftSession(exerciseId), liftSession(exerciseId, { label: 'Lift B' })] }],
+		};
+
+		expect(validateProposal(proposal, context).join(' ')).toMatch(/duplicate date/);
+	});
+
+	it('rejects sessions that are not in ascending date order within a week', async () => {
+		const { exerciseId } = await seedBaseline();
+		await env.DB.prepare(`UPDATE settings SET days_per_week = 2 WHERE id = 1`).run();
+		const context = await buildExportContext(env.DB, 1);
+
+		const proposal: MultiWeekProposalInput = {
+			weeks: [{ week_number: 2, sessions: [liftSession(exerciseId, { date: '2026-08-12' }), liftSession(exerciseId, { date: '2026-08-10' })] }],
+		};
+
+		expect(validateProposal(proposal, context).join(' ')).toMatch(/out of date order/);
+	});
+
+	it('rejects a week that starts before the previous week has finished', async () => {
+		const { exerciseId } = await seedBaseline();
+		const context = await buildExportContext(env.DB, 2);
+
+		const proposal: MultiWeekProposalInput = {
+			weeks: [
+				{ week_number: 2, sessions: [liftSession(exerciseId, { date: '2026-08-10' })] },
+				{ week_number: 3, sessions: [liftSession(exerciseId, { date: '2026-08-09' })] },
+			],
+		};
+
+		expect(validateProposal(proposal, context).join(' ')).toMatch(/starts on or before/);
+	});
+
+	// A run whose structure_json parses but isn't the {steps:[...]} shape used
+	// to render it imported happily and then displayed as nothing at all.
+	it('rejects structure_json that parses but has no steps array', async () => {
+		await seedBaseline();
+		const context = await buildExportContext(env.DB, 1);
+
+		const session: ProposedSessionInput = {
+			date: '2026-08-10',
+			kind: 'run',
+			label: 'Intervals',
+			plannedSets: [],
+			plannedRun: { run_type: 'intervals', target_minutes: 40, target_km: null, structure_json: '{"foo":1}' },
+		};
+
+		expect(validateProposal(proposalOf(session), context).join(' ')).toMatch(/steps array/);
+	});
+
+	it('rejects a structure_json step that is missing effort', async () => {
+		await seedBaseline();
+		const context = await buildExportContext(env.DB, 1);
+
+		const session: ProposedSessionInput = {
+			date: '2026-08-10',
+			kind: 'run',
+			label: 'Intervals',
+			plannedSets: [],
+			plannedRun: {
+				run_type: 'intervals',
+				target_minutes: 40,
+				target_km: null,
+				structure_json: '{"steps":[{"kind":"warmup","minutes":10}]}',
+			},
+		};
+
+		expect(validateProposal(proposalOf(session), context).join(' ')).toMatch(/step 0/);
+	});
+
+	it('accepts a well-formed structure_json', async () => {
+		await seedBaseline();
+		const context = await buildExportContext(env.DB, 1);
+
+		const session: ProposedSessionInput = {
+			date: '2026-08-10',
+			kind: 'run',
+			label: 'Intervals',
+			plannedSets: [],
+			plannedRun: {
+				run_type: 'intervals',
+				target_minutes: 40,
+				target_km: null,
+				structure_json: '{"steps":[{"kind":"warmup","minutes":10,"effort":"easy"},{"kind":"work","minutes":3,"effort":"hard","repeat":5}]}',
+			},
+		};
+
+		expect(validateProposal(proposalOf(session), context)).toEqual([]);
+	});
+});
+
+describe('validateProposal — session counts and deloads', () => {
+	async function seedFourDayWeek() {
+		const exerciseId = await insertExercise({ name: 'Goblet squat', pattern: 'squat', increment_kg: 2 });
+		const sessionId = await insertSession({ date: '2026-08-03', label: 'Lift A', week_number: 1 });
+		await insertPlannedSet(sessionId, exerciseId, { order_index: 1, target_sets: 3, rep_low: 8, rep_high: 10, target_weight_kg: 20, rest_seconds: 120 });
+		await env.DB.prepare(`UPDATE settings SET days_per_week = 4 WHERE id = 1`).run();
+		return { exerciseId };
+	}
+
+	function weekOf(exerciseId: number, weekNumber: number, dates: string[]) {
+		return { week_number: weekNumber, sessions: dates.map((date) => liftSession(exerciseId, { date })) };
+	}
+
+	it('requires week 1 to match days_per_week exactly — it mirrors a real week', async () => {
+		const { exerciseId } = await seedFourDayWeek();
+		const context = await buildExportContext(env.DB, 1);
+
+		const proposal = { weeks: [weekOf(exerciseId, 2, ['2026-08-10', '2026-08-11', '2026-08-12'])] };
+		expect(validateProposal(proposal, context).join(' ')).toMatch(/Session count/);
+	});
+
+	// A deload that drops a session is real judgement, and used to be
+	// un-importable because every week had to equal days_per_week exactly.
+	it('lets a later week drop one session for a deload', async () => {
+		const { exerciseId } = await seedFourDayWeek();
+		const context = await buildExportContext(env.DB, 2);
+
+		const proposal: MultiWeekProposalInput = {
+			weeks: [
+				weekOf(exerciseId, 2, ['2026-08-10', '2026-08-11', '2026-08-12', '2026-08-13']),
+				{ ...weekOf(exerciseId, 3, ['2026-08-17', '2026-08-18', '2026-08-19']), focus: 'deload' },
+			],
+		};
+
+		expect(validateProposal(proposal, context)).toEqual([]);
+	});
+
+	it('still rejects a later week that drops two sessions', async () => {
+		const { exerciseId } = await seedFourDayWeek();
+		const context = await buildExportContext(env.DB, 2);
+
+		const proposal: MultiWeekProposalInput = {
+			weeks: [
+				weekOf(exerciseId, 2, ['2026-08-10', '2026-08-11', '2026-08-12', '2026-08-13']),
+				weekOf(exerciseId, 3, ['2026-08-17', '2026-08-18']),
+			],
+		};
+
+		expect(validateProposal(proposal, context).join(' ')).toMatch(/Session count/);
+	});
+
+	it('never allows an empty week, even where days_per_week is 1', async () => {
+		const { exerciseId } = await seedBaseline();
+		const context = await buildExportContext(env.DB, 2);
+
+		const proposal: MultiWeekProposalInput = {
+			weeks: [weekOf(exerciseId, 2, ['2026-08-10']), { week_number: 3, sessions: [] }],
+		};
+
+		expect(validateProposal(proposal, context).join(' ')).toMatch(/Session count/);
+	});
+
+	it('rejects a focus that is not a non-empty string', async () => {
+		const { exerciseId } = await seedBaseline();
+		const context = await buildExportContext(env.DB, 1);
+
+		const proposal = { weeks: [{ ...weekOf(exerciseId, 2, ['2026-08-10']), focus: '   ' }] };
+		expect(validateProposal(proposal, context).join(' ')).toMatch(/invalid focus/);
+	});
+});
+
+describe('importProposal — collision with sessions already in the database', () => {
+	it('refuses a proposal whose dates are already scheduled', async () => {
+		const exerciseId = await insertExercise({ name: 'Goblet squat', pattern: 'squat', increment_kg: 2 });
+		const sessionId = await insertSession({ date: '2026-08-03', label: 'Lift A', week_number: 1 });
+		await insertPlannedSet(sessionId, exerciseId, { order_index: 1, target_sets: 3, rep_low: 8, rep_high: 10, target_weight_kg: 20, rest_seconds: 120 });
+		await env.DB.prepare(`UPDATE settings SET days_per_week = 1 WHERE id = 1`).run();
+
+		// Someone already has something booked on the day the proposal wants.
+		await insertSession({ date: '2026-08-10', label: 'Existing', week_number: 2 });
+
+		const result = await importProposal(env.DB, proposalOf(liftSession(exerciseId)));
+		expect(result.ok).toBe(false);
+		if (!result.ok) expect(result.errors.join(' ')).toMatch(/2026-08-10 already has a session/);
+
+		const row = await env.DB.prepare(`SELECT COUNT(*) AS n FROM generated_plans`).first<{ n: number }>();
+		expect(row?.n).toBe(0);
+	});
 });

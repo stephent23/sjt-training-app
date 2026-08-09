@@ -6,7 +6,26 @@ disagree. Read this first when picking the work back up.
 
 Design rationale lives in [generator-design.md](generator-design.md).
 
+## Branches
+
+One branch per key feature, each pushed to `origin` for review. They are stacked in the order
+below — each is branched off the one before it, so **merge them into `main` in this order** and
+every merge is a fast-forward with no conflicts. Merging only the first few is also safe; the later
+branches simply carry the earlier commits with them.
+
+1. `feat/generator-foundations` — stages 0–2 (docs, date anchor, constraint review)
+2. `feat/structured-goals` — stage 3
+3. `feat/run-data` — stages 4–5
+4. `feat/generate-page` — stages 6–9
+5. `feat/plan-collapsible-weeks` — stage 10
+6. `feat/swaps-and-exercises` — stage 11
+7. `refactor/simplify` — stage 12
+
 ## Working rules
+
+- **Keep it simple.** Prefer deleting to adding, and the smallest change that actually solves the
+  problem. No abstraction until the third repetition. Stage 12 is a dedicated pass to remove
+  anything this campaign let creep in.
 
 - **TDD.** Failing test first, then the code. Server logic runs under the `worker` vitest project,
   client under `client`.
@@ -28,12 +47,13 @@ Design rationale lives in [generator-design.md](generator-design.md).
       `weekStartDate` via a new `ExportPayload`. `buildExportContext` stays clock-free.
       *Done: a cold-start export now carries a Monday to build from, and the generator tests still
       assert exact dates because the clock lives in the route.*
-- [ ] **2 · Constraint review.** Reject a duplicate `exercise_id` within a session; require dates
+- [x] **2 · Constraint review.** Reject a duplicate `exercise_id` within a session; require dates
       unique and ascending within a week and strictly increasing between weeks; reject collision
-      with sessions already in the database; validate `structure_json` step shape and harden
-      `RunStructure` against malformed steps; relax the session count to allow a deload
-      (week 1 exact, later weeks `daysPerWeek` or one fewer); optional `week.focus` string.
-      *Acceptance: each new rule has its own failing-first test; existing message wording unchanged.*
+      with sessions already in the database; validate `structure_json` step shape; relax the session
+      count to allow a deload (week 1 exact, later weeks `daysPerWeek` or one fewer); optional
+      `week.focus` string. *Done: 15 new tests. Two existing fixtures built every week from week 1's
+      template without shifting the date — unrealistic, and the new overlap rule caught them.
+      `RunStructure` hardening moved to stage 4, where the run work lives.*
 - [ ] **3 · Structured goals** (migration 0006). `settings.goal_tags` JSON array; validated slug
       vocabulary in `src/types.ts`; `GoalsEditor` becomes always-visible with objective, emphasis
       and constraint tick boxes plus free text; export carries `goalTags`.
@@ -63,6 +83,11 @@ Design rationale lives in [generator-design.md](generator-design.md).
       planned sessions; loading and error states in the sheet; a back affordance; new
       `POST /api/exercises` with a minimal form, reachable from the sheet's empty state. Optional
       per-lap `splits_json` last, and droppable.
+- [ ] **12 · Simplification pass.** A dedicated refactor over everything this campaign touched:
+      delete dead code and unused CSS (`.plan-row--today` is defined and never applied), collapse
+      duplication the stages introduced, shorten anything that grew a wrapper it didn't need, and
+      re-read every new comment for whether it still earns its place. No behaviour change — the
+      suite must stay green throughout. Run the `simplify` skill over the full diff against `main`.
 
 ## Notes for whoever picks this up
 

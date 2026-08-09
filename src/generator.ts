@@ -420,6 +420,41 @@ function isNullableNonNegativeNumber(value: unknown): boolean {
 }
 
 /**
+ * `structure_json` is stored as an opaque TEXT blob and parsed by the client at
+ * render time, so anything wrong with it fails silently in the UI rather than
+ * loudly at import. Checking only that it parses wasn't enough: `{"foo":1}`
+ * passed, then rendered as nothing at all, and a step missing `effort` threw
+ * inside RunStructure's render. Validate the shape the renderer actually
+ * expects — a flat `{ steps: [...] }` list, deliberately not nested.
+ */
+function validateStructureJson(raw: string, at: string): string[] {
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(raw);
+	} catch {
+		return [`${at} has a structure_json that is not valid JSON`];
+	}
+
+	const steps = (parsed as { steps?: unknown } | null)?.steps;
+	if (!Array.isArray(steps)) {
+		return [`${at} has a structure_json with no steps array — expected {"steps":[...]}`];
+	}
+
+	const errors: string[] = [];
+	steps.forEach((step, index) => {
+		const stepAt = `${at}, structure_json step ${index}`;
+		const s = step as { kind?: unknown; minutes?: unknown; effort?: unknown; repeat?: unknown } | null;
+		if (typeof s?.kind !== 'string' || s.kind.trim() === '') errors.push(`${stepAt} has no kind`);
+		if (typeof s?.minutes !== 'number' || !Number.isFinite(s.minutes) || s.minutes <= 0) errors.push(`${stepAt} has an invalid minutes`);
+		if (typeof s?.effort !== 'string' || s.effort.trim() === '') errors.push(`${stepAt} has no effort`);
+		if (s?.repeat !== undefined && s.repeat !== null && (!Number.isInteger(s.repeat) || (s.repeat as number) < 1)) {
+			errors.push(`${stepAt} has an invalid repeat`);
+		}
+	});
+	return errors;
+}
+
+/**
  * Structural/type validation for one week, independent of any baseline.
  *
  * This exists because validateWeekAgainstBaseline only ever checked *weights*
@@ -438,9 +473,29 @@ function validateWeekStructure(week: WeekProposalInput, weekIndex: number): stri
 	if (!isPositiveInt(week.week_number)) {
 		errors.push(`${where()} has an invalid week_number (${JSON.stringify(week.week_number)}) — must be a positive integer`);
 	}
+	if (week.focus !== null && week.focus !== undefined && (typeof week.focus !== 'string' || week.focus.trim() === '')) {
+		errors.push(`${where()} has an invalid focus (${JSON.stringify(week.focus)}) — must be null or a non-empty string`);
+	}
 	if (!Array.isArray(week.sessions)) {
 		errors.push(`${where()} has no sessions array`);
 		return errors; // nothing further is inspectable
+	}
+
+	// Dates within a week must be distinct and ascending. Neither was checked
+	// before, so a whole week could land on one day — which inserts fine and
+	// then reads as an unexplainable pile-up on Today.
+	const seenDates = new Set<string>();
+	let previousDate = '';
+	for (const session of week.sessions) {
+		if (!isRealIsoDate(session.date)) continue; // reported per-session below
+		if (seenDates.has(session.date)) {
+			errors.push(`${where()} has a duplicate date (${session.date}) — one session per day`);
+		}
+		seenDates.add(session.date);
+		if (previousDate && session.date < previousDate) {
+			errors.push(`${where()} is out of date order (${session.date} follows ${previousDate})`);
+		}
+		previousDate = session.date;
 	}
 
 	week.sessions.forEach((session, sessionIndex) => {
@@ -463,6 +518,19 @@ function validateWeekStructure(week: WeekProposalInput, weekIndex: number): stri
 			// carrying them would silently attach lift rows to a run.
 			if (session.kind === 'run' && session.plannedSets.length > 0) {
 				errors.push(`${at} is a run but carries ${session.plannedSets.length} plannedSets`);
+			}
+
+			// logged_sets is unique on (session_id, exercise_id, set_index), and
+			// logSet/loadSessionDetail both key by exercise_id — so a second
+			// planned row for the same exercise in one session is simply
+			// unloggable. POST /api/swaps already 409s on this; import didn't.
+			const seenExercises = new Set<number>();
+			for (const set of session.plannedSets) {
+				if (!isPositiveInt(set.exercise_id)) continue; // reported below
+				if (seenExercises.has(set.exercise_id)) {
+					errors.push(`${at} has exercise_id ${set.exercise_id} twice — an exercise appears twice in one session`);
+				}
+				seenExercises.add(set.exercise_id);
 			}
 
 			session.plannedSets.forEach((set, setIndex) => {
@@ -499,13 +567,7 @@ function validateWeekStructure(week: WeekProposalInput, weekIndex: number): stri
 				if (typeof run.structure_json !== 'string') {
 					errors.push(`${at} has a non-string structure_json`);
 				} else {
-					try {
-						JSON.parse(run.structure_json);
-					} catch {
-						// Stored as an opaque TEXT blob and parsed by the client at
-						// render time, so bad JSON here fails silently in the UI later.
-						errors.push(`${at} has a structure_json that is not valid JSON`);
-					}
+					errors.push(...validateStructureJson(run.structure_json, at));
 				}
 			}
 		}
@@ -611,11 +673,34 @@ function validateWeekAgainstBaseline(
 		}
 	}
 
-	if (week.sessions.length !== context.daysPerWeek) {
-		errors.push(`Session count (${week.sessions.length}) does not match days_per_week (${context.daysPerWeek}) (week ${week.week_number})`);
-	}
-
 	return errors;
+}
+
+/**
+ * How many sessions a week is allowed to contain.
+ *
+ * Week 1 must match `days_per_week` exactly — it mirrors a week that really
+ * happened, and dropping a session there is just an omission. Later weeks may
+ * drop one, because a deload week that trains a day less is legitimate
+ * periodisation and the old exact-equality rule made it un-importable. Never
+ * more than `days_per_week`, and never zero — with days_per_week of 1 the
+ * floor and the target are the same number.
+ */
+function validateSessionCount(week: WeekProposalInput, context: ExportContext, isFirstWeek: boolean): string[] {
+	const target = context.daysPerWeek;
+	const floor = isFirstWeek ? target : Math.max(1, target - 1);
+	if (week.sessions.length >= floor && week.sessions.length <= target) return [];
+
+	const allowed = floor === target ? `${target}` : `${floor}-${target}`;
+	return [`Session count (${week.sessions.length}) is outside the allowed ${allowed} for days_per_week ${target} (week ${week.week_number})`];
+}
+
+/** First and last dates of a week, for the cross-week ordering check. Weeks are
+ * already known to be internally ordered by the time this runs. */
+function weekDateRange(week: WeekProposalInput): { first: string; last: string } | null {
+	const dates = week.sessions.map((s) => s.date).filter((d) => typeof d === 'string');
+	if (dates.length === 0) return null;
+	return { first: dates[0], last: dates[dates.length - 1] };
 }
 
 /**
@@ -644,11 +729,22 @@ export function validateProposal(proposal: MultiWeekProposalInput, context: Expo
 	const errors: string[] = [];
 
 	proposal.weeks.forEach((week, index) => {
+		errors.push(...validateSessionCount(week, context, index === 0));
+
 		if (index === 0) {
 			errors.push(...validateWeekAgainstBaseline(week, context.deterministicProposal.weeks[0], context, 'the deterministic proposal', true));
 		} else {
 			const previousWeek = proposal.weeks[index - 1];
 			errors.push(...validateWeekAgainstBaseline(week, previousWeek, context, `week ${previousWeek.week_number}`, false));
+
+			// Weeks must not overlap or run backwards. Each week is already
+			// internally ordered by validateWeekStructure, so comparing the
+			// previous week's last date to this one's first is enough.
+			const previousRange = weekDateRange(previousWeek);
+			const range = weekDateRange(week);
+			if (previousRange && range && range.first <= previousRange.last) {
+				errors.push(`Week ${week.week_number} starts on or before week ${previousWeek.week_number} ends (${range.first} vs ${previousRange.last})`);
+			}
 		}
 	});
 
@@ -663,6 +759,7 @@ export function hydrateProposal(input: WeekProposalInput, exercises: Exercise[])
 	const exerciseById = new Map(exercises.map((e) => [e.id, e]));
 	return {
 		week_number: input.week_number,
+		focus: input.focus ?? null,
 		sessions: input.sessions.map((session) => ({
 			date: session.date,
 			kind: session.kind,
@@ -699,6 +796,22 @@ export async function importProposal(db: D1Database, input: MultiWeekProposalInp
 	const errors = validateProposal(input, context);
 	if (errors.length > 0) {
 		return { ok: false, errors };
+	}
+
+	// Nothing stopped a proposal from being scheduled on top of days that
+	// already have sessions. Accepting it double-booked the day: two rows for
+	// the same date, both showing on Today, with no indication which is real.
+	// Checked here rather than in validateProposal because it's the only rule
+	// that needs the database rather than the export context.
+	const proposedDates = input.weeks.flatMap((week) => week.sessions.map((session) => session.date));
+	if (proposedDates.length > 0) {
+		const { results: clashes } = await db
+			.prepare(`SELECT DISTINCT date FROM sessions WHERE date IN (${sqlIn(proposedDates.length)}) ORDER BY date`)
+			.bind(...proposedDates)
+			.all<{ date: string }>();
+		if (clashes.length > 0) {
+			return { ok: false, errors: clashes.map((c) => `${c.date} already has a session scheduled — move it or delete the existing one`) };
+		}
 	}
 
 	const hydrated: MultiWeekProposal = { weeks: input.weeks.map((week) => hydrateProposal(week, context.exerciseCatalogue)) };
