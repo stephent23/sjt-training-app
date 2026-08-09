@@ -78,10 +78,18 @@ export interface RunStep {
 	repeat?: number;
 }
 
+/** Everything a Garmin shows on its post-run summary. Only distance and
+ * duration are required — the rest are copied across by hand, so any of them
+ * can be skipped. Pace is never stored: it is distance over duration, and a
+ * stored copy would just be a second thing to keep in step. */
 export interface LoggedRunEntry {
 	distance_km: number;
 	duration_seconds: number;
 	avg_hr: number | null;
+	max_hr: number | null;
+	avg_cadence_spm: number | null;
+	elevation_gain_m: number | null;
+	aerobic_training_effect: number | null;
 	rpe_1_10: number | null;
 	performed_on: string;
 	note: string | null;
@@ -115,14 +123,7 @@ export interface LogSetInput {
 	performed_on: string;
 }
 
-export interface LogRunInput {
-	distance_km: number;
-	duration_seconds: number;
-	avg_hr: number | null;
-	rpe_1_10: number | null;
-	performed_on: string;
-	note: string | null;
-}
+export type LogRunInput = LoggedRunEntry;
 
 export interface SessionSummary {
 	id: number;
@@ -138,6 +139,10 @@ export interface SessionSummary {
 	target_minutes: number | null;
 	target_km: number | null;
 	has_logged_run: boolean;
+	/** What the run actually was, so a finished run doesn't read on a list row
+	 * exactly like one nobody has done yet. Null for lifts and unlogged runs. */
+	logged_distance_km: number | null;
+	logged_duration_seconds: number | null;
 }
 
 export interface SwapCandidate extends Exercise {

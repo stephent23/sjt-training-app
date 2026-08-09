@@ -131,8 +131,30 @@ describe('POST /api/sessions/:id/runs', () => {
 	it('logs a run and re-logging updates it rather than creating a second one', async () => {
 		const sessionId = await insertSession({ kind: 'run', label: 'Easy run' });
 
-		const first: LogRunInput = { distance_km: 5, duration_seconds: 1800, avg_hr: 140, rpe_1_10: 4, performed_on: '2026-08-03', note: null };
-		const second: LogRunInput = { distance_km: 5.2, duration_seconds: 1850, avg_hr: 145, rpe_1_10: 5, performed_on: '2026-08-03', note: 'felt tired' };
+		const first: LogRunInput = {
+			distance_km: 5,
+			duration_seconds: 1800,
+			avg_hr: 140,
+			max_hr: null,
+			avg_cadence_spm: null,
+			elevation_gain_m: null,
+			aerobic_training_effect: null,
+			rpe_1_10: 4,
+			performed_on: '2026-08-03',
+			note: null,
+		};
+		const second: LogRunInput = {
+			distance_km: 5.2,
+			duration_seconds: 1850,
+			avg_hr: 145,
+			max_hr: 172,
+			avg_cadence_spm: 168,
+			elevation_gain_m: 84.5,
+			aerobic_training_effect: 3.4,
+			rpe_1_10: 5,
+			performed_on: '2026-08-03',
+			note: 'felt tired',
+		};
 
 		await postJson(`https://training-app.test/api/sessions/${sessionId}/runs`, first);
 		await postJson(`https://training-app.test/api/sessions/${sessionId}/runs`, second);
@@ -141,30 +163,46 @@ describe('POST /api/sessions/:id/runs', () => {
 		expect(detail.loggedRun).toEqual(second);
 	});
 
-	it('rejects a negative distance_km with 400', async () => {
-		const sessionId = await insertSession({ kind: 'run', label: 'Easy run' });
-		const res = await postJson(`https://training-app.test/api/sessions/${sessionId}/runs`, {
-			distance_km: -1,
-			duration_seconds: 1800,
-			avg_hr: null,
-			rpe_1_10: null,
-			performed_on: '2026-08-03',
-			note: null,
-		} satisfies LogRunInput);
-		expect(res.status).toBe(400);
-	});
-
-	it('rejects an out-of-range rpe_1_10 with 400', async () => {
-		const sessionId = await insertSession({ kind: 'run', label: 'Easy run' });
-		const res = await postJson(`https://training-app.test/api/sessions/${sessionId}/runs`, {
+	// The sync queue drops 4xx permanently but retries 5xx forever, so anything
+	// a D1 constraint or a nonsense value could blow up on has to 400 here.
+	function runBody(overrides: Partial<LogRunInput>): LogRunInput {
+		return {
 			distance_km: 5,
 			duration_seconds: 1800,
 			avg_hr: null,
-			rpe_1_10: 11,
+			max_hr: null,
+			avg_cadence_spm: null,
+			elevation_gain_m: null,
+			aerobic_training_effect: null,
+			rpe_1_10: null,
 			performed_on: '2026-08-03',
 			note: null,
-		} satisfies LogRunInput);
+			...overrides,
+		};
+	}
+
+	it.each([
+		['distance_km', { distance_km: -1 }],
+		['rpe_1_10', { rpe_1_10: 11 }],
+		['avg_hr', { avg_hr: 900 }],
+		['max_hr', { max_hr: 0 }],
+		['avg_cadence_spm', { avg_cadence_spm: 5000 }],
+		['elevation_gain_m', { elevation_gain_m: -5 }],
+		['aerobic_training_effect', { aerobic_training_effect: 9 }],
+		['a non-integer avg_hr', { avg_hr: 140.5 }],
+	])('rejects an out-of-range %s with 400', async (_name, overrides) => {
+		const sessionId = await insertSession({ kind: 'run', label: 'Easy run' });
+		const res = await postJson(`https://training-app.test/api/sessions/${sessionId}/runs`, runBody(overrides as Partial<LogRunInput>));
 		expect(res.status).toBe(400);
+	});
+
+	it('accepts a run with every watch field omitted', async () => {
+		const sessionId = await insertSession({ kind: 'run', label: 'Easy run' });
+		const res = await postJson(`https://training-app.test/api/sessions/${sessionId}/runs`, runBody({}));
+		expect(res.status).toBe(200);
+
+		const detail = (await (await SELF.fetch(`https://training-app.test/api/sessions/${sessionId}`)).json()) as SessionDetail;
+		expect(detail.loggedRun).toMatchObject({ max_hr: null, avg_cadence_spm: null, elevation_gain_m: null, aerobic_training_effect: null });
 	});
 });
 

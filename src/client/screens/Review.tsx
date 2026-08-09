@@ -3,7 +3,7 @@ import type { LoggedRunEntry, LoggedSetEntry, PlannedSetDetail, SessionFeedback 
 import { logRun, logSet, saveFeedback, setExerciseStatus, setSessionStatus } from '../api';
 import { FeedbackCard } from '../components/FeedbackCard';
 import { SessionScreenFallback } from '../components/SessionScreenFallback';
-import { runSummary } from '../format';
+import { formatPace, runSummary } from '../format';
 import { sessionSetTotals } from '../../sessionProgress';
 import { useSession } from '../useSession';
 
@@ -125,23 +125,45 @@ function ReviewExercise({ exercise, onCommitSet, onUnskip }: ReviewExerciseProps
 
 interface ReviewRunProps {
 	loggedRun: LoggedRunEntry | null;
-	onCommit: (input: { distance_km: number; duration_seconds: number; avg_hr: number | null; rpe_1_10: number | null }) => void;
+	onCommit: (input: LoggedRunMetrics) => void;
+}
+
+/** The watch fields, in the order the Garmin summary screen lists them. Each is
+ * optional and each is bounded server-side; the bounds are repeated here only
+ * so a typo isn't committed and then bounced by a 400 the person never sees. */
+const WATCH_FIELDS = [
+	{ key: 'avg_hr', label: 'Avg HR', min: 20, max: 250, integer: true },
+	{ key: 'max_hr', label: 'Max HR', min: 20, max: 250, integer: true },
+	{ key: 'avg_cadence_spm', label: 'Cadence (spm)', min: 20, max: 300, integer: true },
+	{ key: 'elevation_gain_m', label: 'Elevation (m)', min: 0, max: 10000, integer: false },
+	{ key: 'aerobic_training_effect', label: 'Training effect', min: 0, max: 5, integer: false },
+	{ key: 'rpe_1_10', label: 'RPE (1-10)', min: 1, max: 10, integer: true },
+] as const;
+
+type WatchField = (typeof WATCH_FIELDS)[number]['key'];
+type LoggedRunMetrics = Pick<LoggedRunEntry, 'distance_km' | 'duration_seconds' | 'note'> & Record<WatchField, number | null>;
+
+function textOf(value: number | null | undefined): string {
+	return value == null ? '' : String(value);
 }
 
 function ReviewRun({ loggedRun, onCommit }: ReviewRunProps) {
-	const [distance, setDistance] = useState(loggedRun ? String(loggedRun.distance_km) : '');
-	const [minutes, setMinutes] = useState(loggedRun ? String(Math.floor(loggedRun.duration_seconds / 60)) : '');
-	const [seconds, setSeconds] = useState(loggedRun ? String(loggedRun.duration_seconds % 60) : '');
-	const [avgHr, setAvgHr] = useState(loggedRun?.avg_hr != null ? String(loggedRun.avg_hr) : '');
-	const [rpe, setRpe] = useState(loggedRun?.rpe_1_10 != null ? String(loggedRun.rpe_1_10) : '');
+	const initial = () => ({
+		distance: loggedRun ? String(loggedRun.distance_km) : '',
+		minutes: loggedRun ? String(Math.floor(loggedRun.duration_seconds / 60)) : '',
+		seconds: loggedRun ? String(loggedRun.duration_seconds % 60) : '',
+		note: loggedRun?.note ?? '',
+		...Object.fromEntries(WATCH_FIELDS.map((f) => [f.key, textOf(loggedRun?.[f.key])])),
+	});
 
-	useEffect(() => {
-		setDistance(loggedRun ? String(loggedRun.distance_km) : '');
-		setMinutes(loggedRun ? String(Math.floor(loggedRun.duration_seconds / 60)) : '');
-		setSeconds(loggedRun ? String(loggedRun.duration_seconds % 60) : '');
-		setAvgHr(loggedRun?.avg_hr != null ? String(loggedRun.avg_hr) : '');
-		setRpe(loggedRun?.rpe_1_10 != null ? String(loggedRun.rpe_1_10) : '');
-	}, [loggedRun?.distance_km, loggedRun?.duration_seconds, loggedRun?.avg_hr, loggedRun?.rpe_1_10]);
+	const [fields, setFields] = useState<Record<string, string>>(initial);
+	const set = (key: string) => (e: Event) => setFields((f) => ({ ...f, [key]: (e.target as HTMLInputElement).value }));
+
+	// Resynced against a signature of the saved values rather than a dependency
+	// per field — there are ten of them now, and a list that long is a list
+	// someone forgets to extend.
+	const signature = JSON.stringify(loggedRun);
+	useEffect(() => setFields(initial()), [signature]);
 
 	// A run is only worth writing once BOTH distance and duration are real —
 	// otherwise filling in the first field alone would log a run with
@@ -150,67 +172,89 @@ function ReviewRun({ loggedRun, onCommit }: ReviewRunProps) {
 	// as a real one and earns the 10% weekly growth. Partial input simply
 	// isn't committed, matching ReviewSetRow's refuse-to-commit-garbage rule.
 	function commit() {
-		const distanceKm = Number(distance);
-		const durationSeconds = (Number(minutes) || 0) * 60 + (Number(seconds) || 0);
+		const distanceKm = Number(fields.distance);
+		const durationSeconds = (Number(fields.minutes) || 0) * 60 + (Number(fields.seconds) || 0);
 		if (!Number.isFinite(distanceKm) || distanceKm <= 0) return;
 		if (durationSeconds <= 0) return;
 
-		const avgHrValue = avgHr === '' ? null : Number(avgHr);
-		if (avgHrValue !== null && (!Number.isInteger(avgHrValue) || avgHrValue <= 0)) return;
+		const metrics = {} as Record<WatchField, number | null>;
+		for (const field of WATCH_FIELDS) {
+			const raw = fields[field.key];
+			if (raw === '') {
+				metrics[field.key] = null;
+				continue;
+			}
+			const value = Number(raw);
+			if (!Number.isFinite(value) || value < field.min || value > field.max) return;
+			if (field.integer && !Number.isInteger(value)) return;
+			metrics[field.key] = value;
+		}
 
-		const rpeValue = rpe === '' ? null : Number(rpe);
-		if (rpeValue !== null && (!Number.isInteger(rpeValue) || rpeValue < 1 || rpeValue > 10)) return;
-
-		onCommit({ distance_km: distanceKm, duration_seconds: durationSeconds, avg_hr: avgHrValue, rpe_1_10: rpeValue });
+		onCommit({ distance_km: distanceKm, duration_seconds: durationSeconds, note: fields.note.trim() === '' ? null : fields.note, ...metrics });
 	}
 
+	const pace = formatPace(Number(fields.distance), (Number(fields.minutes) || 0) * 60 + (Number(fields.seconds) || 0));
+
 	return (
-		<div class="table-scroll">
-			<table class="review-table">
-				<tbody>
-					<tr>
-						<td>Distance (km)</td>
-						<td>
-							<input type="number" inputmode="decimal" value={distance} onInput={(e) => setDistance((e.target as HTMLInputElement).value)} onChange={commit} />
-						</td>
-					</tr>
-					<tr>
-						<td>Duration</td>
-						<td>
-							<div class="duration-inputs">
-								<input
-									type="number"
-									inputmode="numeric"
-									placeholder="min"
-									value={minutes}
-									onInput={(e) => setMinutes((e.target as HTMLInputElement).value)}
-									onChange={commit}
-								/>
-								<input
-									type="number"
-									inputmode="numeric"
-									placeholder="sec"
-									value={seconds}
-									onInput={(e) => setSeconds((e.target as HTMLInputElement).value)}
-									onChange={commit}
-								/>
-							</div>
-						</td>
-					</tr>
-					<tr>
-						<td>Avg HR</td>
-						<td>
-							<input type="number" inputmode="numeric" value={avgHr} onInput={(e) => setAvgHr((e.target as HTMLInputElement).value)} onChange={commit} />
-						</td>
-					</tr>
-					<tr>
-						<td>RPE</td>
-						<td>
-							<input type="number" inputmode="numeric" value={rpe} onInput={(e) => setRpe((e.target as HTMLInputElement).value)} onChange={commit} />
-						</td>
-					</tr>
-				</tbody>
-			</table>
+		<div>
+			<div class="table-scroll">
+				<table class="review-table">
+					<tbody>
+						<tr>
+							<td>Distance (km)</td>
+							<td>
+								<input type="number" inputmode="decimal" value={fields.distance} onInput={set('distance')} onChange={commit} />
+							</td>
+						</tr>
+						<tr>
+							<td>Duration</td>
+							<td>
+								<div class="duration-inputs">
+									<input type="number" inputmode="numeric" placeholder="min" value={fields.minutes} onInput={set('minutes')} onChange={commit} />
+									<input type="number" inputmode="numeric" placeholder="sec" value={fields.seconds} onInput={set('seconds')} onChange={commit} />
+								</div>
+							</td>
+						</tr>
+						{pace && (
+							<tr>
+								<td>Pace</td>
+								<td class="exercise-target">{pace}</td>
+							</tr>
+						)}
+					</tbody>
+				</table>
+			</div>
+
+			{/* Behind a disclosure so the everyday case stays two fields. Everything
+			    in here is typed off the watch face, and skipping any of it is fine. */}
+			<details class="disclosure">
+				<summary class="disclosure-summary">From your watch</summary>
+				<div class="disclosure-body table-scroll">
+					<table class="review-table">
+						<tbody>
+							{WATCH_FIELDS.map((field) => (
+								<tr key={field.key}>
+									<td>{field.label}</td>
+									<td>
+										<input
+											type="number"
+											inputmode={field.integer ? 'numeric' : 'decimal'}
+											value={fields[field.key]}
+											onInput={set(field.key)}
+											onChange={commit}
+										/>
+									</td>
+								</tr>
+							))}
+						</tbody>
+					</table>
+				</div>
+			</details>
+
+			<label class="field">
+				How it went
+				<textarea rows={2} value={fields.note} onInput={set('note')} onBlur={commit} />
+			</label>
 		</div>
 	);
 }
@@ -246,22 +290,10 @@ export function Review({ sessionId }: ReviewProps) {
 		setDetail(updated);
 	}
 
-	function handleCommitRun(input: { distance_km: number; duration_seconds: number; avg_hr: number | null; rpe_1_10: number | null }) {
+	function handleCommitRun(input: LoggedRunMetrics) {
 		if (!detail) return;
 		const existing = detail.loggedRun;
-		const updated = logRun(
-			sessionId,
-			{
-				distance_km: input.distance_km,
-				duration_seconds: input.duration_seconds,
-				avg_hr: input.avg_hr,
-				rpe_1_10: input.rpe_1_10,
-				performed_on: existing ? existing.performed_on : session.date,
-				note: existing ? existing.note : null,
-			},
-			detail,
-		);
-		setDetail(updated);
+		setDetail(logRun(sessionId, { ...input, performed_on: existing ? existing.performed_on : session.date }, detail));
 	}
 
 	function handleSaveFeedback(feedback: SessionFeedback) {

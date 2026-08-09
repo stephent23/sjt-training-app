@@ -58,13 +58,17 @@ branches simply carry the earlier commits with them.
       vocabulary in `src/types.ts`; `GoalsEditor` becomes always-visible with objective, emphasis
       and constraint tick boxes plus free text; export carries `goalTags`. *Done. Migration applied
       locally only — **run `npm run db:migrate:remote` before deploying** (see merge checklist).*
-- [ ] **4 · Run data** (migration 0007). `logged_runs` gains `max_hr`, `avg_cadence_spm`,
+- [x] **4 · Run data** (migration 0007). `logged_runs` gains `max_hr`, `avg_cadence_spm`,
       `elevation_gain_m`, `aerobic_training_effect`, all nullable. Validate them — and `avg_hr`,
-      which is currently bound unchecked. Optionals behind a "From your watch" disclosure; add the
-      missing `note` control; computed pace via a new `formatPace`; show actuals on list and
-      history rows instead of only the plan; a "Log the run" route from `RunSession` to Review.
-- [ ] **5 · Run progression uses the new data.** `progressRun` weighs RPE/HR and whether the last
-      long run was cut short. New reason strings only; existing ones untouched.
+      which was bound unchecked. Optionals behind a "From your watch" disclosure; the missing
+      `note` control; computed pace via `formatPace`; actuals on list and history rows instead of
+      only the plan; a "Log what you ran" route from `RunSession` to Review. *Done. `.disclosure`
+      CSS landed here since Review needed it first; stage 9 reuses it. `RunStructure` now also
+      filters malformed individual steps, which is what stage 2 deferred.*
+- [x] **5 · Run progression uses the new data.** `progressRun` weighs RPE, the heart-rate share of
+      the run's own max, and whether the long run was cut short. *Done: growth previously followed
+      from a logged run merely existing, so a run cut half short earned the same 10% as a
+      comfortable one. New reason strings only; the existing four are untouched.*
 - [ ] **6 · Overwrite a pending plan.** `importProposal(…, replace)`; the "already pending" 422
       offers a Replace button that supersedes in one `db.batch`.
 - [ ] **7 · Import by file upload.** File picker primary, textarea fallback, both through a new
@@ -100,7 +104,7 @@ has been deployed. Before deploying any of these branches:
 npm run db:migrate:remote
 ```
 
-Migrations added so far: `0006_structured_goals.sql`.
+Migrations added so far: `0006_structured_goals.sql`, `0007_run_metrics.sql`.
 
 ## Notes for whoever picks this up
 

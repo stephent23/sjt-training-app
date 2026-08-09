@@ -124,16 +124,10 @@ interface LoggedSetRow {
 	performed_on: string;
 }
 
-interface LoggedRunRow {
-	id: number;
-	session_id: number;
-	distance_km: number;
-	duration_seconds: number;
-	avg_hr: number | null;
-	rpe_1_10: number | null;
-	performed_on: string;
-	note: string | null;
-}
+/** Exactly the logged_runs columns the history window forwards, plus the two
+ * the export drops. Derived from LoggedRunEntry so a new watch metric reaches
+ * the AI reviewer without a second field list to remember. */
+type LoggedRunRow = LoggedRunEntry & { id: number; session_id: number };
 
 /**
  * Runs the deterministic progression pass over the most recently scheduled
@@ -228,7 +222,16 @@ export async function buildExportContext(db: D1Database, weekCount: number): Pro
 
 	// Bulk query 5/6: logged_runs across the full 2-week window.
 	const { results: loggedRunRows } = windowSessionIds.length
-		? await db.prepare(`SELECT * FROM logged_runs WHERE session_id IN (${sqlIn(windowSessionIds.length)})`).bind(...windowSessionIds).all<LoggedRunRow>()
+		? // Columns listed rather than SELECT * so `logged_at` (an internal audit
+			// timestamp) doesn't leak into the exported history window.
+			await db
+				.prepare(
+					`SELECT id, session_id, distance_km, duration_seconds, avg_hr, max_hr, avg_cadence_spm, elevation_gain_m,
+					        aerobic_training_effect, rpe_1_10, performed_on, note
+					 FROM logged_runs WHERE session_id IN (${sqlIn(windowSessionIds.length)})`,
+				)
+				.bind(...windowSessionIds)
+				.all<LoggedRunRow>()
 		: { results: [] as LoggedRunRow[] };
 
 	// Bulk query 6/6: session feedback across the window — this is what makes
@@ -307,7 +310,13 @@ export async function buildExportContext(db: D1Database, weekCount: number): Pro
 			if (plannedRunRow) {
 				const loggedRunRow = loggedRunBySession.get(session.id) ?? null;
 				const logged: LoggedRunForProgression | null = loggedRunRow
-					? { distance_km: loggedRunRow.distance_km, duration_seconds: loggedRunRow.duration_seconds, rpe_1_10: loggedRunRow.rpe_1_10 }
+					? {
+							distance_km: loggedRunRow.distance_km,
+							duration_seconds: loggedRunRow.duration_seconds,
+							rpe_1_10: loggedRunRow.rpe_1_10,
+							avg_hr: loggedRunRow.avg_hr,
+							max_hr: loggedRunRow.max_hr,
+						}
 					: null;
 				const result = progressRun(plannedRunRow.run_type, plannedRunRow.target_km, logged);
 				reasons[`${newDate}:run`] = result.reason;
@@ -365,15 +374,7 @@ export async function buildExportContext(db: D1Database, weekCount: number): Pro
 			rest_taken_seconds: l.rest_taken_seconds,
 			performed_on: l.performed_on,
 		})),
-		loggedRuns: loggedRunRows.map((r) => ({
-			session_id: r.session_id,
-			distance_km: r.distance_km,
-			duration_seconds: r.duration_seconds,
-			avg_hr: r.avg_hr,
-			rpe_1_10: r.rpe_1_10,
-			performed_on: r.performed_on,
-			note: r.note,
-		})),
+		loggedRuns: loggedRunRows.map(({ id: _id, ...run }) => run),
 	};
 
 	return {

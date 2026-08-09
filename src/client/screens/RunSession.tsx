@@ -45,6 +45,11 @@ export function RunSession({ sessionId, onBack }: RunSessionProps) {
 			<button type="button" class="btn-primary" onClick={() => finish('completed')} disabled={session.status === 'completed'}>
 				{session.status === 'completed' ? 'Completed' : 'Mark complete'}
 			</button>
+			{/* Finishing a run used to lead nowhere near the screen that records
+			    what it was, so the numbers on the watch face went unlogged. */}
+			<button type="button" class="btn-secondary" onClick={() => (location.hash = `#/review/${sessionId}`)}>
+				Log what you ran
+			</button>
 			<button type="button" class="btn-secondary" onClick={() => finish('skipped')} disabled={session.status === 'skipped'}>
 				{session.status === 'skipped' ? 'Skipped' : 'Mark skipped'}
 			</button>
