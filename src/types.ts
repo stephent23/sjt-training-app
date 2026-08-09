@@ -173,7 +173,19 @@ export interface WeekProposal extends Omit<WeekProposalInput, 'sessions'> { sess
 export interface MultiWeekProposalInput { weeks: WeekProposalInput[]; }
 export interface MultiWeekProposal { weeks: WeekProposal[]; }
 
+/** The tick-box vocabulary behind free-text goals, grouped only for how the
+ * editor lays them out — the server treats it as one flat allowlist. Adding a
+ * slug here is all it takes to offer it; the prompt explains what they mean. */
+export const GOAL_TAG_GROUPS = {
+	'What I want': ['build_strength', 'build_muscle', 'lose_fat', 'run_endurance', 'run_speed', 'stay_injury_free', 'maintain'],
+	'Where to push': ['upper_body', 'lower_body', 'core', 'posterior_chain'],
+	'What to work around': ['protect_shoulder', 'protect_back', 'limited_time', 'calorie_deficit', 'race_training'],
+} as const;
+
+export const GOAL_TAGS: readonly string[] = Object.values(GOAL_TAG_GROUPS).flat();
+
 export interface Settings {
 	goals: string;
 	days_per_week: number;
+	goal_tags: string[];
 }
