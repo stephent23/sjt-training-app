@@ -202,19 +202,22 @@ describe('importProposal', () => {
 		// week 3 jumps to 20kg. 20kg vs week 2's 15kg is a +33% jump (must
 		// fail); 20kg vs week 1's 20kg is 0% (no jump at all) — a fixed
 		// week-1-baseline check would have incorrectly passed this.
+		// Dates advance a week at a time: weeks may not overlap, so reusing week
+		// 1's date for all three would fail on ordering before the weight chain
+		// was ever reached.
 		const input: MultiWeekProposalInput = {
 			weeks: [
 				{
 					week_number: 2,
-					sessions: [{ ...template, plannedSets: [{ ...template.plannedSets[0], target_weight_kg: 20 }] }],
+					sessions: [{ ...template, date: '2026-08-10', plannedSets: [{ ...template.plannedSets[0], target_weight_kg: 20 }] }],
 				},
 				{
 					week_number: 3,
-					sessions: [{ ...template, plannedSets: [{ ...template.plannedSets[0], target_weight_kg: 15 }] }],
+					sessions: [{ ...template, date: '2026-08-17', plannedSets: [{ ...template.plannedSets[0], target_weight_kg: 15 }] }],
 				},
 				{
 					week_number: 4,
-					sessions: [{ ...template, plannedSets: [{ ...template.plannedSets[0], target_weight_kg: 20 }] }],
+					sessions: [{ ...template, date: '2026-08-24', plannedSets: [{ ...template.plannedSets[0], target_weight_kg: 20 }] }],
 				},
 			],
 		};
@@ -239,6 +242,7 @@ describe('importProposal', () => {
 					sessions: [
 						{
 							...template,
+							date: '2026-08-17', // a week on from week 1 — weeks may not overlap
 							plannedSets: [{ ...template.plannedSets[0], exercise_id: otherExerciseId, target_weight_kg: 500 }], // wildly high, but unconstrained: no week-1 entry for this exercise_id
 						},
 					],

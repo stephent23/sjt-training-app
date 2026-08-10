@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
-import { generateNextWeeks, importProposal, insertWeeksFromProposal } from '../generator';
+import { todayIso, weekStartOnOrAfter } from '../dates';
+import { generateNextWeeks, importProposal, insertWeeksFromProposal, type ExportPayload } from '../generator';
 import type { MultiWeekProposal, MultiWeekProposalInput } from '../types';
 
 export const generator = new Hono<{ Bindings: Env }>();
@@ -28,7 +29,14 @@ generator.get('/export', async (c) => {
 	const weeksParam = Number(c.req.query('weeks') ?? '1');
 	const weeks = Number.isInteger(weeksParam) && weeksParam >= 1 && weeksParam <= MAX_WEEKS ? weeksParam : 1;
 	const context = await generateNextWeeks(c.env.DB, weeks);
-	return c.json(context);
+
+	// The clock lives here, not in buildExportContext — see ExportPayload's doc
+	// comment. weekStartDate is what a from-scratch plan should be built on;
+	// with prior sessions it's ignored, since week 1's dates come from the
+	// previous week + 7.
+	const today = todayIso();
+	const payload: ExportPayload = { ...context, today, weekStartDate: weekStartOnOrAfter(today) };
+	return c.json(payload);
 });
 
 // Body is a MultiWeekProposalInput — validates, hydrates, persists as

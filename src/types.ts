@@ -157,7 +157,11 @@ export interface ApplySwapInput {
 export interface ProposedRun { run_type: RunType; target_minutes: number | null; target_km: number | null; structure_json: string | null; }
 export interface ProposedSetInput { exercise_id: number; order_index: number; target_sets: number; rep_low: number; rep_high: number; target_weight_kg: number | null; rest_seconds: number; notes: string | null; superset_group: number | null; }
 export interface ProposedSessionInput { date: string; kind: SessionKind; label: string; plannedSets: ProposedSetInput[]; plannedRun: ProposedRun | null; }
-export interface WeekProposalInput { week_number: number; sessions: ProposedSessionInput[]; }
+// `focus` is an optional one-word label for what a week is for ("deload",
+// "volume", "race week"). Display-only — nothing branches on it — but it's how
+// a deload becomes something the review screen can state rather than something
+// you have to infer from the numbers.
+export interface WeekProposalInput { week_number: number; focus?: string | null; sessions: ProposedSessionInput[]; }
 
 export interface ProposedSet extends ProposedSetInput { exercise_name: string; pattern: string; }
 export interface ProposedSession extends Omit<ProposedSessionInput, 'plannedSets'> { plannedSets: ProposedSet[]; }

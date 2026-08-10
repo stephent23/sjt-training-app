@@ -55,6 +55,33 @@ describe('GET /export', () => {
 		expect(body.deterministicProposal.weeks).toHaveLength(1);
 	});
 
+	// The anchor exists because a cold-start export (no sessions at all) used to
+	// contain no date anywhere: empty weeks, empty history, empty skipped list.
+	// An assistant asked to write a plan from scratch had to invent dates, and
+	// isRealIsoDate happily accepts any real date — so a plan dated last year
+	// imported cleanly and then never matched a Today/Plan query again.
+	it('carries a today/weekStartDate anchor for a plan written from scratch', async () => {
+		await seedOneSessionWeek();
+
+		const res = await SELF.fetch('https://training-app.test/api/generator/export');
+		const body = (await res.json()) as { today: string; weekStartDate: string };
+
+		expect(body.today).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+		expect(body.weekStartDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+		// Deliberately not pinned to literal dates — this route reads the clock.
+		expect(body.weekStartDate >= body.today).toBe(true);
+		expect(new Date(`${body.weekStartDate}T00:00:00Z`).getUTCDay()).toBe(1);
+	});
+
+	it('anchors a cold-start export too, where no other date exists in the payload', async () => {
+		const res = await SELF.fetch('https://training-app.test/api/generator/export?weeks=2');
+		const body = (await res.json()) as { today: string; weekStartDate: string; deterministicProposal: MultiWeekProposalInput };
+
+		expect(body.deterministicProposal.weeks.every((w) => w.sessions.length === 0)).toBe(true);
+		expect(body.today).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+		expect(new Date(`${body.weekStartDate}T00:00:00Z`).getUTCDay()).toBe(1);
+	});
+
 	it('defaults to 1 week when ?weeks is omitted', async () => {
 		await seedOneSessionWeek();
 
