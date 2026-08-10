@@ -90,10 +90,14 @@ branches simply carry the earlier commits with them.
       from today onwards, so the first group is the current week by construction — no calendar
       arithmetic needed. Toggles are independent, not an accordion, since comparing this week with
       next is reasonable. First test for `SessionList`, which had none.*
-- [ ] **11 · Swaps and adding an exercise.** Make `scope: 'permanent'` actually repoint future
-      planned sessions; loading and error states in the sheet; a back affordance; new
-      `POST /api/exercises` with a minimal form, reachable from the sheet's empty state. Optional
-      per-lap `splits_json` last, and droppable.
+- [x] **11 · Swaps and adding an exercise.** *Done: `scope: 'permanent'` now repoints every future
+      **planned** session (the past keeps what was actually done, and sessions already holding the
+      substitute are skipped so the bulk update can't create the duplicate the clash guard
+      prevents). The sheet distinguishes "still loading" from "nothing found", surfaces the 409 it
+      used to swallow, and can go back to the reason picker. New `POST /api/exercises` +
+      `GET /api/exercises/patterns` — the first write path to that table — reachable from the
+      sheet. Pattern must be an existing one: a novel pattern would orphan the exercise from swaps
+      in both directions.* Per-lap `splits_json` dropped: most typing, least signal.
 - [ ] **12 · Simplification pass.** A dedicated refactor over everything this campaign touched:
       delete dead code and unused CSS (`.plan-row--today` is defined and never applied), collapse
       duplication the stages introduced, shorten anything that grew a wrapper it didn't need, and
