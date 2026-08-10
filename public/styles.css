@@ -1,44 +1,75 @@
 /* ==========================================================================
    Training log — design system
-   Editorial, restrained, high-contrast. Quiet by default; claret (--accent)
-   is spent only on focus, "today"/active state, and destructive confirm —
-   never as a fill for a whole control. Tap targets stay >=44px even where
-   the visual language is quiet, because this app is used one-handed,
-   mid-workout, on a sweaty screen.
+
+   Restrained, high-contrast, and built to be read at arm's length on a phone
+   held in one hand. Claret is the only chroma in the whole system: it marks
+   the primary action, "today", focus, and destructive confirm, and nothing
+   else ever introduces a second hue. Hierarchy is carried by size and colour,
+   not by weight — there are three weights (400/500/600) and that is the whole
+   set. Elevation is a hairline; there are no shadows. Every figure is mono and
+   tabular, which is what makes a screen of numbers read as an instrument.
+
+   Tap targets stay >=44px everywhere, because this is used one-handed,
+   mid-workout, on a sweaty screen. That constraint outranks every aesthetic
+   decision below it.
+
+   Changed deliberately from the previous version of this file, which said the
+   palette was fixed and claret was "never a fill for a whole control". Both
+   are now false on purpose — see docs/design-rethink.md for what that bought
+   and what it cost.
    ========================================================================== */
 
 /* ---- Fonts -------------------------------------------------------------- */
 
 @font-face {
-	font-family: "IBM Plex Sans";
+	font-family: 'IBM Plex Sans';
 	src:
-		url("/fonts/ibm-plex-sans-var-latin.woff2") format("woff2-variations"),
-		url("/fonts/ibm-plex-sans-var-latin.woff2") format("woff2");
+		url('/fonts/ibm-plex-sans-var-latin.woff2') format('woff2-variations'),
+		url('/fonts/ibm-plex-sans-var-latin.woff2') format('woff2');
 	font-weight: 400 600;
 	font-style: normal;
 	font-display: swap;
 }
 
 @font-face {
-	font-family: "IBM Plex Mono";
-	src: url("/fonts/ibm-plex-mono-latin.woff2") format("woff2");
+	font-family: 'IBM Plex Mono';
+	src: url('/fonts/ibm-plex-mono-latin.woff2') format('woff2');
 	font-weight: 400;
 	font-style: normal;
 	font-display: swap;
 }
 
 /* ---- Tokens --------------------------------------------------------------
-   Exact values, contrast-checked against WCAG AA. Do not change. */
+   Every value here is measured against the ground it is actually used on, not
+   estimated, and the ratios are recorded in docs/design-rethink.md §3. The
+   names are the original ones so that every rule below keeps working; the
+   values are the refined palette.
+
+   The neutrals are warm and carry a slight claret bias, so the accent sits
+   inside the palette rather than on top of it — a pure grey reads as
+   unconsidered. */
 
 :root {
-	--paper: #fafafa;
-	--paper-alt: #f2f3f1;
-	--ink: #16181d;
-	--rule: #dcdee1;
-	--muted: #5f646e;
-	--accent: #96262b;
-	--sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-	--mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+	--paper: #f5f3f1; /* the page ground */
+	--paper-alt: #eeeae7; /* a raised surface: cards, inputs, chips */
+	--surface: #fffefd; /* the highest surface, for panels that must lift */
+	--ink: #1b1614;
+	--rule: #e0dad5; /* hairline */
+	--rule-strong: #cdc4bd; /* a border you are meant to notice, e.g. a control */
+	--muted: #5d5450; /* secondary text — 6.7:1 */
+	/* Carries the eyebrows and mono figures at 11-12px, so it is darker than it
+	   looks like it wants to be: the obvious lighter tone measures 3.7:1, under
+	   AA at that size. 5.2:1 on --paper, 4.8:1 on --paper-alt. */
+	--muted-2: #6f645e;
+
+	--accent: #96262b; /* claret, unchanged from the original palette */
+	--accent-fill: #96262b; /* claret as a large filled area — see the dark override */
+	--accent-soft: #f7ecec;
+	--on-accent: #fffefd;
+	--done: #4a5a4d; /* desaturated moss: a state, never a second brand */
+
+	--sans: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+	--mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Consolas, monospace;
 	--s1: 0.25rem;
 	--s2: 0.5rem;
 	--s3: 0.75rem;
@@ -47,20 +78,33 @@
 	--s6: 2rem;
 	color-scheme: light dark;
 
-	/* Additional tokens (not part of the fixed palette above, safe to tune) */
 	--nav-h: 56px;
-	--radius: 2px;
-	--radius-sheet: 12px;
+	--rail-w: 200px; /* the tab bar becomes this wide on a laptop */
+	--radius: 3px;
+	--radius-sheet: 12px; /* the bottom sheet keeps its corners: it is a sheet */
 }
 
+/* Only tokens are redefined per theme, never a component. Guarded so an
+   explicit light choice would still beat a dark OS if a toggle is ever added. */
 @media (prefers-color-scheme: dark) {
 	:root {
-		--paper: #16181d;
-		--paper-alt: #1e2127;
-		--ink: #f2f3f1;
-		--rule: #2f333b;
-		--muted: #9aa0ab;
+		--paper: #14120f;
+		--paper-alt: #262220;
+		--surface: #1c1917;
+		--ink: #f3efec;
+		--rule: #332e2b;
+		--rule-strong: #453e3a;
+		--muted: #a89f99;
+		--muted-2: #948a83;
 		--accent: #d4666b;
+		/* The light tint above is a TEXT colour. Filling a whole button with it
+		   reads hot, so the fill goes deeper and the tint becomes the border:
+		   the label passes on the fill (5.6:1) and the border carries the shape
+		   contrast against the page (5.3:1). */
+		--accent-fill: #a83840;
+		--accent-soft: #2b1a1b;
+		--on-accent: #f3efec;
+		--done: #8fa894;
 	}
 }
 
@@ -80,8 +124,8 @@ body {
 	background: var(--paper);
 	color: var(--ink);
 	font-family: var(--sans);
-	font-size: 17px;
-	line-height: 1.7;
+	font-size: 16px;
+	line-height: 1.6;
 	-webkit-font-smoothing: antialiased;
 }
 
@@ -151,14 +195,18 @@ button:disabled {
 	cursor: not-allowed;
 }
 
-/* Eyebrow — small-caps style metadata label (dates, categories, tags) */
+/* Eyebrow — small-caps style metadata label (dates, categories, tags). Mono,
+   because most of these carry a date or a count, and --muted-2 rather than
+   --muted because at 11px the lighter tone falls under AA. */
 .eyebrow {
 	display: block;
+	font-family: var(--mono);
 	font-size: 11px;
-	font-weight: 600;
+	font-weight: 500;
+	font-variant-numeric: tabular-nums;
 	text-transform: uppercase;
 	letter-spacing: 0.12em;
-	color: var(--muted);
+	color: var(--muted-2);
 	margin: 0;
 }
 .eyebrow--accent {
@@ -169,6 +217,23 @@ button:disabled {
 .num {
 	font-family: var(--mono);
 	font-variant-numeric: tabular-nums;
+}
+
+/* A sentence introducing a screen, and a sentence explaining a control. Both
+   are prose and both are sans — .exercise-target and .eyebrow are mono, which
+   is right for a figure or a short label and wrong for a line you actually
+   read. An uppercase letterspaced sentence is worse still. */
+.lede {
+	color: var(--muted);
+	margin: 0 0 var(--s5);
+	max-width: 60ch;
+}
+
+.hint {
+	color: var(--muted);
+	font-size: 0.9rem;
+	margin: var(--s2) 0 0;
+	max-width: 60ch;
 }
 
 /* ---- Screen chrome --------------------------------------------------------- */
@@ -278,13 +343,13 @@ button:disabled {
 	cursor: pointer;
 }
 
-.tabbar-item[aria-current="page"] {
+.tabbar-item[aria-current='page'] {
 	color: var(--ink);
 	font-weight: 600;
 }
 
-.tabbar-item[aria-current="page"]::before {
-	content: "";
+.tabbar-item[aria-current='page']::before {
+	content: '';
 	position: absolute;
 	top: 0;
 	left: 50%;
@@ -360,7 +425,7 @@ button:disabled {
 
 .plan-row-title {
 	font-size: 1rem;
-	font-weight: 600;
+	font-weight: 500;
 	letter-spacing: -0.01em;
 	white-space: nowrap;
 	overflow: hidden;
@@ -529,14 +594,18 @@ button:disabled {
 	min-height: 48px;
 	margin: var(--s3) 0;
 	border-radius: var(--radius);
-	font: 600 16px var(--sans);
+	font: 500 15.5px var(--sans);
 	cursor: pointer;
 }
 
+/* The one filled thing on any screen, which is what keeps a single accent
+   legible: if several controls were filled, none of them would read as "the
+   action". The border is the lighter claret tint so the shape stays visible
+   against the page in dark mode, where the fill is deliberately deeper. */
 .btn-primary {
-	background: var(--ink);
-	color: var(--paper);
-	border: 0;
+	background: var(--accent-fill);
+	color: var(--on-accent);
+	border: 1px solid var(--accent);
 }
 
 .btn-primary:disabled {
@@ -545,8 +614,8 @@ button:disabled {
 }
 
 .btn-secondary {
-	background: transparent;
-	border: 1.5px solid var(--ink);
+	background: var(--surface);
+	border: 1px solid var(--rule-strong);
 	color: var(--ink);
 }
 
@@ -589,42 +658,54 @@ button:disabled {
 .tap-btn {
 	min-height: 48px;
 	min-width: 48px;
-	flex: 1 1 2.75rem;
-	background: var(--paper-alt);
-	border: 1.5px solid var(--ink);
-	color: var(--ink);
+	/* Basis auto rather than a fixed 2.75rem: with a fixed basis the chips all
+	   stretch to equal width, and a long word label is squeezed until it wraps
+	   inside its own border and clips. Sizing to content lets the numeric rows
+	   stay near-uniform anyway, because their content is uniform. */
+	flex: 0 1 auto;
+	background: var(--surface);
+	border: 1px solid var(--rule-strong);
+	color: var(--muted);
 	border-radius: var(--radius);
-	font: 600 15px var(--sans);
+	/* Sans, not mono. Most of these are numerals (reps, RIR, RPE) and mono was
+	   tempting, but the same class carries word labels — "Stay injury free",
+	   "Protect shoulder" — and mono is wide enough to clip them. tabular-nums
+	   on the sans face lines the digits up just as well. */
+	font: 400 15px var(--sans);
+	font-variant-numeric: tabular-nums;
 	padding: var(--s2) var(--s3);
 	text-align: center;
 	cursor: pointer;
 }
 
-/* Marks reps inside the prescribed target range: --ink border (not the pale
-   --rule hairline) plus bolder digits, so it's visible without reading the
-   adjacent "target N-M" text. Composes with the selected-state rule below —
-   both classes can apply together — giving four distinct looks: plain (pale
-   border, 600 weight), target-only (ink border, 700 weight, transparent),
-   selected-only (ink border, 600 weight, --paper-alt fill), and
-   target+selected (ink border, 700 weight, --paper-alt fill). Don't collapse
-   this with !important. */
+/* Marks reps inside the prescribed target range: full-strength ink instead of
+   muted, plus a rule under the digits, so it reads without having to go and
+   read the adjacent "target N-M" text. Two carriers rather than one, because
+   colour alone would vanish in greyscale.
+
+   Composes with the selected-state rule below — both classes can apply at
+   once — giving four distinct looks: plain (muted digits, hairline border),
+   target (ink digits, underscored), selected (claret digits, claret border,
+   soft claret fill), and target+selected (all of it). Don't collapse this
+   with !important. */
 .tap--target,
 .tap-btn--target {
-	font-weight: 700;
-	box-shadow: inset 0 -3px 0 var(--ink);
+	color: var(--ink);
+	box-shadow: inset 0 -2px 0 var(--rule-strong);
 }
 
-/* Selected/pressed state — claret, the same accent used for the active nav
-   tab and "today" emphasis, so a chosen rep/RIR reads as unmistakably
-   selected rather than blending into the ink-bordered baseline chips.
-   Contrast-checked both directions: paper-on-accent is 7.71:1 light /
-   5.00:1 dark, well past AA. New markup should use aria-pressed; the
-   .tap-btn--selected class is kept for the markup that exists today. */
-.tap[aria-pressed="true"],
+/* Selected/pressed state — claret on a soft claret ground rather than a solid
+   claret fill. A whole row of chips where the chosen one is a saturated block
+   fights the primary button for attention, and the button has to win: it is
+   the thing that commits the set. Measured 6.96:1 light, 4.67:1 dark, both
+   past AA. New markup should use aria-pressed; the .tap-btn--selected class is
+   kept for the markup that exists today. */
+.tap[aria-pressed='true'],
 .tap-btn--selected {
-	background: var(--accent);
-	color: var(--paper);
+	background: var(--accent-soft);
+	color: var(--accent);
 	border-color: var(--accent);
+	font-weight: 500;
 }
 
 .tap-row--stacked .tap,
@@ -858,7 +939,7 @@ button:disabled {
 }
 
 .sheet::before {
-	content: "";
+	content: '';
 	display: block;
 	width: 36px;
 	height: 4px;
@@ -895,7 +976,7 @@ button:disabled {
 	color: var(--ink);
 }
 
-.field input[type="number"] {
+.field input[type='number'] {
 	font-family: var(--mono);
 	font-variant-numeric: tabular-nums;
 }
@@ -1111,4 +1192,68 @@ select:focus-visible,
 
 .feedback-card .section-heading {
 	margin-top: 0;
+}
+
+/* ---- Laptop ----------------------------------------------------------------
+   Everything above is written for a phone held in one hand, which is where
+   this app is used. But it is also opened on a laptop to plan a week and to
+   run the Generate flow, which involves a file, a prompt and a chat window at
+   once — and until now that gave you a 480px column stranded in a field of
+   empty page.
+
+   One breakpoint. The bottom tab bar becomes a left rail and the content
+   column centres in what is left of the width. Nothing else changes: same
+   tokens, same components, same >=44px targets, which cost nothing with a
+   mouse and mean the two layouts are one system rather than two designs.
+
+   Deliberately no component changes — Shell.tsx renders the same markup at
+   every width, and this is purely a matter of where the same boxes sit. */
+
+@media (min-width: 900px) {
+	.tabbar {
+		top: 0;
+		right: auto;
+		bottom: 0;
+		width: var(--rail-w);
+		flex-direction: column;
+		justify-content: flex-start;
+		gap: 2px;
+		border-top: 0;
+		border-right: 1px solid var(--rule);
+		padding: var(--s5) var(--s3);
+	}
+
+	.tabbar-item {
+		/* Reset the flex:1 that makes four items share the width across the
+		   bottom — in a column it makes each one grow to fill the whole rail. */
+		flex: 0 0 auto;
+		flex-direction: row;
+		justify-content: flex-start;
+		min-height: 42px;
+		padding: 0 var(--s3);
+		border-radius: var(--radius);
+	}
+
+	/* The bottom bar marks the current tab with a rule above it, which reads as
+	   a rule through the middle of a vertical list. A soft claret fill instead. */
+	.tabbar-item[aria-current='page'] {
+		background: var(--accent-soft);
+	}
+
+	.tabbar-item[aria-current='page']::before {
+		display: none;
+	}
+
+	.shell-content {
+		padding-left: var(--rail-w);
+		padding-bottom: var(--s6);
+	}
+
+	/* The measure stays capped: a 1400px window must not produce 1400px lines.
+	   Slightly wider than the phone column because there is room for it, not
+	   because the text wants it. */
+	.screen {
+		max-width: 680px;
+		padding: var(--s6) var(--s5);
+	}
 }

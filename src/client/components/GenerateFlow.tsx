@@ -127,7 +127,7 @@ export function GenerateFlow({ onImported }: GenerateFlowProps) {
 
 	return (
 		<div>
-			<p class="eyebrow" role="status" aria-live="polite">
+			<p class="hint" role="status" aria-live="polite">
 				{status || ' '}
 			</p>
 
@@ -152,7 +152,7 @@ export function GenerateFlow({ onImported }: GenerateFlowProps) {
 					Copy prompt + data as one paste
 				</button>
 				{downloadError && <p class="eyebrow eyebrow--accent">{downloadError}</p>}
-				{dataNote && <p class="eyebrow">{dataNote}</p>}
+				{dataNote && <p class="hint">{dataNote}</p>}
 			</div>
 
 			<div class="row">
@@ -216,7 +216,7 @@ export function GenerateFlow({ onImported }: GenerateFlowProps) {
 								>
 									Copy these problems
 								</button>
-								<p class="eyebrow">Paste them back into the same chat and ask for a corrected plan.</p>
+								<p class="hint">Paste them back into the same chat and ask for a corrected plan.</p>
 							</>
 						)}
 					</>
