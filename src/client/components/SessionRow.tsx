@@ -36,15 +36,35 @@ function metaLine(s: SessionSummary): string {
 	return typeLabel;
 }
 
+/** "5 sessions · 2 lifts, 3 runs" — what a collapsed week still says about
+ * itself, so folding one away doesn't make it a mystery. */
+function weekSummary(items: SessionSummary[]): string {
+	const lifts = items.filter((s) => s.kind === 'lift').length;
+	const runs = items.length - lifts;
+	const parts = [];
+	if (lifts > 0) parts.push(`${lifts} lift${lifts === 1 ? '' : 's'}`);
+	if (runs > 0) parts.push(`${runs} run${runs === 1 ? '' : 's'}`);
+	return `${items.length} session${items.length === 1 ? '' : 's'} · ${parts.join(', ')}`;
+}
+
 interface SessionListProps {
 	sessions: SessionSummary[];
 	linkFor: (session: SessionSummary) => string;
 	emptyMessage: string;
 	onReschedule?: (session: SessionSummary, date: string) => void;
+	/** Fold every week but the first shut. Opt-in, because it only makes sense
+	 * where the list runs forwards from today: Plan can generate twelve weeks
+	 * at once, which is an enormous scroll, whereas Today only ever holds one
+	 * week and History is entirely past — nothing there is "current". */
+	collapsible?: boolean;
 }
 
-export function SessionList({ sessions, linkFor, emptyMessage, onReschedule }: SessionListProps) {
+export function SessionList({ sessions, linkFor, emptyMessage, onReschedule, collapsible }: SessionListProps) {
 	const [openId, setOpenId] = useState<number | null>(null);
+	// Which weeks the person has toggled, against a default of "only the first".
+	// Independent toggles rather than an accordion — comparing this week with
+	// next is a reasonable thing to want.
+	const [toggled, setToggled] = useState<Set<number>>(new Set());
 
 	if (sessions.length === 0) {
 		return <p class="empty-state">{emptyMessage}</p>;
@@ -62,12 +82,33 @@ export function SessionList({ sessions, linkFor, emptyMessage, onReschedule }: S
 		}
 	}
 
+	// Plan fetches from today onwards, so the first group is the current week by
+	// construction — no calendar arithmetic needed to find it.
+	const isOpen = (index: number) => !collapsible || toggled.has(index) !== (index === 0);
+	const toggle = (index: number) =>
+		setToggled((current) => {
+			const next = new Set(current);
+			if (!next.delete(index)) next.add(index);
+			return next;
+		});
+
 	return (
 		<>
-			{groups.map((g) => (
+			{groups.map((g, groupIndex) => (
 				<div key={`week-${g.week}`}>
-					<h2 class="section-heading">Week {g.week}</h2>
-					{g.items.map((s) => (
+					{collapsible ? (
+						<button type="button" class="plan-row exercise-card-summary" aria-expanded={isOpen(groupIndex)} onClick={() => toggle(groupIndex)}>
+							<div class="plan-row-main">
+								<span class="plan-row-title">Week {g.week}</span>
+								<span class="plan-row-meta">{weekSummary(g.items)}</span>
+							</div>
+							<span class="plan-row-chevron">{isOpen(groupIndex) ? '⌄' : '›'}</span>
+						</button>
+					) : (
+						<h2 class="section-heading">Week {g.week}</h2>
+					)}
+					{isOpen(groupIndex) &&
+						g.items.map((s) => (
 						<div key={s.id}>
 							<a class="row plan-row" href={linkFor(s)}>
 								<div class="plan-row-main">
@@ -106,8 +147,8 @@ export function SessionList({ sessions, linkFor, emptyMessage, onReschedule }: S
 									)}
 								</div>
 							)}
-						</div>
-					))}
+							</div>
+						))}
 				</div>
 			))}
 		</>

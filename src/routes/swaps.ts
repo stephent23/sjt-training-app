@@ -53,5 +53,27 @@ swaps.post('/', async (c) => {
 		.bind(body.to_exercise_id, body.planned_set_id, body.session_id)
 		.run();
 
+	// "From now on" used to write its scope to exercise_swaps and do nothing
+	// else, so the two options behaved identically and the UI promised a change
+	// to future sessions that never happened. It now repoints every planned set
+	// still ahead of this session — planned only, so a week already trained
+	// keeps the record of what was actually done. Sessions that already contain
+	// the substitute are left alone: repointing them would create the duplicate
+	// the clash guard above exists to prevent.
+	if (body.scope === 'permanent') {
+		await c.env.DB.prepare(
+			`UPDATE planned_sets SET exercise_id = ?, target_weight_kg = NULL
+			 WHERE exercise_id = ?
+			   AND session_id IN (
+			     SELECT s.id FROM sessions s
+			     WHERE s.status = 'planned'
+			       AND s.date > (SELECT date FROM sessions WHERE id = ?)
+			       AND NOT EXISTS (SELECT 1 FROM planned_sets existing WHERE existing.session_id = s.id AND existing.exercise_id = ?)
+			   )`,
+		)
+			.bind(body.to_exercise_id, body.from_exercise_id, body.session_id, body.to_exercise_id)
+			.run();
+	}
+
 	return c.json({ ok: true });
 });

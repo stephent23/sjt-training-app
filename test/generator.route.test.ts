@@ -165,8 +165,42 @@ describe('generator export -> import -> pending -> accept/reject flow', () => {
 
 		const second = await postJson('https://training-app.test/api/generator/import', exportBody.deterministicProposal);
 		expect(second.status).toBe(422);
-		const body = (await second.json()) as { error: string };
+		const body = (await second.json()) as { error: string; errors: string[] };
 		expect(body.error).toMatch(/already pending/);
+		expect(body.errors).toEqual([expect.stringMatching(/already pending/)]);
+	});
+
+	// Asking the assistant to fix a rejected plan and pasting the corrected one
+	// back is the normal path, and it always arrives while the first is still
+	// pending. Explicit rather than automatic, so a double-import can't quietly
+	// discard the plan you were reading.
+	it('replaces the pending plan when asked to explicitly', async () => {
+		await seedOneSessionWeek();
+		const exportBody = (await (await SELF.fetch('https://training-app.test/api/generator/export')).json()) as {
+			deterministicProposal: MultiWeekProposalInput;
+		};
+
+		const { id: firstId } = (await (await postJson('https://training-app.test/api/generator/import', exportBody.deterministicProposal)).json()) as { id: number };
+
+		const replaced = await postJson('https://training-app.test/api/generator/import?replace=true', exportBody.deterministicProposal);
+		expect(replaced.status).toBe(200);
+		const { id: secondId } = (await replaced.json()) as { id: number };
+		expect(secondId).not.toBe(firstId);
+
+		// Exactly one pending plan, and it is the new one.
+		const pending = (await (await SELF.fetch('https://training-app.test/api/generator/pending')).json()) as { pending: { id: number } | null };
+		expect(pending.pending?.id).toBe(secondId);
+	});
+
+	it('surfaces validation problems one per entry, not as one joined blob', async () => {
+		await seedOneSessionWeek();
+
+		const res = await postJson('https://training-app.test/api/generator/import', {
+			weeks: [{ week_number: 2, sessions: [{ date: 'whenever', kind: 'swim', label: '', plannedSets: [], plannedRun: null }] }],
+		});
+		expect(res.status).toBe(422);
+		const body = (await res.json()) as { errors: string[] };
+		expect(body.errors.length).toBeGreaterThan(1);
 	});
 
 	it('accept/reject 404 for an id with no pending row', async () => {

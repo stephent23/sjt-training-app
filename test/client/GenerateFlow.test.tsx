@@ -1,6 +1,6 @@
 import { render } from 'preact';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { GenerateFlow } from '../../src/client/components/GenerateFlow';
+import { describeExport, GenerateFlow } from '../../src/client/components/GenerateFlow';
 
 // Step 1's download used to be a bare <a href="/api/..." download>, which in the
 // installed standalone PWA saved a 0-byte file and reported nothing. These
@@ -44,11 +44,30 @@ function captureDownload() {
 	return { saved, restore: () => (HTMLAnchorElement.prototype.click = originalClick) };
 }
 
-function mount() {
+function mount(onImported: () => void = () => {}) {
 	container = document.createElement('div');
 	document.body.appendChild(container);
-	render(<GenerateFlow onImported={() => {}} />, container);
+	render(<GenerateFlow onImported={onImported} />, container);
 	return container;
+}
+
+function buttonWith(root: HTMLElement, text: string): HTMLButtonElement {
+	const button = [...root.querySelectorAll('button')].find((el) => (el.textContent ?? '').includes(text));
+	if (!button) throw new Error(`no button matching ${text}`);
+	return button;
+}
+
+/** Pastes into the fallback textarea and imports. The file picker can't be
+ * driven from jsdom (a FileList is not constructible), and both paths run the
+ * same submit(), so this exercises the shared code. */
+async function pasteAndImport(root: HTMLElement, text: string) {
+	root.querySelector('details.disclosure:last-of-type')?.setAttribute('open', '');
+	const textarea = root.querySelector('textarea') as HTMLTextAreaElement;
+	textarea.value = text;
+	textarea.dispatchEvent(new Event('input', { bubbles: true }));
+	await tick();
+	buttonWith(root, 'Import').click();
+	await tick();
 }
 
 /** Deliberately tag-agnostic — an <a href download> and a <button> are both
@@ -157,5 +176,91 @@ describe('Generate — step 1 download', () => {
 		} finally {
 			restore();
 		}
+	});
+});
+
+// The import path had no coverage at all: the component did a bare JSON.parse
+// of the paste, so the prompt's own "explain, then give the JSON" instruction
+// produced an answer that could never be imported.
+describe('Generate — step 3 import', () => {
+	const plan = { weeks: [{ week_number: 2, sessions: [] }] };
+
+	it('finds the plan inside a reply that explains itself first', async () => {
+		const fetchMock = vi.fn(async () => new Response('{"id":1}', { status: 200 }));
+		vi.stubGlobal('fetch', fetchMock);
+		const onImported = vi.fn();
+
+		const root = mount(onImported);
+		await pasteAndImport(root, `Here's what I changed.\n\n\`\`\`json\n${JSON.stringify(plan)}\n\`\`\``);
+		await waitFor(() => onImported.mock.calls.length > 0);
+
+		const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+		expect(url).toBe('/api/generator/import');
+		expect(JSON.parse(init.body as string)).toEqual(plan);
+	});
+
+	it('lists each validation problem separately rather than as one blob', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async () => new Response(JSON.stringify({ error: 'a; b', errors: ['bad exercise_id 9', 'session count is wrong'] }), { status: 422 })),
+		);
+
+		const root = mount();
+		await pasteAndImport(root, JSON.stringify(plan));
+		await waitFor(() => root.querySelector('.error-list') !== null);
+
+		expect(root.querySelectorAll('.error-list li')).toHaveLength(2);
+	});
+
+	it('offers to replace rather than a trip back to the assistant when one is already pending', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async () => new Response(JSON.stringify({ errors: ['A plan is already pending review — accept or reject it first.'] }), { status: 422 })),
+		);
+
+		const root = mount();
+		await pasteAndImport(root, JSON.stringify(plan));
+		await waitFor(() => root.querySelector('.error-list') !== null);
+
+		expect(buttonWith(root, 'Replace the pending plan')).toBeTruthy();
+	});
+
+	it('never reaches the network when the reply has no plan in it', async () => {
+		const fetchMock = vi.fn();
+		vi.stubGlobal('fetch', fetchMock);
+
+		const root = mount();
+		await pasteAndImport(root, "Sure! I'd be happy to help with your training.");
+		await waitFor(() => root.querySelector('.error-list') !== null);
+
+		expect(fetchMock).not.toHaveBeenCalled();
+		expect(root.querySelector('.error-list')!.textContent).toContain('find any JSON');
+	});
+});
+
+describe('describeExport', () => {
+	it('says a plan is being written from scratch when there is no history', () => {
+		const text = describeExport({ deterministicProposal: { weeks: [{ week_number: 1, sessions: [] }] }, weekStartDate: '2026-08-10' });
+		expect(text).toContain('from scratch');
+		expect(text).toContain('2026-08-10');
+	});
+
+	it('calls out a week that exists but has nothing logged against it', () => {
+		const text = describeExport({
+			deterministicProposal: { weeks: [{ week_number: 2, sessions: [{ date: '2026-08-10', kind: 'lift', label: 'A', plannedSets: [], plannedRun: null }] }] },
+			historyWindow: { loggedSets: [], loggedRuns: [] },
+		});
+		expect(text).toContain('Nothing logged yet');
+	});
+
+	it('counts what has actually been logged', () => {
+		const text = describeExport({
+			deterministicProposal: { weeks: [{ week_number: 2, sessions: [{ date: '2026-08-10', kind: 'lift', label: 'A', plannedSets: [], plannedRun: null }] }] },
+			historyWindow: {
+				loggedSets: [{ session_id: 1, exercise_id: 1, set_index: 1, weight_kg: 20, reps: 8, rir: 2, rest_taken_seconds: null, performed_on: '2026-08-03' }],
+				loggedRuns: [],
+			},
+		});
+		expect(text).toBe('1 sets and 0 runs logged in the last two weeks.');
 	});
 });

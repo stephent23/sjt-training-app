@@ -69,25 +69,35 @@ branches simply carry the earlier commits with them.
       the run's own max, and whether the long run was cut short. *Done: growth previously followed
       from a logged run merely existing, so a run cut half short earned the same 10% as a
       comfortable one. New reason strings only; the existing four are untouched.*
-- [ ] **6 · Overwrite a pending plan.** `importProposal(…, replace)`; the "already pending" 422
-      offers a Replace button that supersedes in one `db.batch`.
-- [ ] **7 · Import by file upload.** File picker primary, textarea fallback, both through a new
+- [x] **6 · Overwrite a pending plan.** `importProposal(…, replace)`; the "already pending" 422
+      offers a Replace button that supersedes in one `db.batch`. *Done: correcting a rejected plan
+      always arrives while the first is still pending, so refusing outright was too strict — but
+      it stays explicit, so a double-import can't discard the plan you were reading.*
+- [x] **7 · Import by file upload.** File picker primary, textarea fallback, both through the new
       pure `src/client/parseProposal.ts`; `POST /import` 422 gains `errors: string[]` and the client
-      throws an `ImportRejected` carrying it.
-- [ ] **8 · The new prompt.** Moved to `src/client/prompt.ts`, rewritten against `validateProposal`
-      as it stands after stages 2–5. Covers the three data states, both caps and their baselines,
-      `increment_kg` / `per_hand`, deloads, and resolves the prose-vs-JSON contradiction.
-- [ ] **9 · Generate page redesign.** Kill the duplicate heading; two export routes (file, or
-      prompt + data as one paste); data-state note; prompt behind a styled disclosure; errors as a
-      copyable list; one `aria-live` region. New CSS: `.disclosure*`, `.error-list`, `.btn-small`,
-      capped `.prompt-preview`.
-- [ ] **10 · Collapsible weeks on Plan.** Opt-in `collapsible` prop on `SessionList`; current week
-      open, rest closed, independent toggles, count in the collapsed header. First test for
-      `SessionList`.
-- [ ] **11 · Swaps and adding an exercise.** Make `scope: 'permanent'` actually repoint future
-      planned sessions; loading and error states in the sheet; a back affordance; new
-      `POST /api/exercises` with a minimal form, reachable from the sheet's empty state. Optional
-      per-lap `splits_json` last, and droppable.
+      throws an `ImportRejected` carrying it. *Done: 11 parser tests covering fenced blocks, prose
+      either side, a brace inside a string value, and a decoy snippet before the real plan.*
+- [x] **8 · The new prompt.** Moved to `src/client/prompt.ts`, rewritten against `validateProposal`
+      as it stands after stages 2–6. *Done: correct field names, all eleven hard rules stated,
+      three data-state branches, deload instructions, and prose-then-one-fenced-block output that
+      the stage 7 parser reads.*
+- [x] **9 · Generate page redesign.** *Done: duplicate heading gone; download or copy-as-one-paste;
+      data-state note; prompt behind a styled disclosure; upload-or-paste answer; problems as a
+      copyable list; one `aria-live` region. `.error-list` and `.btn-small` added, `.prompt-preview`
+      capped at 45vh. The import path now has tests — it had none.*
+- [x] **10 · Collapsible weeks on Plan.** Opt-in `collapsible` prop on `SessionList`; current week
+      open, rest closed, independent toggles, count in the collapsed header. *Done: Plan fetches
+      from today onwards, so the first group is the current week by construction — no calendar
+      arithmetic needed. Toggles are independent, not an accordion, since comparing this week with
+      next is reasonable. First test for `SessionList`, which had none.*
+- [x] **11 · Swaps and adding an exercise.** *Done: `scope: 'permanent'` now repoints every future
+      **planned** session (the past keeps what was actually done, and sessions already holding the
+      substitute are skipped so the bulk update can't create the duplicate the clash guard
+      prevents). The sheet distinguishes "still loading" from "nothing found", surfaces the 409 it
+      used to swallow, and can go back to the reason picker. New `POST /api/exercises` +
+      `GET /api/exercises/patterns` — the first write path to that table — reachable from the
+      sheet. Pattern must be an existing one: a novel pattern would orphan the exercise from swaps
+      in both directions.* Per-lap `splits_json` dropped: most typing, least signal.
 - [ ] **12 · Simplification pass.** A dedicated refactor over everything this campaign touched:
       delete dead code and unused CSS (`.plan-row--today` is defined and never applied), collapse
       duplication the stages introduced, shorten anything that grew a wrapper it didn't need, and

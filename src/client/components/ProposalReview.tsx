@@ -27,7 +27,10 @@ export function ProposalReview({ proposal, busy, onAccept, onReject }: ProposalR
 		<div>
 			{proposal.weeks.map((week, weekIndex) => (
 				<div key={week.week_number}>
-					<h2 class="section-heading">Week {week.week_number}</h2>
+					<h2 class="section-heading">
+						Week {week.week_number}
+						{week.focus ? ` · ${week.focus}` : ''}
+					</h2>
 					{weekIndex > 0 && <span class="eyebrow eyebrow--accent">Speculative — needs real judgement</span>}
 
 					{week.sessions.map((s, i) => (

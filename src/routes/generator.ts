@@ -45,8 +45,11 @@ generator.get('/export', async (c) => {
 // plan is already pending.
 generator.post('/import', async (c) => {
 	const body = await c.req.json<MultiWeekProposalInput>();
-	const result = await importProposal(c.env.DB, body);
-	if (!result.ok) return c.json({ error: result.errors.join('; ') }, 422);
+	const result = await importProposal(c.env.DB, body, c.req.query('replace') === 'true');
+	// `errors` is the list; `error` is the same thing joined, kept because it is
+	// what every existing caller reads. The list is what lets the UI show one
+	// line per problem, and hand them all back to the assistant that caused them.
+	if (!result.ok) return c.json({ error: result.errors.join('; '), errors: result.errors }, 422);
 	return c.json({ id: result.id });
 });
 

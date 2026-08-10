@@ -80,6 +80,7 @@ export function Generate() {
 	return (
 		<main class="screen">
 			<h1>Generate</h1>
+			<p class="exercise-target">Export your data, hand it to any AI assistant, bring the plan back.</p>
 
 			<GoalsEditor />
 

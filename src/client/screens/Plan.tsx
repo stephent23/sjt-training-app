@@ -42,7 +42,7 @@ export function Plan() {
 			) : sessions === undefined ? (
 				<p>Loading…</p>
 			) : (
-				<SessionList sessions={sessions} linkFor={linkFor} emptyMessage="Nothing planned." onReschedule={handleReschedule} />
+				<SessionList sessions={sessions} linkFor={linkFor} emptyMessage="Nothing planned." onReschedule={handleReschedule} collapsible />
 			)}
 		</main>
 	);

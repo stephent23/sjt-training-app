@@ -803,13 +803,18 @@ export function hydrateProposal(input: WeekProposalInput, exercises: Exercise[])
  * self-contained and avoids needing the client to round-trip extra state it
  * has no reason to keep.
  */
-export async function importProposal(db: D1Database, input: MultiWeekProposalInput): Promise<ImportResult> {
+export async function importProposal(db: D1Database, input: MultiWeekProposalInput, replace = false): Promise<ImportResult> {
 	if (input.weeks.length === 0) {
 		return { ok: false, errors: ['proposal must include at least one week'] };
 	}
 
+	// Refusing outright was too strict: asking the assistant to fix a rejected
+	// plan and pasting the corrected one back is the normal path, and it always
+	// arrives while the first is still pending. Still not silent — the client
+	// has to ask for the replacement explicitly, so a double-import can't
+	// quietly discard the plan you were reading.
 	const existingPending = await db.prepare(`SELECT id FROM generated_plans WHERE status = 'pending' LIMIT 1`).first<{ id: number }>();
-	if (existingPending) {
+	if (existingPending && !replace) {
 		return { ok: false, errors: ['A plan is already pending review — accept or reject it before importing another.'] };
 	}
 
@@ -837,12 +842,20 @@ export async function importProposal(db: D1Database, input: MultiWeekProposalInp
 
 	const hydrated: MultiWeekProposal = { weeks: input.weeks.map((week) => hydrateProposal(week, context.exerciseCatalogue)) };
 
-	const row = await db
-		.prepare(`INSERT INTO generated_plans (first_week_number, week_count, plan_json, deterministic_json) VALUES (?, ?, ?, ?) RETURNING id`)
-		.bind(input.weeks[0].week_number, input.weeks.length, JSON.stringify(hydrated), JSON.stringify(context.deterministicProposal))
-		.first<{ id: number }>();
+	// Supersede and insert in one batch, so a failure can't leave the old plan
+	// rejected with no replacement stored.
+	const statements: D1PreparedStatement[] = [];
+	if (existingPending) {
+		statements.push(db.prepare(`UPDATE generated_plans SET status = 'rejected', reviewed_at = datetime('now') WHERE id = ?`).bind(existingPending.id));
+	}
+	statements.push(
+		db
+			.prepare(`INSERT INTO generated_plans (first_week_number, week_count, plan_json, deterministic_json) VALUES (?, ?, ?, ?) RETURNING id`)
+			.bind(input.weeks[0].week_number, input.weeks.length, JSON.stringify(hydrated), JSON.stringify(context.deterministicProposal)),
+	);
 
-	return { ok: true, id: row!.id };
+	const results = await db.batch<{ id: number }>(statements);
+	return { ok: true, id: results[results.length - 1].results[0].id };
 }
 
 /**

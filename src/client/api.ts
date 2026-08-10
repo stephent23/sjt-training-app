@@ -1,5 +1,7 @@
 import type {
 	ApplySwapInput,
+	Exercise,
+	Modality,
 	LogRunInput,
 	LogSetInput,
 	PlannedSetStatus,
@@ -103,13 +105,36 @@ export async function fetchSwapCandidates(exerciseId: number, pain: 'shoulder' |
 	return data.candidates;
 }
 
+/** Non-ok responses carry a reason worth showing — a 409 here means the
+ * substitute is already in this session, which the person can act on. */
+async function errorFrom(res: Response): Promise<Error> {
+	const body = (await res.json().catch(() => null)) as { error?: string } | null;
+	return new Error(body?.error ?? `request failed: ${res.status}`);
+}
+
 export async function applySwap(input: ApplySwapInput): Promise<void> {
 	const res = await fetch('/api/swaps', {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify(input),
 	});
-	if (!res.ok) throw new Error(`request failed: ${res.status}`);
+	if (!res.ok) throw await errorFrom(res);
+}
+
+export async function fetchPatterns(): Promise<string[]> {
+	const res = await fetch('/api/exercises/patterns');
+	if (!res.ok) throw await errorFrom(res);
+	return ((await res.json()) as { patterns: string[] }).patterns;
+}
+
+export async function createExercise(input: { name: string; pattern: string; increment_kg: number; modality: Modality }): Promise<Exercise> {
+	const res = await fetch('/api/exercises', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(input),
+	});
+	if (!res.ok) throw await errorFrom(res);
+	return ((await res.json()) as { exercise: Exercise }).exercise;
 }
 
 // Moves a session to a different date — a planning-time action done at home,
@@ -146,12 +171,20 @@ export async function updateSettings(patch: Partial<Settings>): Promise<void> {
 // bytes ourselves and saving them from a blob keeps the download inside the
 // page, and lets a non-ok response surface as an error instead of a 0-byte
 // file.
-export async function downloadExport(weeks: number, filename = 'training-export.json'): Promise<void> {
+/** The export as raw text. Shared by the download and the copy-it-all-as-one-
+ * paste button, so the two can't diverge — and the text is passed through
+ * unmodified, never re-serialised. */
+export async function fetchExportText(weeks: number): Promise<string> {
 	const res = await fetch(`/api/generator/export?weeks=${weeks}`);
 	if (!res.ok) throw new Error(`request failed: ${res.status}`);
 
 	const text = await res.text();
 	if (text.trim() === '') throw new Error('the export came back empty');
+	return text;
+}
+
+export async function downloadExport(weeks: number, filename = 'training-export.json'): Promise<void> {
+	const text = await fetchExportText(weeks);
 
 	const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
 	try {
@@ -181,20 +214,26 @@ export async function fetchPendingProposal(): Promise<PendingProposal | null> {
 	return data.pending;
 }
 
-// Unlike every other function here, a non-ok response is surfaced via its
-// own message rather than a generic "request failed" — a 422 here carries
-// the exact validation errors (bad exercise_id, weight jump too big, session
-// count mismatch, ...) that the person needs in order to go back and ask
-// their AI assistant to fix the specific problem.
-export async function importProposal(input: MultiWeekProposalInput): Promise<{ id: number }> {
-	const res = await fetch('/api/generator/import', {
+/** A 422 from import carries the exact validation problems (bad exercise_id,
+ * weight jump too big, session count, ...) — the things the person has to hand
+ * back to their assistant to get a corrected plan. Carried as a list so the UI
+ * never has to split a joined string back apart. */
+export class ImportRejected extends Error {
+	constructor(readonly errors: string[]) {
+		super(errors.join('; '));
+		this.name = 'ImportRejected';
+	}
+}
+
+export async function importProposal(input: MultiWeekProposalInput, replace = false): Promise<{ id: number }> {
+	const res = await fetch(`/api/generator/import${replace ? '?replace=true' : ''}`, {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify(input),
 	});
 	if (!res.ok) {
-		const body = (await res.json().catch(() => null)) as { error?: string } | null;
-		throw new Error(body?.error ?? `request failed: ${res.status}`);
+		const body = (await res.json().catch(() => null)) as { error?: string; errors?: string[] } | null;
+		throw new ImportRejected(body?.errors ?? [body?.error ?? `request failed: ${res.status}`]);
 	}
 	return res.json();
 }

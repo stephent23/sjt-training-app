@@ -43,7 +43,7 @@ function LoadedLiftSession({ sessionId, detail, error, setDetail, reload, onBack
 	// you're working in stays open throughout.
 	const [expandedKey, setExpandedKey] = useState<string | null>(null);
 	const [rest, setRest] = useState<{ startedAt: number; seconds: number; groupKey: string; roundIndex: number } | null>(null);
-	const [swapFor, setSwapFor] = useState<{ plannedSetId: number; exerciseId: number } | null>(null);
+	const [swapFor, setSwapFor] = useState<{ plannedSetId: number; exerciseId: number; pattern: string } | null>(null);
 
 	const groups = useMemo(() => groupPlannedSets(detail.plannedSets), [detail.plannedSets]);
 	const totals = sessionSetTotals(detail.plannedSets);
@@ -119,7 +119,7 @@ function LoadedLiftSession({ sessionId, detail, error, setDetail, reload, onBack
 					expanded={expandedKey === group.key}
 					onToggle={() => setExpandedKey((key) => (key === group.key ? null : group.key))}
 					onLog={(exercise, si, w, r, rir) => handleLog(group, exercise, si, w, r, rir)}
-					onSwap={(exercise) => setSwapFor({ plannedSetId: exercise.id, exerciseId: exercise.exercise_id })}
+					onSwap={(exercise) => setSwapFor({ plannedSetId: exercise.id, exerciseId: exercise.exercise_id, pattern: exercise.pattern })}
 					onSkipToggle={handleSkipToggle}
 					restAfterRoundIndex={rest && rest.groupKey === group.key ? rest.roundIndex : null}
 					restNode={
@@ -146,6 +146,7 @@ function LoadedLiftSession({ sessionId, detail, error, setDetail, reload, onBack
 				<SwapSheet
 					sessionId={sessionId}
 					fromExerciseId={swapFor.exerciseId}
+					fromPattern={swapFor.pattern}
 					plannedSetId={swapFor.plannedSetId}
 					excludeExerciseIds={detail.plannedSets.filter((ps) => ps.id !== swapFor.plannedSetId).map((ps) => ps.exercise_id)}
 					onClose={() => setSwapFor(null)}
