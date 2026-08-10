@@ -1,0 +1,234 @@
+<!doctype html>
+<!--
+  THROWAWAY VISUAL REFERENCE — not production code.
+  Mock of the live lift session for docs/design-rethink.md §4.3. Self-contained, no
+  external requests. Lift A exactly as seeded in seeds/week1_sessions.sql — Goblet squat,
+  Neutral-grip DB press, Machine shoulder press, Lateral raise + Triceps pushdown as a
+  superset, Dead bug — mid-session at 4 of 18 sets.
+
+  The load-bearing detail here is the working set: rep chip -> Log set is TWO TAPS, both
+  on screen together at 390x844, weight prefilled. Chips are 48px. The four chip states
+  (plain / target / selected / target+selected) stay distinguishable by weight and
+  underline as well as by colour.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mock · Lift session</title>
+<style>
+:root{
+--bg:#f4f5f8;--surface:#fff;--surface-2:#eef0f5;--line:#e4e7ef;
+--ink:#12141a;--ink-2:#565d6e;--ink-3:#676e7e;
+--brand:#3d34d4;--brand-ink:#3d34d4;--on-brand:#fff;--brand-soft:#eceafc;
+--done-fill:#17795e;--done-ink:#146a53;--done-soft:#e3f4ee;
+--warn:#96262b;
+--r-lg:22px;--r-pill:999px;
+--shadow-1:0 1px 2px rgba(16,18,26,.06),0 10px 24px -16px rgba(16,18,26,.28);
+--card-border:0 0 0 0 transparent;
+--sans:"Plus Jakarta Sans","SF Pro Rounded",system-ui,-apple-system,"Segoe UI Variable Display","Segoe UI",Roboto,sans-serif;
+--mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+color-scheme:light dark;
+}
+@media(prefers-color-scheme:dark){:root{
+--bg:#0f1116;--surface:#171a21;--surface-2:#1f232c;--line:#272c37;
+--ink:#f3f5f9;--ink-2:#99a1b3;--ink-3:#8b93a5;
+--brand:#5b51e8;--brand-ink:#a79eff;--brand-soft:#1e1f3d;
+--done-fill:#1f9b78;--done-ink:#5be0ae;--done-soft:#14312a;--warn:#d4666b;
+--shadow-1:none;--card-border:inset 0 0 0 1px rgba(255,255,255,.06);}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 16px/1.5 var(--sans);-webkit-font-smoothing:antialiased}
+.phone{max-width:430px;margin:0 auto;padding:0 16px 120px;min-height:100dvh}
+.eyebrow{font:700 12px/1.2 var(--sans);letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);display:block}
+.h2{font:700 18px/1.25 var(--sans);letter-spacing:-.01em;margin:0}
+.muted{color:var(--ink-2)}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:13px}
+.appbar{position:sticky;top:0;z-index:15;background:var(--bg);padding:12px 0 10px}
+.appbar .top{display:flex;align-items:center;gap:12px;min-height:44px}
+.back{width:44px;height:44px;border:0;border-radius:50%;background:var(--surface);color:var(--ink);display:grid;place-items:center;cursor:pointer;box-shadow:var(--shadow-1),var(--card-border)}
+.bar{height:7px;border-radius:var(--r-pill);background:var(--surface-2);overflow:hidden;margin-top:10px}
+.bar>i{display:block;height:100%;background:var(--brand);border-radius:inherit}
+.card{background:var(--surface);border-radius:var(--r-lg);padding:16px 18px;box-shadow:var(--shadow-1),var(--card-border);margin:0 0 12px}
+.card--superset{box-shadow:var(--shadow-1),var(--card-border),inset 4px 0 0 var(--brand)}
+.hdr{display:flex;align-items:center;gap:13px;width:100%;background:none;border:0;color:inherit;padding:0;cursor:pointer;text-align:left;min-height:48px}
+.hdr-main{flex:1 1 auto;min-width:0}
+.hdr-main .name{font:700 16px/1.3 var(--sans);display:block}
+.hdr-main .sub{font:600 13px/1.4 var(--sans);color:var(--ink-2);display:block}
+.chev{color:var(--ink-3);flex:0 0 auto}
+.tick{width:26px;height:26px;border-radius:50%;background:var(--done-fill);color:#fff;display:grid;place-items:center;flex:0 0 auto}
+.pill{display:inline-flex;align-items:center;border-radius:var(--r-pill);padding:4px 10px;font:700 11.5px var(--sans)}
+.pill--brand{background:var(--brand-soft);color:var(--brand-ink)}
+.pill--done{background:var(--done-soft);color:var(--done-ink)}
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:52px;border:0;border-radius:var(--r-pill);font:700 16px var(--sans);cursor:pointer}
+.btn--primary{background:var(--brand);color:var(--on-brand)}
+.btn--soft{background:var(--surface-2);color:var(--ink)}
+.btn--quiet{background:none;color:var(--ink-2);min-height:46px;font-weight:600}
+.btn--sm{width:auto;min-height:44px;padding:0 15px;font-size:14px;background:var(--surface-2);color:var(--ink);border:0;border-radius:var(--r-pill);font-weight:700;cursor:pointer}
+.btn:focus-visible,.btn--sm:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
+.acts{display:flex;gap:8px;margin:12px 0 4px}
+.setline{display:flex;align-items:center;gap:11px;width:100%;min-height:52px;padding:6px 0;background:none;border:0;color:inherit;text-align:left;cursor:pointer;border-top:1px solid var(--line)}
+.setline .idx{font:700 14px var(--sans);width:46px;flex:0 0 auto}
+.setline .sum{flex:1 1 auto;text-align:right}
+.setline .edit{font:700 11px var(--sans);letter-spacing:.06em;text-transform:uppercase;color:var(--brand-ink);flex:0 0 auto}
+.live{border-top:1px solid var(--line);margin-top:6px;padding-top:14px}
+.live .lh{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.field{margin:14px 0}
+.stepper{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--surface-2);border-radius:var(--r-pill);padding:6px;margin-top:8px}
+.stepper button{width:52px;height:52px;border-radius:50%;border:0;background:var(--surface);color:var(--ink);font:700 24px/1 var(--sans);cursor:pointer;box-shadow:var(--card-border)}
+.stepper b{font:800 26px var(--sans);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.chips{display:flex;flex-wrap:wrap;gap:7px;margin-top:8px}
+.chip{min-height:48px;min-width:48px;flex:1 1 42px;border:0;border-radius:13px;background:var(--surface-2);color:var(--ink);font:700 16px var(--sans);font-variant-numeric:tabular-nums;cursor:pointer}
+.chip--target{font-weight:800;box-shadow:inset 0 -3px 0 var(--brand-ink)}
+.chip[aria-pressed="true"]{background:var(--brand);color:var(--on-brand)}
+.chip[aria-pressed="true"].chip--target{box-shadow:inset 0 -3px 0 rgba(255,255,255,.6)}
+.hint{font:500 12.5px/1.4 var(--sans);color:var(--ink-2);margin:4px 0 0}
+.timer{position:fixed;left:50%;transform:translateX(-50%);bottom:18px;width:calc(100% - 40px);max-width:390px;display:flex;align-items:center;gap:12px;background:var(--ink);color:var(--bg);border-radius:var(--r-pill);padding:8px 8px 8px 18px;z-index:25;box-shadow:0 14px 34px -14px rgba(0,0,0,.5)}
+.timer .ring{width:38px;height:38px;border-radius:50%;background:conic-gradient(currentColor 52%,rgba(128,128,128,.35) 0);flex:0 0 auto}
+.timer b{font:800 22px var(--sans);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.timer .lbl{font:700 11px var(--sans);letter-spacing:.08em;text-transform:uppercase;opacity:.7;flex:1}
+.timer button{min-height:44px;padding:0 18px;border:0;border-radius:var(--r-pill);background:rgba(128,128,128,.28);color:inherit;font:700 14px var(--sans);cursor:pointer}
+@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div class="phone">
+
+  <header class="appbar">
+    <div class="top">
+      <button class="back" aria-label="Back"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="m15 5-7 7 7 7"/></svg></button>
+      <div style="flex:1"><span class="eyebrow">Week 4 · Mon 24 Aug</span><div class="h2">Lift A</div></div>
+      <div style="text-align:right"><b style="font:800 20px var(--sans);font-variant-numeric:tabular-nums">4</b><span class="muted" style="font-weight:700">/18</span></div>
+    </div>
+    <div class="bar"><i style="width:22%"></i></div>
+  </header>
+
+  <!-- Finished exercise: collapses to a tick and one mono line. That collapse is
+       still the "done" signal; the tick just makes it legible at a glance. -->
+  <div class="card">
+    <button class="hdr">
+      <span class="tick"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5 9.5 18 20 6"/></svg></span>
+      <span class="hdr-main"><span class="name">Goblet squat</span><span class="sub mono">24kg × 10 · 10 · 9</span></span>
+      <svg class="chev" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="m9 5 7 7-7 7"/></svg>
+    </button>
+  </div>
+
+  <!-- The open exercise. Only the working set is at full volume. -->
+  <div class="card">
+    <button class="hdr">
+      <span class="hdr-main">
+        <span class="eyebrow">3 × 6–10 · rest 2:30</span>
+        <span class="name">Neutral-grip DB press</span>
+        <span class="sub">1 of 3 logged</span>
+      </span>
+      <svg class="chev" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="m5 9 7 7 7-7"/></svg>
+    </button>
+
+    <div class="acts">
+      <button class="btn--sm">Swap</button>
+      <button class="btn--sm">Skip</button>
+    </div>
+
+    <button class="setline">
+      <span class="idx">Set 1</span>
+      <span class="sum mono">22kg × 9 @ RIR 2</span>
+      <span class="edit">Edit</span>
+    </button>
+
+    <div class="live">
+      <div class="lh">
+        <span style="font:800 16px var(--sans)">Set 2</span>
+        <span class="mono muted">Last: 20kg × 9 @ RIR 2</span>
+      </div>
+
+      <div class="field">
+        <span class="eyebrow">Weight</span>
+        <div class="stepper">
+          <button aria-label="Down 2kg">−</button>
+          <b>22 <span style="font-size:15px;font-weight:700;color:var(--ink-2)">kg</span></b>
+          <button aria-label="Up 2kg">+</button>
+        </div>
+        <p class="hint">Tap the number to type, or ± to adjust by 2kg</p>
+      </div>
+
+      <div class="field">
+        <span class="eyebrow">Reps · target 6–10</span>
+        <div class="chips">
+          <button class="chip">4</button>
+          <button class="chip">5</button>
+          <button class="chip chip--target">6</button>
+          <button class="chip chip--target">7</button>
+          <button class="chip chip--target">8</button>
+          <button class="chip chip--target" aria-pressed="true">9</button>
+          <button class="chip chip--target">10</button>
+          <button class="chip">11</button>
+          <button class="chip">12</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <span class="eyebrow">RIR · reps in reserve</span>
+        <div class="chips">
+          <button class="chip">0</button>
+          <button class="chip">1</button>
+          <button class="chip" aria-pressed="true">2</button>
+          <button class="chip">3</button>
+          <button class="chip">4</button>
+        </div>
+        <p class="hint">0 = couldn't do another rep · 4 = several left</p>
+      </div>
+
+      <button class="btn btn--primary">Log set</button>
+    </div>
+
+    <div class="setline" style="color:var(--ink-3);cursor:default">
+      <span class="idx">Set 3</span>
+      <span class="sum mono">—</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <button class="hdr">
+      <span class="hdr-main"><span class="eyebrow">3 × 10–12</span><span class="name">Machine shoulder press</span><span class="sub">3 sets</span></span>
+      <svg class="chev" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="m9 5 7 7-7 7"/></svg>
+    </button>
+  </div>
+
+  <!-- Superset: one card, both members, unbroken left rule — now brand, not ink. -->
+  <div class="card card--superset">
+    <button class="hdr">
+      <span class="hdr-main">
+        <span class="pill pill--brand" style="margin-bottom:6px">Superset · 3 rounds</span>
+        <span class="name">Lateral raise</span>
+        <span class="name">Triceps pushdown</span>
+        <span class="sub">3 rounds · short rest between</span>
+      </span>
+      <svg class="chev" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="m9 5 7 7-7 7"/></svg>
+    </button>
+  </div>
+
+  <div class="card">
+    <button class="hdr">
+      <span class="hdr-main"><span class="eyebrow">3 × 10–12 · bodyweight</span><span class="name">Dead bug</span><span class="sub">3 sets · reps per side</span></span>
+      <svg class="chev" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="m9 5 7 7-7 7"/></svg>
+    </button>
+  </div>
+
+  <!-- Finishing early stays possible; `ready` drives prominence only, so while
+       sets are outstanding this is soft, not brand. -->
+  <div style="margin-top:18px">
+    <button class="btn btn--soft">Finish session</button>
+    <button class="btn btn--quiet" style="margin-top:4px">Mark skipped</button>
+  </div>
+</div>
+
+<!-- Rest timer: floating above the thumb rather than a sticky bar at the top.
+     Turns --warn when it runs over. -->
+<div class="timer">
+  <span class="ring"></span>
+  <b>1:12</b>
+  <span class="lbl">rest</span>
+  <button>Skip</button>
+</div>
+
+</body>
+</html>
