@@ -558,6 +558,18 @@ button:disabled {
 	border: 0;
 }
 
+/* Small inline variant — a secondary action hanging off the thing above it
+   ("Copy these problems"), not a full-width commitment. It overrides the
+   block/100% base above, so it has to stay after it in this file. */
+.btn-small {
+	display: inline-flex;
+	align-items: center;
+	width: auto;
+	min-height: 40px;
+	padding: var(--s2) var(--s3);
+	font-size: 0.85rem;
+}
+
 /* ---- Tap targets (reps, RIR, RPE, swap reasons/candidates) ------------------
    .tap is the new primitive; .tap-btn is kept as a compatibility alias for
    the class name currently rendered by SetRow/SwapSheet/RunSession. */
@@ -980,6 +992,33 @@ button:disabled {
 	padding: var(--s3);
 	border-radius: var(--radius);
 	margin: var(--s3) 0;
+	/* Capped and scrollable: at full length the prompt is a wall of mono text
+	   on a 480px column, and everything below it sat two screens away. */
+	max-height: 45vh;
+	overflow-y: auto;
+	overscroll-behavior: contain;
+}
+
+/* ---- Import problems (Generate step 3) ----------------------------------------------
+   A rejected import can come back with a dozen validation problems. Joined into
+   one paragraph they were unreadable; as a list they can be scanned, and the
+   whole list is one tap from the clipboard so it can go straight back to the
+   assistant that produced the bad plan. Claret as a rule rather than as text —
+   the problems themselves need to stay legible. */
+
+.error-list {
+	list-style: none;
+	margin: var(--s2) 0 var(--s3);
+	padding: 0 0 0 var(--s3);
+	border-left: 2px solid var(--accent);
+	font-family: var(--mono);
+	font-size: 0.8rem;
+	line-height: 1.6;
+	color: var(--ink);
+}
+
+.error-list li + li {
+	margin-top: var(--s2);
 }
 
 /* ---- Disclosure ---------------------------------------------------------------------
