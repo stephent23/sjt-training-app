@@ -61,10 +61,11 @@ interface SessionListProps {
 
 export function SessionList({ sessions, linkFor, emptyMessage, onReschedule, collapsible }: SessionListProps) {
 	const [openId, setOpenId] = useState<number | null>(null);
-	// Which weeks the person has toggled, against a default of "only the first".
-	// Independent toggles rather than an accordion — comparing this week with
-	// next is a reasonable thing to want.
-	const [toggled, setToggled] = useState<Set<number>>(new Set());
+	// Which week groups are open, by index. Starts as just the first — Plan
+	// fetches from today onwards, so group 0 is the current week by
+	// construction. Independent toggles rather than an accordion: comparing this
+	// week with next is a reasonable thing to want.
+	const [openWeeks, setOpenWeeks] = useState<Set<number>>(() => new Set([0]));
 
 	if (sessions.length === 0) {
 		return <p class="empty-state">{emptyMessage}</p>;
@@ -82,13 +83,12 @@ export function SessionList({ sessions, linkFor, emptyMessage, onReschedule, col
 		}
 	}
 
-	// Plan fetches from today onwards, so the first group is the current week by
-	// construction — no calendar arithmetic needed to find it.
-	const isOpen = (index: number) => !collapsible || toggled.has(index) !== (index === 0);
+	const isOpen = (index: number) => !collapsible || openWeeks.has(index);
 	const toggle = (index: number) =>
-		setToggled((current) => {
+		setOpenWeeks((current) => {
 			const next = new Set(current);
-			if (!next.delete(index)) next.add(index);
+			if (next.has(index)) next.delete(index);
+			else next.add(index);
 			return next;
 		});
 
@@ -97,7 +97,12 @@ export function SessionList({ sessions, linkFor, emptyMessage, onReschedule, col
 			{groups.map((g, groupIndex) => (
 				<div key={`week-${g.week}`}>
 					{collapsible ? (
-						<button type="button" class="plan-row exercise-card-summary" aria-expanded={isOpen(groupIndex)} onClick={() => toggle(groupIndex)}>
+						<button
+							type="button"
+							class="plan-row exercise-card-summary"
+							aria-expanded={isOpen(groupIndex)}
+							onClick={() => toggle(groupIndex)}
+						>
 							<div class="plan-row-main">
 								<span class="plan-row-title">Week {g.week}</span>
 								<span class="plan-row-meta">{weekSummary(g.items)}</span>
@@ -109,44 +114,44 @@ export function SessionList({ sessions, linkFor, emptyMessage, onReschedule, col
 					)}
 					{isOpen(groupIndex) &&
 						g.items.map((s) => (
-						<div key={s.id}>
-							<a class="row plan-row" href={linkFor(s)}>
-								<div class="plan-row-main">
-									<span class="eyebrow">
-										{s.date}
-										{statusBadge(s)}
-									</span>
-									<span class="plan-row-title">{s.label}</span>
-									<span class="plan-row-meta">{metaLine(s)}</span>
-								</div>
-								<span class="plan-row-chevron">›</span>
-							</a>
+							<div key={s.id}>
+								<a class="row plan-row" href={linkFor(s)}>
+									<div class="plan-row-main">
+										<span class="eyebrow">
+											{s.date}
+											{statusBadge(s)}
+										</span>
+										<span class="plan-row-title">{s.label}</span>
+										<span class="plan-row-meta">{metaLine(s)}</span>
+									</div>
+									<span class="plan-row-chevron">›</span>
+								</a>
 
-							{onReschedule && (
-								<div class="reschedule">
-									<button type="button" class="btn-secondary reschedule-toggle" onClick={() => setOpenId(openId === s.id ? null : s.id)}>
-										{openId === s.id ? 'Cancel' : 'Move to a different day'}
-									</button>
-									{openId === s.id && (
-										<div class="tap-row" role="group" aria-label="Move to a different day this week">
-											{weekDatesFor(s.date).map((d, i) => (
-												<button
-													key={d}
-													type="button"
-													class={`tap-btn ${d === s.date ? 'tap-btn--selected' : ''}`}
-													aria-pressed={d === s.date}
-													onClick={() => {
-														setOpenId(null);
-														if (d !== s.date) onReschedule(s, d);
-													}}
-												>
-													{WEEKDAY_LABELS[i]}
-												</button>
-											))}
-										</div>
-									)}
-								</div>
-							)}
+								{onReschedule && (
+									<div class="reschedule">
+										<button type="button" class="btn-secondary reschedule-toggle" onClick={() => setOpenId(openId === s.id ? null : s.id)}>
+											{openId === s.id ? 'Cancel' : 'Move to a different day'}
+										</button>
+										{openId === s.id && (
+											<div class="tap-row" role="group" aria-label="Move to a different day this week">
+												{weekDatesFor(s.date).map((d, i) => (
+													<button
+														key={d}
+														type="button"
+														class={`tap-btn ${d === s.date ? 'tap-btn--selected' : ''}`}
+														aria-pressed={d === s.date}
+														onClick={() => {
+															setOpenId(null);
+															if (d !== s.date) onReschedule(s, d);
+														}}
+													>
+														{WEEKDAY_LABELS[i]}
+													</button>
+												))}
+											</div>
+										)}
+									</div>
+								)}
 							</div>
 						))}
 				</div>

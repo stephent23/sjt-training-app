@@ -159,24 +159,60 @@ export interface ApplySwapInput {
 }
 
 // Weekly generator (manual export/import) — see migrations/0004_generator.sql.
-export interface ProposedRun { run_type: RunType; target_minutes: number | null; target_km: number | null; structure_json: string | null; }
-export interface ProposedSetInput { exercise_id: number; order_index: number; target_sets: number; rep_low: number; rep_high: number; target_weight_kg: number | null; rest_seconds: number; notes: string | null; superset_group: number | null; }
-export interface ProposedSessionInput { date: string; kind: SessionKind; label: string; plannedSets: ProposedSetInput[]; plannedRun: ProposedRun | null; }
+export interface ProposedRun {
+	run_type: RunType;
+	target_minutes: number | null;
+	target_km: number | null;
+	structure_json: string | null;
+}
+export interface ProposedSetInput {
+	exercise_id: number;
+	order_index: number;
+	target_sets: number;
+	rep_low: number;
+	rep_high: number;
+	target_weight_kg: number | null;
+	rest_seconds: number;
+	notes: string | null;
+	superset_group: number | null;
+}
+export interface ProposedSessionInput {
+	date: string;
+	kind: SessionKind;
+	label: string;
+	plannedSets: ProposedSetInput[];
+	plannedRun: ProposedRun | null;
+}
 // `focus` is an optional one-word label for what a week is for ("deload",
 // "volume", "race week"). Display-only — nothing branches on it — but it's how
 // a deload becomes something the review screen can state rather than something
 // you have to infer from the numbers.
-export interface WeekProposalInput { week_number: number; focus?: string | null; sessions: ProposedSessionInput[]; }
+export interface WeekProposalInput {
+	week_number: number;
+	focus?: string | null;
+	sessions: ProposedSessionInput[];
+}
 
-export interface ProposedSet extends ProposedSetInput { exercise_name: string; pattern: string; }
-export interface ProposedSession extends Omit<ProposedSessionInput, 'plannedSets'> { plannedSets: ProposedSet[]; }
-export interface WeekProposal extends Omit<WeekProposalInput, 'sessions'> { sessions: ProposedSession[]; }
+export interface ProposedSet extends ProposedSetInput {
+	exercise_name: string;
+	pattern: string;
+}
+export interface ProposedSession extends Omit<ProposedSessionInput, 'plannedSets'> {
+	plannedSets: ProposedSet[];
+}
+export interface WeekProposal extends Omit<WeekProposalInput, 'sessions'> {
+	sessions: ProposedSession[];
+}
 
 // Multi-week wrapper (generate-many-weeks-at-once) — thin reuse of the
 // per-week shapes above so hydrateProposal/insert logic loop rather than
 // duplicate. See migrations/0005_generator_multiweek.sql.
-export interface MultiWeekProposalInput { weeks: WeekProposalInput[]; }
-export interface MultiWeekProposal { weeks: WeekProposal[]; }
+export interface MultiWeekProposalInput {
+	weeks: WeekProposalInput[];
+}
+export interface MultiWeekProposal {
+	weeks: WeekProposal[];
+}
 
 /** The tick-box vocabulary behind free-text goals, grouped only for how the
  * editor lays them out — the server treats it as one flat allowlist. Adding a
@@ -188,6 +224,38 @@ export const GOAL_TAG_GROUPS = {
 } as const;
 
 export const GOAL_TAGS: readonly string[] = Object.values(GOAL_TAG_GROUPS).flat();
+
+/** goal_tags is a JSON array in one TEXT column (migration 0006). A value
+ * written before that column existed, or hand-edited, shouldn't take down the
+ * settings screen or the export — unreadable reads as no tags. Shared by both
+ * readers so the leniency can't drift between them. */
+export function parseGoalTags(raw: string | undefined | null): string[] {
+	if (!raw) return [];
+	try {
+		const parsed = JSON.parse(raw);
+		return Array.isArray(parsed) ? parsed.filter((tag): tag is string => typeof tag === 'string') : [];
+	} catch {
+		return [];
+	}
+}
+
+export const MODALITIES: readonly Modality[] = ['dumbbell', 'machine', 'cable', 'bodyweight'];
+export const LOADINGS: readonly Loading[] = ['per_hand', 'total', 'bodyweight'];
+
+/** The optional run metrics copied off a watch, with the bounds both sides
+ * enforce. The route rejects anything outside them; the Review form uses the
+ * same list to build its inputs and to refuse to commit a typo. One list, so
+ * the two can't disagree about what a plausible cadence is. */
+export const RUN_METRIC_FIELDS = [
+	{ key: 'avg_hr', label: 'Avg HR', min: 20, max: 250, integer: true },
+	{ key: 'max_hr', label: 'Max HR', min: 20, max: 250, integer: true },
+	{ key: 'avg_cadence_spm', label: 'Cadence (spm)', min: 20, max: 300, integer: true },
+	{ key: 'elevation_gain_m', label: 'Elevation (m)', min: 0, max: 10000, integer: false },
+	{ key: 'aerobic_training_effect', label: 'Training effect', min: 0, max: 5, integer: false },
+	{ key: 'rpe_1_10', label: 'RPE (1-10)', min: 1, max: 10, integer: true },
+] as const;
+
+export type RunMetricField = (typeof RUN_METRIC_FIELDS)[number]['key'];
 
 export interface Settings {
 	goals: string;

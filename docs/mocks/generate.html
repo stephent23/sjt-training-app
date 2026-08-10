@@ -1,0 +1,218 @@
+<!doctype html>
+<!--
+  THROWAWAY VISUAL REFERENCE — not production code.
+  Mock of the Generate screen for docs/design-rethink.md §4.6. Self-contained, no external
+  requests. Goal tags are the real vocabulary from GOAL_TAG_GROUPS in src/types.ts; the
+  three steps are the real GenerateFlow steps. Three states: the wizard, a rejected
+  import, and a pending proposal awaiting accept/reject.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mock · Generate</title>
+<style>
+:root{
+--bg:#f4f5f8;--surface:#fff;--surface-2:#eef0f5;--line:#e4e7ef;
+--ink:#12141a;--ink-2:#565d6e;--ink-3:#676e7e;
+--brand:#3d34d4;--brand-ink:#3d34d4;--on-brand:#fff;--brand-soft:#eceafc;
+--done-fill:#17795e;--done-ink:#146a53;--done-soft:#e3f4ee;
+--warn:#96262b;--warn-soft:#fbeced;
+--r-lg:22px;--r-pill:999px;
+--shadow-1:0 1px 2px rgba(16,18,26,.06),0 10px 24px -16px rgba(16,18,26,.28);
+--card-border:0 0 0 0 transparent;
+--sans:"Plus Jakarta Sans","SF Pro Rounded",system-ui,-apple-system,"Segoe UI Variable Display","Segoe UI",Roboto,sans-serif;
+--mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+--nav-h:62px;color-scheme:light dark;
+}
+@media(prefers-color-scheme:dark){:root{
+--bg:#0f1116;--surface:#171a21;--surface-2:#1f232c;--line:#272c37;
+--ink:#f3f5f9;--ink-2:#99a1b3;--ink-3:#8b93a5;
+--brand:#5b51e8;--brand-ink:#a79eff;--brand-soft:#1e1f3d;
+--done-fill:#1f9b78;--done-ink:#5be0ae;--done-soft:#14312a;
+--warn:#d4666b;--warn-soft:#33191b;
+--shadow-1:none;--card-border:inset 0 0 0 1px rgba(255,255,255,.06);}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 16px/1.5 var(--sans);-webkit-font-smoothing:antialiased}
+.phone{max-width:430px;margin:0 auto;padding:0 16px calc(var(--nav-h) + 28px);min-height:100dvh}
+.eyebrow{font:700 12px/1.2 var(--sans);letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);display:block}
+.h1{font:800 28px/1.15 var(--sans);letter-spacing:-.02em;margin:14px 0 4px}
+.h2{font:700 18px/1.25 var(--sans);letter-spacing:-.01em;margin:0}
+.muted{color:var(--ink-2)}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:12.5px}
+.card{background:var(--surface);border-radius:var(--r-lg);padding:16px 18px;box-shadow:var(--shadow-1),var(--card-border);margin:0 0 12px}
+.card--warn{background:var(--warn-soft);box-shadow:none}
+.hdr{display:flex;align-items:center;gap:13px;min-height:46px}
+.step{width:32px;height:32px;border-radius:50%;flex:0 0 auto;display:grid;place-items:center;font:800 14px var(--sans);background:var(--surface-2);color:var(--ink-3)}
+.step--on{background:var(--brand);color:var(--on-brand)}
+.step--done{background:var(--done-fill);color:#fff}
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:52px;border:0;border-radius:var(--r-pill);font:700 16px var(--sans);cursor:pointer;margin-top:10px}
+.btn--primary{background:var(--brand);color:var(--on-brand)}
+.btn--soft{background:var(--surface-2);color:var(--ink)}
+.btn--quiet{background:none;color:var(--ink-2);min-height:46px;font-weight:600}
+.btn--sm{width:auto;min-height:44px;padding:0 15px;font-size:14px;background:var(--surface-2);color:var(--ink);border:0;border-radius:var(--r-pill);font-weight:700;cursor:pointer;margin-top:10px}
+.btn:focus-visible,.btn--sm:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
+.pill{display:inline-flex;align-items:center;border-radius:var(--r-pill);padding:4px 10px;font:700 11.5px var(--sans)}
+.pill--brand{background:var(--brand-soft);color:var(--brand-ink)}
+.pill--done{background:var(--done-soft);color:var(--done-ink)}
+.pill--out{background:none;box-shadow:inset 0 0 0 1.5px var(--line);color:var(--ink-2)}
+.chips{display:flex;flex-wrap:wrap;gap:7px;margin:8px 0 14px}
+.chip{min-height:48px;padding:0 14px;border:0;border-radius:14px;background:var(--surface-2);color:var(--ink);font:700 14px var(--sans);cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--brand);color:var(--on-brand)}
+.chip--num{min-width:48px;padding:0;flex:1 1 44px;font-variant-numeric:tabular-nums;font-size:16px}
+.p{margin:8px 0 0;font-size:14.5px;color:var(--ink-2)}
+.stepper{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--surface-2);border-radius:var(--r-pill);padding:6px;margin-top:10px}
+.stepper button{width:48px;height:48px;border-radius:50%;border:0;background:var(--surface);color:var(--ink);font:700 22px/1 var(--sans);cursor:pointer;box-shadow:var(--card-border)}
+.stepper b{font:800 22px var(--sans);font-variant-numeric:tabular-nums}
+.errlist{list-style:none;margin:10px 0 0;padding:0 0 0 12px;border-left:3px solid var(--warn);font-family:var(--mono);font-size:12.5px;line-height:1.6;color:var(--ink)}
+.errlist li+li{margin-top:8px}
+.disc{border-top:1px solid var(--line);margin-top:12px;padding-top:2px}
+.disc summary{display:flex;align-items:center;justify-content:space-between;min-height:46px;font:700 15px var(--sans);cursor:pointer;list-style:none}
+.disc summary::-webkit-details-marker{display:none}
+.wk{display:flex;align-items:center;gap:11px;padding:10px 0;text-decoration:none;color:inherit;border-top:1px solid var(--line)}
+.wk .day{width:34px;text-align:center;flex:0 0 auto}
+.wk .day b{display:block;font:800 16px var(--sans);font-variant-numeric:tabular-nums}
+.wk .day s{display:block;text-decoration:none;font:700 10px var(--sans);letter-spacing:.08em;color:var(--ink-3)}
+.wk .t{font:700 15px var(--sans);display:block}
+.wk .m{font:500 13px var(--sans);color:var(--ink-2);display:block}
+.tabbar{position:fixed;left:50%;transform:translateX(-50%);bottom:0;width:100%;max-width:430px;display:flex;background:var(--surface);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom);z-index:20}
+.tabbar a{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-height:var(--nav-h);color:var(--ink-3);font:600 11px var(--sans);text-decoration:none}
+.tabbar a[aria-current]{color:var(--brand-ink)}
+.ic{width:19px;height:19px;display:block}
+.demo{display:flex;gap:6px;border:1px dashed var(--line);border-radius:14px;padding:6px;margin:12px 0 4px}
+.demo button{flex:1;min-height:38px;border:0;border-radius:9px;background:var(--surface-2);color:var(--ink-2);font:700 12px var(--sans);cursor:pointer}
+.demo button.on{background:var(--brand);color:var(--on-brand)}
+[hidden]{display:none!important}
+@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div class="phone">
+
+  <div class="demo">
+    <button class="on" data-state="flow">Flow</button>
+    <button data-state="rejected">Rejected</button>
+    <button data-state="pending">Pending plan</button>
+  </div>
+
+  <h1 class="h1">Generate</h1>
+  <p class="muted" style="margin:0 0 16px">Export your data, hand it to any AI assistant, bring the plan back.</p>
+
+  <!-- Goals sit above the wizard, always visible: they have to be right before
+       the export is taken. Same tap controls as today, as pill chips. -->
+  <div class="card">
+    <div class="h2" style="margin-bottom:12px">What are you training for?</div>
+
+    <span class="eyebrow">What I want</span>
+    <div class="chips">
+      <button class="chip" aria-pressed="true">Build muscle</button>
+      <button class="chip" aria-pressed="true">Run endurance</button>
+      <button class="chip">Build strength</button>
+      <button class="chip">Lose fat</button>
+      <button class="chip">Run speed</button>
+      <button class="chip">Stay injury free</button>
+      <button class="chip">Maintain</button>
+    </div>
+
+    <span class="eyebrow">What to work around</span>
+    <div class="chips">
+      <button class="chip" aria-pressed="true">Protect shoulder</button>
+      <button class="chip">Protect back</button>
+      <button class="chip">Limited time</button>
+      <button class="chip">Race training</button>
+    </div>
+
+    <span class="eyebrow">Sessions per week</span>
+    <div class="chips">
+      <button class="chip chip--num">2</button><button class="chip chip--num">3</button>
+      <button class="chip chip--num">4</button><button class="chip chip--num" aria-pressed="true">5</button>
+      <button class="chip chip--num">6</button><button class="chip chip--num">7</button>
+    </div>
+    <p class="p" style="margin-top:0">Every generated week has to match this — a deload week may drop one.</p>
+  </div>
+
+  <!-- ── State: the wizard. Only the active step carries a brand button. ──── -->
+  <div data-panel="flow">
+    <div class="card">
+      <div class="hdr"><span class="step step--done"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5 9.5 18 20 6"/></svg></span>
+        <div style="flex:1"><div class="h2">Your data</div><div class="muted" style="font-size:13.5px">4 weeks · ≈38 KB</div></div>
+        <span class="pill pill--done">Copied</span></div>
+      <p class="p">186 sets and 11 runs logged in the last two weeks.</p>
+      <div class="stepper"><button aria-label="Fewer weeks">−</button><b>4 weeks</b><button aria-label="More weeks">+</button></div>
+      <button class="btn btn--soft">Copy prompt + data again</button>
+    </div>
+
+    <div class="card">
+      <div class="hdr"><span class="step step--on">2</span>
+        <div style="flex:1"><div class="h2">The prompt</div></div></div>
+      <p class="p">Paste it into ChatGPT, Claude or Gemini with the file attached. Add anything else it should know — an injury, a busy week coming up.</p>
+      <button class="btn btn--primary">Copy the prompt</button>
+      <details class="disc"><summary>Read the prompt <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="m9 5 7 7-7 7"/></svg></summary></details>
+    </div>
+
+    <div class="card">
+      <div class="hdr"><span class="step">3</span>
+        <div style="flex:1"><div class="h2">The answer</div></div></div>
+      <p class="p">Upload the JSON your assistant produced, or paste its reply. The explanation can stay in — we'll find the plan.</p>
+      <button class="btn btn--soft">Choose a file</button>
+      <details class="disc"><summary>Or paste it instead <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="m9 5 7 7-7 7"/></svg></summary></details>
+    </div>
+  </div>
+
+  <!-- ── State: rejected import. The common failure, given a real home. ───── -->
+  <div data-panel="rejected" hidden>
+    <div class="card">
+      <div class="hdr"><span class="step step--on">3</span><div style="flex:1"><div class="h2">The answer</div></div></div>
+      <button class="btn btn--soft">Choose a file</button>
+    </div>
+    <div class="card card--warn">
+      <div class="h2" style="color:var(--warn)">3 problems — the plan was rejected</div>
+      <ul class="errlist">
+        <li>week 1, session 2: duplicate exercise_id 14 within a session</li>
+        <li>week 1: expected 5 sessions for days_per_week 5, got 4</li>
+        <li>week 2, session 3: date 2026-08-30 collides with an existing session</li>
+      </ul>
+      <button class="btn--sm">Copy these problems</button>
+      <p class="p">Paste them back into the same chat and ask for a corrected plan.</p>
+    </div>
+  </div>
+
+  <!-- ── State: a proposal is pending. Accept is brand; reject is quiet — the
+       decision is deliberately not symmetric. ─────────────────────────────── -->
+  <div data-panel="pending" hidden>
+    <div class="card">
+      <div class="hdr"><div style="flex:1"><div class="h2">Week 5 · Build</div><div class="muted" style="font-size:13.5px">5 sessions · 2 lifts, 3 runs</div></div></div>
+      <a class="wk" href="#"><span class="day"><b>31</b><s>MON</s></span><span style="flex:1"><span class="t">Lift A</span><span class="m">Goblet squat 26kg · DB press 22kg · +4</span></span></a>
+      <a class="wk" href="#"><span class="day"><b>01</b><s>TUE</s></span><span style="flex:1"><span class="t">Easy run</span><span class="m">32 min · 5.5 km</span></span></a>
+      <a class="wk" href="#"><span class="day"><b>02</b><s>WED</s></span><span style="flex:1"><span class="t">Lift B</span><span class="m">Cable pull-through 42.5kg · Pull-ups · +4</span></span></a>
+      <a class="wk" href="#"><span class="day"><b>03</b><s>THU</s></span><span style="flex:1"><span class="t">Intervals</span><span class="m">45 min · 6 × 3 min hard</span></span></a>
+      <a class="wk" href="#"><span class="day"><b>05</b><s>SAT</s></span><span style="flex:1"><span class="t">Long run</span><span class="m">66 min · 10 km</span></span></a>
+    </div>
+
+    <div class="card">
+      <div class="hdr"><div style="flex:1"><div class="h2">Week 6 · Deload</div><div class="muted" style="font-size:13.5px">4 sessions · 2 lifts, 2 runs</div></div>
+        <span class="pill pill--out">Speculative</span></div>
+      <p class="p">Needs real judgement — only week 5 is derived from your logged data.</p>
+    </div>
+
+    <button class="btn btn--primary">Accept plan</button>
+    <button class="btn btn--quiet">Reject</button>
+  </div>
+
+</div>
+
+<nav class="tabbar">
+  <a href="today.html"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M4 11 12 4l8 7v8a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1z"/></svg>Today</a>
+  <a href="plan.html"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><rect x="3.5" y="5" width="17" height="15" rx="3"/><path d="M8 3v4M16 3v4M3.5 10h17"/></svg>Plan</a>
+  <a href="history.html"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5.5l3.5 2"/></svg>History</a>
+  <a href="generate.html" aria-current="page"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M12 4v16M4 12h16"/></svg>Generate</a>
+</nav>
+
+<script>
+document.querySelectorAll('.demo button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.demo button').forEach(x => x.classList.toggle('on', x === b));
+  document.querySelectorAll('[data-panel]').forEach(p => p.hidden = p.dataset.panel !== b.dataset.state);
+});
+</script>
+</body>
+</html>

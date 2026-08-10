@@ -15,6 +15,7 @@ function mount(overrides: Partial<Props> = {}) {
 		repLow: 8,
 		repHigh: 10,
 		incrementKg: 2.5,
+		targetWeightKg: null,
 		isBodyweight: false,
 		defaultWeight: 20,
 		defaultReps: null,
@@ -142,5 +143,29 @@ describe('SetRow — collapsed logged sets', () => {
 		const { container } = mount({ label: 'DB bicep curl' });
 
 		expect(container.querySelector('.set-row-index')?.textContent).toBe('DB bicep curl');
+	});
+});
+
+// The prescribed weight was rendered nowhere at all: the only number on screen
+// was last week's, so the target the generator worked out was invisible at the
+// exact moment you act on it.
+describe('SetRow — the prescribed target', () => {
+	function weightLabel(root: HTMLElement): string {
+		return [...root.querySelectorAll('.set-field')].find((f) => (f.textContent ?? '').includes('Weight'))?.querySelector('.eyebrow')?.textContent ?? '';
+	}
+
+	it('states the target weight beside the weight control', () => {
+		const { container } = mount({ targetWeightKg: 22.5 });
+		expect(weightLabel(container)).toBe('Weight · target 22.5kg');
+	});
+
+	it('says just "Weight" on a calibration week, where there is no target yet', () => {
+		const { container } = mount({ targetWeightKg: null });
+		expect(weightLabel(container)).toBe('Weight');
+	});
+
+	it('does not claim a target for bodyweight work', () => {
+		const { container } = mount({ targetWeightKg: 0, isBodyweight: true });
+		expect(weightLabel(container)).toBe('Weight');
 	});
 });
