@@ -1,0 +1,590 @@
+/* ===========================================================================
+   Refined design system — the shared sheet behind every mock in this folder.
+
+   THROWAWAY VISUAL REFERENCE, but this file is the one worth reading: it is
+   the thing that would be ported into public/styles.css if the direction is
+   taken. The five mock pages carry markup only.
+
+   The brief that produced it, after a first pass read as childish:
+     · claret is the only chroma, unchanged from the existing system
+     · nothing is rounded — 3px, never a pill
+     · three weights only (400/500/600); size and colour do the hierarchy
+     · hairlines, not shadows
+     · every figure is mono and tabular, so the app reads as an instrument
+     · it has to hold up on a laptop, not only on a 430px phone
+   =========================================================================== */
+
+:root {
+	/* Warm stone neutrals, biased slightly toward the claret so the accent
+	   belongs to the page rather than sitting on top of it. A pure grey here
+	   reads as unconsidered. */
+	--bg: #f5f3f1;
+	--surface: #fffefd;
+	--surface-2: #eeeae7;
+	--line: #e0dad5;
+	--line-strong: #cdc4bd;
+	--ink: #1b1614;
+	--ink-2: #5d5450;
+	/* Darker than it looks like it wants to be, deliberately: --ink-3 carries
+	   the eyebrows and the mono figures at 11–12.5px, and the lighter tone this
+	   started at measured 3.7:1 — under AA for text that small. 5.2:1 on --bg,
+	   4.8:1 on --surface-2. */
+	--ink-3: #6f645e;
+
+	--accent: #96262b; /* the existing claret, unchanged */
+	--accent-ink: #96262b;
+	--accent-soft: #f7ecec;
+	--on-accent: #fffefd;
+
+	--done: #4a5a4d; /* desaturated moss — state, not a second brand */
+	--done-soft: #eaeeea;
+
+	--r: 3px;
+	--sans: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+	--mono: 'IBM Plex Mono', ui-monospace, Consolas, monospace;
+	--nav-h: 56px;
+	color-scheme: light dark;
+}
+
+/* Only the tokens are redefined per theme — never a component. Guarded so an
+   explicit light choice still beats a dark OS. */
+@media (prefers-color-scheme: dark) {
+	:root:not([data-theme='light']) {
+		--bg: #14120f;
+		--surface: #1c1917;
+		--surface-2: #262220;
+		--line: #332e2b;
+		--line-strong: #453e3a;
+		--ink: #f3efec;
+		--ink-2: #a89f99;
+		--ink-3: #948a83;
+		--accent: #d4666b;
+		--accent-ink: #e08a8e;
+		--accent-soft: #2b1a1b;
+		--on-accent: #14120f;
+		--done: #8fa894;
+		--done-soft: #20261f;
+	}
+}
+:root[data-theme='dark'] {
+	--bg: #14120f;
+	--surface: #1c1917;
+	--surface-2: #262220;
+	--line: #332e2b;
+	--line-strong: #453e3a;
+	--ink: #f3efec;
+	--ink-2: #a89f99;
+	--ink-3: #948a83;
+	--accent: #d4666b;
+	--accent-ink: #e08a8e;
+	--accent-soft: #2b1a1b;
+	--on-accent: #14120f;
+	--done: #8fa894;
+	--done-soft: #20261f;
+}
+
+* {
+	box-sizing: border-box;
+}
+body {
+	margin: 0;
+	background: var(--bg);
+	color: var(--ink);
+	font: 400 15.5px/1.6 var(--sans);
+	-webkit-font-smoothing: antialiased;
+}
+h1,
+h2,
+h3 {
+	margin: 0;
+	text-wrap: balance;
+}
+p {
+	margin: 0;
+}
+a {
+	color: inherit;
+}
+[hidden] {
+	display: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+	* {
+		transition: none !important;
+		animation: none !important;
+	}
+}
+
+/* ---- Shell ----------------------------------------------------------------
+   Phone: one column, bottom tab bar. Laptop (>=900px): the tab bar becomes a
+   left rail and content gets a second column, so secondary material sits
+   beside the main flow instead of a screen below it. The measure stays capped
+   either way — a wide window must not produce 1400px lines. */
+.shell {
+	display: grid;
+	grid-template-columns: 1fr;
+	min-height: 100dvh;
+}
+.nav {
+	position: fixed;
+	bottom: 0;
+	left: 0;
+	right: 0;
+	display: flex;
+	background: var(--surface);
+	border-top: 1px solid var(--line);
+	z-index: 20;
+	padding-bottom: env(safe-area-inset-bottom);
+}
+.nav a {
+	flex: 1;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	min-height: var(--nav-h);
+	text-decoration: none;
+	color: var(--ink-3);
+	font: 500 12px var(--sans);
+	letter-spacing: 0.02em;
+}
+.nav a[aria-current] {
+	color: var(--accent-ink);
+	box-shadow: inset 0 -2px 0 var(--accent);
+}
+.brand {
+	display: none;
+}
+.content {
+	display: block;
+}
+.main {
+	padding: 24px 20px calc(var(--nav-h) + 40px);
+	max-width: 640px;
+	margin: 0 auto;
+	width: 100%;
+}
+.aside {
+	display: none;
+}
+
+@media (min-width: 900px) {
+	.shell {
+		grid-template-columns: 200px minmax(0, 1fr);
+	}
+	.nav {
+		position: sticky;
+		top: 0;
+		left: auto;
+		right: auto;
+		height: 100dvh;
+		flex-direction: column;
+		align-items: stretch;
+		justify-content: flex-start;
+		gap: 2px;
+		border-top: 0;
+		border-right: 1px solid var(--line);
+		padding: 28px 12px;
+	}
+	.nav a {
+		justify-content: flex-start;
+		padding: 0 12px;
+		min-height: 42px;
+		border-radius: var(--r);
+		font-size: 14px;
+	}
+	.nav a[aria-current] {
+		background: var(--accent-soft);
+		box-shadow: none;
+	}
+	.brand {
+		display: block;
+		font: 600 13px var(--sans);
+		letter-spacing: 0.14em;
+		text-transform: uppercase;
+		color: var(--ink-3);
+		padding: 0 12px 22px;
+	}
+	.content {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) 340px;
+		gap: 40px;
+		align-items: start;
+		padding: 40px 40px 64px;
+		max-width: 1180px;
+		margin: 0 auto;
+	}
+	.content--single {
+		grid-template-columns: minmax(0, 1fr);
+		max-width: 760px;
+	}
+	.main {
+		padding: 0;
+		max-width: none;
+	}
+	.aside {
+		display: block;
+		position: sticky;
+		top: 40px;
+	}
+}
+
+/* ---- Type -----------------------------------------------------------------
+   Three weights, and that is the whole set. Every figure is mono + tabular. */
+.eyebrow {
+	font: 500 11px/1.2 var(--mono);
+	letter-spacing: 0.13em;
+	text-transform: uppercase;
+	color: var(--ink-3);
+	display: block;
+}
+.title {
+	font: 600 26px/1.2 var(--sans);
+	letter-spacing: -0.014em;
+	margin: 6px 0;
+}
+.h2 {
+	font: 600 16.5px/1.3 var(--sans);
+	letter-spacing: -0.006em;
+}
+.lede {
+	color: var(--ink-2);
+	font-size: 15px;
+	margin: 0 0 30px;
+	max-width: 60ch;
+}
+.muted {
+	color: var(--ink-2);
+}
+.num {
+	font-family: var(--mono);
+	font-variant-numeric: tabular-nums;
+}
+.meta {
+	font: 400 12.5px var(--mono);
+	color: var(--ink-3);
+	font-variant-numeric: tabular-nums;
+}
+
+/* ---- Controls -------------------------------------------------------------
+   Square, hairline-bordered. The primary action is the only filled thing on
+   any screen, which is what keeps one accent legible. */
+.row {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin-top: 14px;
+}
+.btn {
+	appearance: none;
+	border: 1px solid var(--line-strong);
+	background: var(--surface);
+	color: var(--ink);
+	border-radius: var(--r);
+	min-height: 44px;
+	padding: 0 16px;
+	font: 500 14.5px var(--sans);
+	cursor: pointer;
+	transition:
+		border-color 0.12s ease,
+		background 0.12s ease;
+}
+.btn:hover {
+	border-color: var(--ink-3);
+}
+.btn--primary {
+	background: var(--accent);
+	border-color: var(--accent);
+	color: var(--on-accent);
+}
+.btn--primary:hover {
+	filter: brightness(1.06);
+}
+.btn--quiet {
+	border-color: transparent;
+	background: none;
+	color: var(--ink-2);
+	padding: 0 4px;
+}
+.btn--quiet:hover {
+	color: var(--ink);
+	border-color: transparent;
+}
+.btn--wide {
+	width: 100%;
+}
+.btn:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+}
+
+.field {
+	display: block;
+	margin-top: 14px;
+}
+.field span {
+	display: block;
+	font: 500 12.5px var(--sans);
+	color: var(--ink-2);
+	margin-bottom: 6px;
+}
+.field input,
+.field textarea,
+.field select {
+	width: 100%;
+	background: var(--surface);
+	border: 1px solid var(--line-strong);
+	border-radius: var(--r);
+	color: var(--ink);
+	font: 400 15px var(--sans);
+	padding: 11px 12px;
+	min-height: 44px;
+}
+.field input[type='number'] {
+	font-family: var(--mono);
+	font-variant-numeric: tabular-nums;
+	max-width: 110px;
+}
+.field :focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 1px;
+}
+
+/* Chips carry state by fill AND weight, never by colour alone. */
+.chip {
+	appearance: none;
+	border: 1px solid var(--line-strong);
+	background: none;
+	color: var(--ink-2);
+	border-radius: var(--r);
+	min-height: 44px;
+	padding: 0 13px;
+	font: 400 14px var(--sans);
+	cursor: pointer;
+}
+.chip[aria-pressed='true'] {
+	background: var(--accent-soft);
+	border-color: var(--accent);
+	color: var(--accent-ink);
+	font-weight: 500;
+}
+.chip--num {
+	min-width: 46px;
+	padding: 0 8px;
+	font-family: var(--mono);
+	font-variant-numeric: tabular-nums;
+	justify-content: center;
+}
+/* In-target reps: a rule under the number, so the cue survives greyscale. */
+.chip--target {
+	box-shadow: inset 0 -2px 0 var(--line-strong);
+}
+.chip:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+}
+
+.stepper {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin-top: 10px;
+}
+.stepper button {
+	appearance: none;
+	width: 52px;
+	height: 52px;
+	border: 1px solid var(--line-strong);
+	border-radius: var(--r);
+	background: var(--surface);
+	color: var(--ink);
+	font: 400 20px/1 var(--mono);
+	cursor: pointer;
+}
+.stepper b {
+	font: 500 22px var(--mono);
+	font-variant-numeric: tabular-nums;
+	min-width: 96px;
+	text-align: center;
+}
+
+/* ---- Surfaces -------------------------------------------------------------
+   A panel is a hairline box. There are no drop shadows anywhere in this
+   system: elevation was doing work that a rule does more quietly. */
+.panel {
+	border: 1px solid var(--line);
+	border-radius: var(--r);
+	background: var(--surface);
+}
+.panel-head {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 14px 16px;
+	border-bottom: 1px solid var(--line);
+}
+.panel-body {
+	padding: 16px;
+}
+
+.disc {
+	border-top: 1px solid var(--line);
+	margin-top: 16px;
+}
+.disc summary {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	min-height: 46px;
+	font: 500 14.5px var(--sans);
+	cursor: pointer;
+	list-style: none;
+	color: var(--ink);
+}
+.disc summary::-webkit-details-marker {
+	display: none;
+}
+.disc summary::after {
+	content: '+';
+	font: 400 17px var(--mono);
+	color: var(--ink-3);
+}
+.disc[open] summary::after {
+	content: '–';
+}
+
+/* ---- Rows -----------------------------------------------------------------
+   The one list primitive: a hairline-separated grid of date / name / figure.
+   Used by Plan, History and the pending proposal. */
+.rowitem {
+	border-top: 1px solid var(--line);
+	padding: 13px 0;
+	display: grid;
+	grid-template-columns: 66px minmax(0, 1fr) auto;
+	gap: 14px;
+	align-items: baseline;
+	text-decoration: none;
+	color: inherit;
+}
+.rowitem:first-of-type {
+	border-top: 0;
+}
+.rowitem .d {
+	font: 400 12.5px var(--mono);
+	color: var(--ink-3);
+	font-variant-numeric: tabular-nums;
+}
+.rowitem .t {
+	font: 500 14.5px var(--sans);
+}
+.rowitem .s {
+	display: block;
+	font: 400 13px var(--sans);
+	color: var(--ink-2);
+	margin-top: 1px;
+}
+.rowitem .k {
+	font: 400 12.5px var(--mono);
+	color: var(--ink-3);
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+.rowitem--done .t {
+	color: var(--ink-2);
+}
+.rowitem--today {
+	box-shadow: inset 2px 0 0 var(--accent);
+	padding-left: 12px;
+}
+
+.sectionhead {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 12px;
+	margin: 26px 0 2px;
+}
+.sectionhead--toggle {
+	width: 100%;
+	appearance: none;
+	background: none;
+	border: 0;
+	border-top: 1px solid var(--line);
+	padding: 18px 0 6px;
+	cursor: pointer;
+	text-align: left;
+	color: inherit;
+}
+
+/* State words. Colour is never the only carrier — each reads as a word. */
+.flag {
+	font: 500 11px var(--mono);
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+}
+.flag--done {
+	color: var(--done);
+}
+.flag--accent {
+	color: var(--accent-ink);
+}
+.flag--muted {
+	color: var(--ink-3);
+}
+
+.errs {
+	list-style: none;
+	margin: 14px 0 0;
+	padding: 0 0 0 14px;
+	border-left: 2px solid var(--accent);
+	font: 400 12.5px/1.7 var(--mono);
+	color: var(--ink);
+}
+.errs li + li {
+	margin-top: 9px;
+}
+
+.prompt {
+	margin: 0;
+	padding: 16px;
+	max-height: 46vh;
+	overflow: auto;
+	overscroll-behavior: contain;
+	white-space: pre-wrap;
+	font: 400 12px/1.65 var(--mono);
+	color: var(--ink-2);
+}
+
+.empty {
+	padding: 44px 0;
+	color: var(--ink-2);
+	max-width: 46ch;
+}
+
+/* ---- Mock-only state switcher --------------------------------------------- */
+.demo {
+	display: flex;
+	border: 1px solid var(--line);
+	border-radius: var(--r);
+	overflow: hidden;
+	margin-bottom: 26px;
+	width: fit-content;
+}
+.demo button {
+	appearance: none;
+	border: 0;
+	border-right: 1px solid var(--line);
+	background: var(--surface);
+	color: var(--ink-2);
+	min-height: 34px;
+	padding: 0 13px;
+	font: 400 12.5px var(--sans);
+	cursor: pointer;
+}
+.demo button:last-child {
+	border-right: 0;
+}
+.demo button.on {
+	background: var(--ink);
+	color: var(--surface);
+}

@@ -1,222 +1,146 @@
 <!doctype html>
 <!--
   THROWAWAY VISUAL REFERENCE — not production code.
-  Mock of the Today screen for docs/design-rethink.md §4.1. Hand-written, self-contained,
-  no external requests. Data is real: exercise names from seeds/exercises.sql, the week
-  shape (Lift A / Easy run / Lift B / Intervals / Long run) from seeds/week1_sessions.sql,
-  dated into week 4 of an ongoing block. Production self-hosts Plus Jakarta Sans; this
-  falls back to a system geometric-ish stack.
+
+  Today, on the refined system (docs/mocks/system.css). Markup only; this file
+  defines no CSS of its own.
+
+  Desktop call: uses the .aside for the rest of this week. That is genuinely
+  secondary — you never need it to start today's session — but on a laptop
+  you're usually looking at Today to orient yourself in the week, so it earns
+  the column. On a phone it is simply absent rather than pushed below the fold.
+
+  States: a lift day, a rest day, and loading.
 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Mock · Today</title>
-<style>
-:root{
---bg:#f4f5f8;--surface:#fff;--surface-2:#eef0f5;--line:#e4e7ef;
---ink:#12141a;--ink-2:#565d6e;--ink-3:#676e7e;
---brand:#3d34d4;--brand-ink:#3d34d4;--on-brand:#fff;--brand-soft:#eceafc;
---done-fill:#17795e;--done-ink:#146a53;--done-soft:#e3f4ee;
---warn:#96262b;--warn-soft:#fbeced;
---r-lg:22px;--r-pill:999px;
---shadow-1:0 1px 2px rgba(16,18,26,.06),0 10px 24px -16px rgba(16,18,26,.28);
---card-border:0 0 0 0 transparent;
---sans:"Plus Jakarta Sans","SF Pro Rounded",system-ui,-apple-system,"Segoe UI Variable Display","Segoe UI",Roboto,sans-serif;
---mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
---nav-h:62px;color-scheme:light dark;
-}
-@media(prefers-color-scheme:dark){:root{
---bg:#0f1116;--surface:#171a21;--surface-2:#1f232c;--line:#272c37;
---ink:#f3f5f9;--ink-2:#99a1b3;--ink-3:#8b93a5;
---brand:#5b51e8;--brand-ink:#a79eff;--brand-soft:#1e1f3d;
---done-fill:#1f9b78;--done-ink:#5be0ae;--done-soft:#14312a;
---warn:#d4666b;--warn-soft:#33191b;
---shadow-1:none;--card-border:inset 0 0 0 1px rgba(255,255,255,.06);}}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);font:400 16px/1.5 var(--sans);-webkit-font-smoothing:antialiased}
-.phone{max-width:430px;margin:0 auto;padding:0 16px calc(var(--nav-h) + 28px);min-height:100dvh}
-.eyebrow{font:700 12px/1.2 var(--sans);letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);display:block}
-.h1{font:800 28px/1.15 var(--sans);letter-spacing:-.02em;margin:2px 0 0}
-.h2{font:700 19px/1.25 var(--sans);letter-spacing:-.01em;margin:0}
-.display{font:800 clamp(34px,10vw,46px)/1 var(--sans);letter-spacing:-.03em;font-variant-numeric:tabular-nums}
-.muted{color:var(--ink-2)}
-.mono{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:13px}
-.card{background:var(--surface);border-radius:var(--r-lg);padding:18px;box-shadow:var(--shadow-1),var(--card-border);margin:0 0 14px}
-.btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:52px;border:0;border-radius:var(--r-pill);font:700 16px var(--sans);cursor:pointer}
-.btn--primary{background:var(--brand);color:var(--on-brand)}
-.btn--soft{background:var(--surface-2);color:var(--ink)}
-.btn:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
-.pill{display:inline-flex;align-items:center;gap:6px;border-radius:var(--r-pill);padding:5px 11px;font:700 12px var(--sans)}
-.pill--brand{background:var(--brand-soft);color:var(--brand-ink)}
-.pill--done{background:var(--done-soft);color:var(--done-ink)}
-.pill--quiet{background:var(--surface-2);color:var(--ink-2)}
-.badge{width:40px;height:40px;border-radius:13px;display:grid;place-items:center;flex:0 0 auto;background:var(--brand-soft);color:var(--brand-ink)}
-.badge--run{background:var(--surface-2);color:var(--ink)}
-.ic{width:20px;height:20px;display:block}
-.hdr{display:flex;align-items:center;gap:12px}
-.row{display:flex;align-items:center;gap:12px;width:100%;padding:11px 0;text-decoration:none;color:inherit}
-.row+.row{border-top:1px solid var(--line)}
-.row-main{flex:1 1 auto;min-width:0}
-.row-title{font:700 15px/1.3 var(--sans);display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.row-meta{display:block;font:500 13px/1.4 var(--sans);color:var(--ink-2)}
-.chev{color:var(--ink-3);flex:0 0 auto}
-.tick{width:24px;height:24px;border-radius:50%;background:var(--done-fill);color:#fff;display:grid;place-items:center;flex:0 0 auto}
-.bar{height:9px;border-radius:var(--r-pill);background:var(--surface-2);overflow:hidden}
-.bar>i{display:block;height:100%;background:var(--brand);border-radius:inherit}
-.week{display:flex;gap:5px;margin:6px 0 16px}
-.week a{flex:1 1 0;display:flex;flex-direction:column;align-items:center;gap:7px;padding:8px 0;border-radius:16px;text-decoration:none;color:var(--ink-3);font:700 11px var(--sans);letter-spacing:.05em;min-height:66px}
-.week i{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;font:800 14px var(--sans);font-style:normal;font-variant-numeric:tabular-nums;background:var(--surface);color:var(--ink);box-shadow:var(--shadow-1),var(--card-border)}
-.week .today i{background:var(--brand);color:var(--on-brand)}
-.week .done i{background:var(--done-soft);color:var(--done-ink)}
-.week .rest i{background:transparent;color:var(--ink-3);box-shadow:inset 0 0 0 1px var(--line)}
-.stat{display:flex;gap:8px;text-align:center}
-.stat>div{flex:1}
-.stat b{display:block;font:800 24px var(--sans);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
-.stat span{font:600 12px var(--sans);color:var(--ink-2)}
-.skel{background:var(--surface-2);border-radius:10px}
-.tabbar{position:fixed;left:50%;transform:translateX(-50%);bottom:0;width:100%;max-width:430px;display:flex;background:var(--surface);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom);z-index:20}
-.tabbar a{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-height:var(--nav-h);color:var(--ink-3);font:600 11px var(--sans);text-decoration:none}
-.tabbar a[aria-current]{color:var(--brand-ink)}
-.demo{display:flex;gap:6px;border:1px dashed var(--line);border-radius:14px;padding:6px;margin:12px 0 4px}
-.demo button{flex:1;min-height:38px;border:0;border-radius:9px;background:var(--surface-2);color:var(--ink-2);font:700 12px var(--sans);cursor:pointer}
-.demo button.on{background:var(--brand);color:var(--on-brand)}
-[hidden]{display:none!important}
-@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
-</style>
+<link rel="stylesheet" href="system.css">
 </head>
 <body>
-<div class="phone">
+<div class="shell">
 
-  <!-- mock-only state switcher, not part of the design -->
-  <div class="demo">
-    <button class="on" data-state="session">Session</button>
-    <button data-state="rest">Rest day</button>
-    <button data-state="loading">Loading</button>
-  </div>
-
-  <div class="hdr" style="padding:14px 0 6px">
-    <div style="flex:1">
-      <span class="eyebrow">Week 4 · 24 August 2026</span>
-      <h1 class="h1">Monday</h1>
-    </div>
-    <span class="pill pill--quiet">2 queued</span>
-  </div>
-
-  <!-- Week strip: done days ringed green, today filled brand, rest days outlined -->
-  <nav class="week">
-    <a class="today" href="#"><i>24</i>MON</a>
-    <a href="#"><i>25</i>TUE</a>
-    <a href="#"><i>26</i>WED</a>
-    <a href="#"><i>27</i>THU</a>
-    <a class="rest" href="#"><i>28</i>FRI</a>
-    <a href="#"><i>29</i>SAT</a>
-    <a class="rest" href="#"><i>30</i>SUN</a>
+  <nav class="nav" aria-label="Sections">
+    <span class="brand">Training</span>
+    <a href="today.html" aria-current="page">Today</a>
+    <a href="plan.html">Plan</a>
+    <a href="generate.html">Generate</a>
+    <a href="history.html">History</a>
   </nav>
 
-  <!-- ── State: today's session, part-logged ─────────────────────────────── -->
-  <div data-panel="session">
-    <div class="card">
-      <div class="hdr">
-        <div class="badge"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M4 9v6M8 7v10M16 7v10M20 9v6M8 12h8"/></svg></div>
-        <div style="flex:1"><span class="eyebrow">Today · Lift</span><div class="h2">Lift A</div></div>
-        <span class="pill pill--brand">In progress</span>
+  <div class="content">
+    <main class="main">
+
+      <div class="demo" role="group" aria-label="Mock state">
+        <button class="on" data-state="lift">Lift day</button>
+        <button data-state="rest">Rest day</button>
+        <button data-state="loading">Loading</button>
       </div>
 
-      <div style="display:flex;align-items:baseline;gap:9px;margin:18px 0 8px">
-        <span class="display">4</span>
-        <span class="muted" style="font-weight:700">of 18 sets</span>
+      <!-- ============ LIFT DAY ============ -->
+      <section data-view="lift">
+        <span class="eyebrow">Monday 7 September · Week 5</span>
+        <h1 class="title">Lift A</h1>
+        <p class="lede">Six exercises, 17 working sets. Last done Thursday.</p>
+
+        <div class="row">
+          <button class="btn btn--primary">Start the session</button>
+        </div>
+
+        <h2 class="h2" style="margin-top:34px">What's in it</h2>
+        <div class="rowitem">
+          <span class="d">01</span>
+          <span class="t">Goblet squat<span class="s">Last: 24kg × 9 @ RIR 2</span></span>
+          <span class="k">3×8-10 @ 26kg</span>
+        </div>
+        <div class="rowitem">
+          <span class="d">02</span>
+          <span class="t">Neutral-grip DB press<span class="s">Last: 22kg × 8 @ RIR 1</span></span>
+          <span class="k">3×6-10 @ 22kg</span>
+        </div>
+        <div class="rowitem">
+          <span class="d">03</span>
+          <span class="t">Machine shoulder press<span class="s">Last: 35kg × 12 @ RIR 2</span></span>
+          <span class="k">3×10-12 @ 40kg</span>
+        </div>
+        <div class="rowitem">
+          <span class="d">04</span>
+          <span class="t">Lateral raise<span class="s">Superset with pushdown</span></span>
+          <span class="k">3×12-15 @ 8kg</span>
+        </div>
+        <div class="rowitem">
+          <span class="d">05</span>
+          <span class="t">Triceps pushdown<span class="s">Superset with lateral raise</span></span>
+          <span class="k">3×12-15 @ 25kg</span>
+        </div>
+        <div class="rowitem">
+          <span class="d">06</span>
+          <span class="t">Dead bug<span class="s">Bodyweight</span></span>
+          <span class="k">3×10-12</span>
+        </div>
+      </section>
+
+      <!-- ============ REST DAY ============ -->
+      <section data-view="rest" hidden>
+        <span class="eyebrow">Friday 11 September · Week 5</span>
+        <h1 class="title">Nothing today</h1>
+        <p class="lede">Rest day. Next up is the long run tomorrow — 9.9 km, steady.</p>
+        <div class="row">
+          <button class="btn">See the week</button>
+        </div>
+      </section>
+
+      <!-- ============ LOADING ============ -->
+      <section data-view="loading" hidden>
+        <span class="eyebrow">Loading</span>
+        <h1 class="title">&nbsp;</h1>
+        <p class="lede">Fetching today's session…</p>
+      </section>
+    </main>
+
+    <aside class="aside">
+      <div class="panel">
+        <div class="panel-head"><h2 class="h2">The rest of the week</h2><span class="eyebrow">Week 5</span></div>
+        <div class="panel-body">
+          <div class="rowitem rowitem--today">
+            <span class="d">Mon 07</span>
+            <span class="t">Lift A</span>
+            <span class="k">Today</span>
+          </div>
+          <div class="rowitem">
+            <span class="d">Tue 08</span>
+            <span class="t">Easy run</span>
+            <span class="k">32 min</span>
+          </div>
+          <div class="rowitem">
+            <span class="d">Wed 09</span>
+            <span class="t">Lift B</span>
+            <span class="k">6 exercises</span>
+          </div>
+          <div class="rowitem">
+            <span class="d">Thu 10</span>
+            <span class="t">Intervals</span>
+            <span class="k">42 min</span>
+          </div>
+          <div class="rowitem">
+            <span class="d">Sat 12</span>
+            <span class="t">Long run</span>
+            <span class="k">9.9 km</span>
+          </div>
+        </div>
       </div>
-      <div class="bar"><i style="width:22%"></i></div>
-
-      <div style="margin:14px 0 18px">
-        <a class="row" href="#">
-          <span class="tick"><svg class="ic" style="width:14px;height:14px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5 9.5 18 20 6"/></svg></span>
-          <span class="row-main"><span class="row-title">Goblet squat</span><span class="row-meta mono">24kg × 10 · 10 · 9</span></span>
-        </a>
-        <a class="row" href="#">
-          <span class="badge" style="width:24px;height:24px;border-radius:8px;font:800 11px var(--sans)">2</span>
-          <span class="row-main"><span class="row-title">Neutral-grip DB press</span><span class="row-meta">1 of 3 logged · 6–10 reps</span></span>
-          <svg class="ic chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="m9 5 7 7-7 7"/></svg>
-        </a>
-        <a class="row" href="#">
-          <span class="badge" style="width:24px;height:24px;border-radius:8px;background:var(--surface-2);color:var(--ink-3);font:800 11px var(--sans)">3</span>
-          <span class="row-main"><span class="row-title">Machine shoulder press</span><span class="row-meta">3 × 10–12</span></span>
-          <svg class="ic chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="m9 5 7 7-7 7"/></svg>
-        </a>
-        <div class="row" style="color:var(--ink-3);font:600 13px var(--sans)">+ 3 more · superset, core</div>
-      </div>
-
-      <button class="btn btn--primary">Continue session</button>
-    </div>
-
-    <div class="card">
-      <span class="eyebrow" style="margin-bottom:10px">Up next</span>
-      <a class="row" href="#" style="padding-top:0">
-        <span class="badge badge--run"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M4 18c4 0 4-6 8-6s4-6 8-6"/></svg></span>
-        <span class="row-main"><span class="row-title">Easy run · Tomorrow</span><span class="row-meta">30 min · 5 km</span></span>
-        <svg class="ic chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="m9 5 7 7-7 7"/></svg>
-      </a>
-    </div>
-
-    <div class="card">
-      <span class="eyebrow" style="margin-bottom:14px">Last 7 days</span>
-      <div class="stat">
-        <div><b>4/5</b><span>sessions</span></div>
-        <div><b>18.7</b><span>km run</span></div>
-        <div><b>54</b><span>sets</span></div>
-      </div>
-    </div>
+    </aside>
   </div>
-
-  <!-- ── State: rest day. Same card size as the hero — deliberate, not broken ─ -->
-  <div data-panel="rest" hidden>
-    <div class="card" style="text-align:center;padding:34px 18px">
-      <span class="eyebrow">Today</span>
-      <div class="display" style="margin:6px 0 8px">Rest day</div>
-      <p class="muted" style="margin:0 0 20px">Nothing planned. Three sessions left this week.</p>
-      <button class="btn btn--soft">See the week</button>
-    </div>
-    <div class="card">
-      <span class="eyebrow" style="margin-bottom:10px">Up next</span>
-      <a class="row" href="#" style="padding-top:0">
-        <span class="badge"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M4 9v6M8 7v10M16 7v10M20 9v6M8 12h8"/></svg></span>
-        <span class="row-main"><span class="row-title">Lift B · Tomorrow</span><span class="row-meta">6 exercises · 18 sets</span></span>
-        <svg class="ic chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="m9 5 7 7-7 7"/></svg>
-      </a>
-    </div>
-  </div>
-
-  <!-- ── State: loading. Skeleton at the exact hero shape; the week strip above
-       renders immediately because it needs no network. ───────────────────── -->
-  <div data-panel="loading" hidden>
-    <div class="card">
-      <div class="hdr">
-        <div class="skel" style="width:40px;height:40px;border-radius:13px"></div>
-        <div style="flex:1"><div class="skel" style="width:64px;height:10px"></div><div class="skel" style="width:110px;height:20px;margin-top:8px"></div></div>
-      </div>
-      <div class="skel" style="width:150px;height:44px;margin:18px 0 10px"></div>
-      <div class="skel" style="height:9px"></div>
-      <div class="skel" style="height:46px;margin-top:16px"></div>
-      <div class="skel" style="height:46px;margin-top:8px"></div>
-      <div class="skel" style="height:52px;border-radius:999px;margin-top:18px"></div>
-    </div>
-  </div>
-
 </div>
 
-<nav class="tabbar">
-  <a href="today.html" aria-current="page"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M4 11 12 4l8 7v8a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1z"/></svg>Today</a>
-  <a href="plan.html"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><rect x="3.5" y="5" width="17" height="15" rx="3"/><path d="M8 3v4M16 3v4M3.5 10h17"/></svg>Plan</a>
-  <a href="history.html"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5.5l3.5 2"/></svg>History</a>
-  <a href="generate.html"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M12 4v16M4 12h16"/></svg>Generate</a>
-</nav>
-
 <script>
-document.querySelectorAll('.demo button').forEach(b => b.onclick = () => {
-  document.querySelectorAll('.demo button').forEach(x => x.classList.toggle('on', x === b));
-  document.querySelectorAll('[data-panel]').forEach(p => p.hidden = p.dataset.panel !== b.dataset.state);
-});
+  const buttons = [...document.querySelectorAll('.demo button')];
+  buttons.forEach((b) => b.addEventListener('click', () => {
+    buttons.forEach((x) => x.classList.toggle('on', x === b));
+    document.querySelectorAll('[data-view]').forEach((v) => { v.hidden = v.dataset.view !== b.dataset.state; });
+  }));
 </script>
 </body>
 </html>

@@ -1,205 +1,149 @@
 <!doctype html>
 <!--
   THROWAWAY VISUAL REFERENCE — not production code.
-  Mock of the History screen for docs/design-rethink.md §4.7. Self-contained, no external
-  requests. Rows are deliberately denser than Plan's — one line each, with the ACTUAL
-  result as a mono badge rather than the target, which is what SessionRow already
-  prefers when a run has been logged. Labels and exercise counts follow
-  seeds/week1_sessions.sql; dates are weeks 2-3 of an ongoing block.
+
+  History, on the refined system (docs/mocks/system.css). Markup only.
+
+  Completed runs show what was actually run, not what was planned — that is a
+  real change in the app, and this is the screen where it shows. Paces are
+  arithmetic: 9.4 km in 58:12 is 6:11 /km; 5.2 km in 31:40 is 6:05 /km;
+  8.1 km in 42:30 is 5:15 /km.
+
+  Desktop call: uses the .aside for weekly volume. It is the one genuinely
+  useful secondary thing here — history is where you look for a trend, and a
+  trend needs more than one week on screen at once.
+
+  States: normal, and empty.
 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Mock · History</title>
-<style>
-:root{
---bg:#f4f5f8;--surface:#fff;--surface-2:#eef0f5;--line:#e4e7ef;
---ink:#12141a;--ink-2:#565d6e;--ink-3:#676e7e;
---brand:#3d34d4;--brand-ink:#3d34d4;--on-brand:#fff;--brand-soft:#eceafc;
---done-fill:#17795e;--done-ink:#146a53;--done-soft:#e3f4ee;
---warn:#96262b;--warn-soft:#fbeced;
---r-lg:22px;--r-pill:999px;
---shadow-1:0 1px 2px rgba(16,18,26,.06),0 10px 24px -16px rgba(16,18,26,.28);
---card-border:0 0 0 0 transparent;
---sans:"Plus Jakarta Sans","SF Pro Rounded",system-ui,-apple-system,"Segoe UI Variable Display","Segoe UI",Roboto,sans-serif;
---mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
---nav-h:62px;color-scheme:light dark;
-}
-@media(prefers-color-scheme:dark){:root{
---bg:#0f1116;--surface:#171a21;--surface-2:#1f232c;--line:#272c37;
---ink:#f3f5f9;--ink-2:#99a1b3;--ink-3:#8b93a5;
---brand:#5b51e8;--brand-ink:#a79eff;--brand-soft:#1e1f3d;
---done-fill:#1f9b78;--done-ink:#5be0ae;--done-soft:#14312a;
---warn:#d4666b;--warn-soft:#33191b;
---shadow-1:none;--card-border:inset 0 0 0 1px rgba(255,255,255,.06);}}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);font:400 16px/1.5 var(--sans);-webkit-font-smoothing:antialiased}
-.phone{max-width:430px;margin:0 auto;padding:0 16px calc(var(--nav-h) + 28px);min-height:100dvh}
-.eyebrow{font:700 12px/1.2 var(--sans);letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);display:block}
-.h1{font:800 28px/1.15 var(--sans);letter-spacing:-.02em;margin:14px 0 14px}
-.h2{font:700 17px/1.25 var(--sans);letter-spacing:-.01em;margin:0}
-.muted{color:var(--ink-2)}
-.mono{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:12.5px}
-.card{background:var(--surface);border-radius:var(--r-lg);padding:14px 18px;box-shadow:var(--shadow-1),var(--card-border);margin:0 0 12px}
-.card--brand{background:var(--brand);color:var(--on-brand);box-shadow:var(--shadow-1)}
-.stat{display:flex;gap:6px;text-align:center;margin-top:12px}
-.stat>div{flex:1}
-.stat b{display:block;font:800 27px var(--sans);font-variant-numeric:tabular-nums;letter-spacing:-.03em}
-.stat span{font:600 12px var(--sans);opacity:.78}
-.wkhdr{display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding:2px 2px 8px}
-.row{display:flex;align-items:center;gap:11px;width:100%;padding:9px 0;text-decoration:none;color:inherit;min-height:52px}
-.row+.row{border-top:1px solid var(--line)}
-.day{width:34px;flex:0 0 auto;text-align:center}
-.day b{display:block;font:800 16px var(--sans);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
-.day s{display:block;text-decoration:none;font:700 10px var(--sans);letter-spacing:.08em;color:var(--ink-3)}
-.badge{width:30px;height:30px;border-radius:10px;display:grid;place-items:center;flex:0 0 auto;background:var(--brand-soft);color:var(--brand-ink)}
-.badge--run{background:var(--surface-2);color:var(--ink)}
-.ic{width:17px;height:17px;display:block}
-.main{flex:1 1 auto;min-width:0}
-.title{font:700 15px/1.3 var(--sans);display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.meta{display:block;font:500 12.5px/1.4 var(--sans);color:var(--ink-2);font-family:var(--mono);font-variant-numeric:tabular-nums}
-.tick{width:22px;height:22px;border-radius:50%;background:var(--done-fill);color:#fff;display:grid;place-items:center;flex:0 0 auto}
-.miss{width:22px;height:22px;border-radius:50%;box-shadow:inset 0 0 0 1.5px var(--line);color:var(--ink-3);display:grid;place-items:center;flex:0 0 auto;font:800 12px var(--sans)}
-.row--skip .title{color:var(--ink-2);text-decoration:line-through;text-decoration-color:var(--line)}
-.pill{display:inline-flex;align-items:center;border-radius:var(--r-pill);padding:3px 9px;font:700 11px var(--sans);background:var(--surface-2);color:var(--ink-2)}
-.btn{display:flex;align-items:center;justify-content:center;width:100%;min-height:52px;border:0;border-radius:var(--r-pill);font:700 16px var(--sans);cursor:pointer;background:var(--brand);color:var(--on-brand)}
-.btn:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
-.skel{background:var(--surface-2);border-radius:10px}
-.tabbar{position:fixed;left:50%;transform:translateX(-50%);bottom:0;width:100%;max-width:430px;display:flex;background:var(--surface);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom);z-index:20}
-.tabbar a{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-height:var(--nav-h);color:var(--ink-3);font:600 11px var(--sans);text-decoration:none}
-.tabbar a[aria-current]{color:var(--brand-ink)}
-.demo{display:flex;gap:6px;border:1px dashed var(--line);border-radius:14px;padding:6px;margin:12px 0 4px}
-.demo button{flex:1;min-height:38px;border:0;border-radius:9px;background:var(--surface-2);color:var(--ink-2);font:700 12px var(--sans);cursor:pointer}
-.demo button.on{background:var(--brand);color:var(--on-brand)}
-[hidden]{display:none!important}
-@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
-</style>
+<link rel="stylesheet" href="system.css">
 </head>
 <body>
-<div class="phone">
+<div class="shell">
 
-  <div class="demo">
-    <button class="on" data-state="list">History</button>
-    <button data-state="empty">Empty</button>
-    <button data-state="loading">Loading</button>
-  </div>
+  <nav class="nav" aria-label="Sections">
+    <span class="brand">Training</span>
+    <a href="today.html">Today</a>
+    <a href="plan.html">Plan</a>
+    <a href="generate.html">Generate</a>
+    <a href="history.html" aria-current="page">History</a>
+  </nav>
 
-  <h1 class="h1">History</h1>
+  <div class="content">
+    <main class="main">
 
-  <div data-panel="list">
-    <!-- The one thing History does not have today: a sense of accumulation.
-         Three numbers, all already on the rows. -->
-    <div class="card card--brand">
-      <span class="eyebrow" style="color:inherit;opacity:.8">Last 4 weeks</span>
-      <div class="stat">
-        <div><b>14</b><span>sessions</span></div>
-        <div><b>62.4</b><span>km run</span></div>
-        <div><b>186</b><span>sets</span></div>
+      <div class="demo" role="group" aria-label="Mock state">
+        <button class="on" data-state="history">History</button>
+        <button data-state="empty">Empty</button>
       </div>
-    </div>
 
-    <div class="wkhdr"><span class="h2">Week 3</span><span class="pill">5 of 5 · 17–22 Aug</span></div>
-    <div class="card">
-      <a class="row" href="#">
-        <span class="day"><b>22</b><s>SAT</s></span>
-        <span class="badge badge--run"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 18c4 0 4-6 8-6s4-6 8-6"/></svg></span>
-        <span class="main"><span class="title">Long run</span><span class="meta">9.4 km · 58:12 · 6:11 /km</span></span>
-        <span class="tick"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5 9.5 18 20 6"/></svg></span>
-      </a>
-      <a class="row" href="#">
-        <span class="day"><b>20</b><s>THU</s></span>
-        <span class="badge badge--run"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 18c4 0 4-6 8-6s4-6 8-6"/></svg></span>
-        <span class="main"><span class="title">Intervals</span><span class="meta">8.6 km · 42:40 · 4:58 /km</span></span>
-        <span class="tick"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5 9.5 18 20 6"/></svg></span>
-      </a>
-      <a class="row" href="#">
-        <span class="day"><b>19</b><s>WED</s></span>
-        <span class="badge"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 9v6M8 7v10M16 7v10M20 9v6M8 12h8"/></svg></span>
-        <span class="main"><span class="title">Lift B</span><span class="meta">18 sets · 6 exercises</span></span>
-        <span class="tick"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5 9.5 18 20 6"/></svg></span>
-      </a>
-      <a class="row" href="#">
-        <span class="day"><b>18</b><s>TUE</s></span>
-        <span class="badge badge--run"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 18c4 0 4-6 8-6s4-6 8-6"/></svg></span>
-        <span class="main"><span class="title">Easy run</span><span class="meta">5.2 km · 32:05 · 6:10 /km</span></span>
-        <span class="tick"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5 9.5 18 20 6"/></svg></span>
-      </a>
-      <a class="row" href="#">
-        <span class="day"><b>17</b><s>MON</s></span>
-        <span class="badge"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 9v6M8 7v10M16 7v10M20 9v6M8 12h8"/></svg></span>
-        <span class="main"><span class="title">Lift A</span><span class="meta">18 sets · Goblet squat 24kg</span></span>
-        <span class="tick"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5 9.5 18 20 6"/></svg></span>
-      </a>
-    </div>
+      <span class="eyebrow">Most recent first</span>
+      <h1 class="title">History</h1>
+      <p class="lede">Everything logged, newest first. Tap a session to correct what you recorded.</p>
 
-    <div class="wkhdr"><span class="h2">Week 2</span><span class="pill">4 of 5 · 10–15 Aug</span></div>
-    <div class="card">
-      <a class="row" href="#">
-        <span class="day"><b>15</b><s>SAT</s></span>
-        <span class="badge badge--run"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 18c4 0 4-6 8-6s4-6 8-6"/></svg></span>
-        <span class="main"><span class="title">Long run</span><span class="meta">8.8 km · 55:40 · 6:19 /km</span></span>
-        <span class="tick"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5 9.5 18 20 6"/></svg></span>
-      </a>
-      <a class="row" href="#">
-        <span class="day"><b>13</b><s>THU</s></span>
-        <span class="badge badge--run"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 18c4 0 4-6 8-6s4-6 8-6"/></svg></span>
-        <span class="main"><span class="title">Intervals</span><span class="meta">8.1 km · 41:20 · 5:06 /km</span></span>
-        <span class="tick"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5 9.5 18 20 6"/></svg></span>
-      </a>
-      <!-- Skipped: still tappable — Review is where a mis-skip gets repaired. -->
-      <a class="row row--skip" href="#">
-        <span class="day"><b>12</b><s>WED</s></span>
-        <span class="badge" style="background:var(--surface-2);color:var(--ink-3)"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 9v6M8 7v10M16 7v10M20 9v6M8 12h8"/></svg></span>
-        <span class="main"><span class="title">Lift B</span><span class="meta">Skipped · 0 of 18 sets</span></span>
-        <span class="miss">–</span>
-      </a>
-      <a class="row" href="#">
-        <span class="day"><b>11</b><s>TUE</s></span>
-        <span class="badge badge--run"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 18c4 0 4-6 8-6s4-6 8-6"/></svg></span>
-        <span class="main"><span class="title">Easy run</span><span class="meta">5.0 km · 31:44 · 6:21 /km</span></span>
-        <span class="tick"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5 9.5 18 20 6"/></svg></span>
-      </a>
-      <a class="row" href="#">
-        <span class="day"><b>10</b><s>MON</s></span>
-        <span class="badge"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 9v6M8 7v10M16 7v10M20 9v6M8 12h8"/></svg></span>
-        <span class="main"><span class="title">Lift A</span><span class="meta">17 sets · Goblet squat 22kg</span></span>
-        <span class="tick"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5 9.5 18 20 6"/></svg></span>
-      </a>
-    </div>
+      <section data-view="history">
+
+        <div class="sectionhead"><h2 class="h2">Week 4</h2><span class="meta">5 of 5 done</span></div>
+        <a class="rowitem rowitem--done" href="#">
+          <span class="d">Sat 05</span>
+          <span class="t">Long run<span class="s">9.4 km · 58:12 · 6:11 /km</span></span>
+          <span class="k">RPE 6</span>
+        </a>
+        <a class="rowitem rowitem--done" href="#">
+          <span class="d">Thu 03</span>
+          <span class="t">Intervals<span class="s">8.1 km · 42:30 · 5:15 /km</span></span>
+          <span class="k">RPE 8</span>
+        </a>
+        <a class="rowitem rowitem--done" href="#">
+          <span class="d">Wed 02</span>
+          <span class="t">Lift B<span class="s">17 of 17 sets</span></span>
+          <span class="k flag flag--done">Done</span>
+        </a>
+        <a class="rowitem rowitem--done" href="#">
+          <span class="d">Tue 01</span>
+          <span class="t">Easy run<span class="s">5.2 km · 31:40 · 6:05 /km</span></span>
+          <span class="k">RPE 4</span>
+        </a>
+        <a class="rowitem rowitem--done" href="#">
+          <span class="d">Mon 31</span>
+          <span class="t">Lift A<span class="s">17 of 17 sets</span></span>
+          <span class="k flag flag--done">Done</span>
+        </a>
+
+        <div class="sectionhead"><h2 class="h2">Week 3</h2><span class="meta">4 of 5 done</span></div>
+        <a class="rowitem rowitem--done" href="#">
+          <span class="d">Sat 29</span>
+          <span class="t">Long run<span class="s">8.6 km · 54:05 · 6:17 /km</span></span>
+          <span class="k">RPE 7</span>
+        </a>
+        <a class="rowitem" href="#">
+          <span class="d">Thu 27</span>
+          <span class="t muted">Intervals<span class="s">Not done</span></span>
+          <span class="k flag flag--muted">Skipped</span>
+        </a>
+        <a class="rowitem rowitem--done" href="#">
+          <span class="d">Wed 26</span>
+          <span class="t">Lift B<span class="s">15 of 17 sets</span></span>
+          <span class="k flag flag--done">Done</span>
+        </a>
+        <a class="rowitem rowitem--done" href="#">
+          <span class="d">Tue 25</span>
+          <span class="t">Easy run<span class="s">5.0 km · 30:55 · 6:11 /km</span></span>
+          <span class="k">RPE 4</span>
+        </a>
+        <a class="rowitem rowitem--done" href="#">
+          <span class="d">Mon 24</span>
+          <span class="t">Lift A<span class="s">17 of 17 sets</span></span>
+          <span class="k flag flag--done">Done</span>
+        </a>
+      </section>
+
+      <section data-view="empty" hidden>
+        <p class="empty">Nothing logged yet. Once you finish a session it turns up here, and the generator starts having something to work from.</p>
+      </section>
+    </main>
+
+    <aside class="aside">
+      <div class="panel">
+        <div class="panel-head"><h2 class="h2">Weekly volume</h2><span class="eyebrow">Last 4</span></div>
+        <div class="panel-body">
+          <div class="rowitem" style="border-top:0">
+            <span class="d">Week 4</span>
+            <span class="t">22.7 km<span class="s">34 lift sets</span></span>
+            <span class="k">3 runs</span>
+          </div>
+          <div class="rowitem">
+            <span class="d">Week 3</span>
+            <span class="t">13.6 km<span class="s">32 lift sets</span></span>
+            <span class="k">2 runs</span>
+          </div>
+          <div class="rowitem">
+            <span class="d">Week 2</span>
+            <span class="t">21.1 km<span class="s">34 lift sets</span></span>
+            <span class="k">3 runs</span>
+          </div>
+          <div class="rowitem">
+            <span class="d">Week 1</span>
+            <span class="t">19.8 km<span class="s">30 lift sets</span></span>
+            <span class="k">3 runs</span>
+          </div>
+          <p class="meta" style="margin-top:14px">Week 3 dropped a quality session — the intervals were skipped.</p>
+        </div>
+      </div>
+    </aside>
   </div>
-
-  <div data-panel="empty" hidden>
-    <div class="card" style="text-align:center;padding:34px 20px">
-      <div style="font:800 22px var(--sans);letter-spacing:-.02em">Nothing logged yet</div>
-      <p class="muted" style="margin:8px 0 22px">Finish a session and it shows up here.</p>
-      <button class="btn">Go to today</button>
-    </div>
-  </div>
-
-  <div data-panel="loading" hidden>
-    <div class="card"><div class="skel" style="height:76px;border-radius:14px"></div></div>
-    <div class="wkhdr"><div class="skel" style="width:78px;height:17px"></div></div>
-    <div class="card">
-      <div class="skel" style="height:40px;margin:8px 0"></div><div class="skel" style="height:40px;margin:8px 0"></div>
-      <div class="skel" style="height:40px;margin:8px 0"></div><div class="skel" style="height:40px;margin:8px 0"></div>
-    </div>
-  </div>
-
 </div>
 
-<nav class="tabbar">
-  <a href="today.html"><svg class="ic" style="width:19px;height:19px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M4 11 12 4l8 7v8a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1z"/></svg>Today</a>
-  <a href="plan.html"><svg class="ic" style="width:19px;height:19px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><rect x="3.5" y="5" width="17" height="15" rx="3"/><path d="M8 3v4M16 3v4M3.5 10h17"/></svg>Plan</a>
-  <a href="history.html" aria-current="page"><svg class="ic" style="width:19px;height:19px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5.5l3.5 2"/></svg>History</a>
-  <a href="generate.html"><svg class="ic" style="width:19px;height:19px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M12 4v16M4 12h16"/></svg>Generate</a>
-</nav>
-
 <script>
-document.querySelectorAll('.demo button').forEach(b => b.onclick = () => {
-  document.querySelectorAll('.demo button').forEach(x => x.classList.toggle('on', x === b));
-  document.querySelectorAll('[data-panel]').forEach(p => p.hidden = p.dataset.panel !== b.dataset.state);
-});
+  const buttons = [...document.querySelectorAll('.demo button')];
+  buttons.forEach((b) => b.addEventListener('click', () => {
+    buttons.forEach((x) => x.classList.toggle('on', x === b));
+    document.querySelectorAll('[data-view]').forEach((v) => { v.hidden = v.dataset.view !== b.dataset.state; });
+  }));
 </script>
 </body>
 </html>

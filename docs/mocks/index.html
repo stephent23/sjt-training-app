@@ -1,119 +1,76 @@
 <!doctype html>
 <!--
-  THROWAWAY VISUAL REFERENCES — not production code.
-  Index for the Runna-shaped redesign mocks that accompany docs/design-rethink.md.
-  Self-contained, no external requests, light and dark via prefers-color-scheme.
+  THROWAWAY VISUAL REFERENCE — not production code.
+  Entry point for the mock set. Open this file from disk; the links are
+  relative and only resolve on the filesystem.
 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Mocks · Design rethink</title>
-<style>
-:root{
---bg:#f4f5f8;--surface:#fff;--surface-2:#eef0f5;--line:#e4e7ef;
---ink:#12141a;--ink-2:#565d6e;--ink-3:#676e7e;
---brand:#3d34d4;--brand-ink:#3d34d4;--on-brand:#fff;--brand-soft:#eceafc;
---done-fill:#17795e;--done-ink:#146a53;--done-soft:#e3f4ee;--warn:#96262b;
---r-lg:22px;--r-pill:999px;
---shadow-1:0 1px 2px rgba(16,18,26,.06),0 10px 24px -16px rgba(16,18,26,.28);
---card-border:0 0 0 0 transparent;
---sans:"Plus Jakarta Sans","SF Pro Rounded",system-ui,-apple-system,"Segoe UI Variable Display","Segoe UI",Roboto,sans-serif;
---mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
-color-scheme:light dark;
-}
-@media(prefers-color-scheme:dark){:root{
---bg:#0f1116;--surface:#171a21;--surface-2:#1f232c;--line:#272c37;
---ink:#f3f5f9;--ink-2:#99a1b3;--ink-3:#8b93a5;
---brand:#5b51e8;--brand-ink:#a79eff;--brand-soft:#1e1f3d;
---done-fill:#1f9b78;--done-ink:#5be0ae;--done-soft:#14312a;--warn:#d4666b;
---shadow-1:none;--card-border:inset 0 0 0 1px rgba(255,255,255,.06);}}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);font:400 16px/1.55 var(--sans);-webkit-font-smoothing:antialiased}
-.wrap{max-width:720px;margin:0 auto;padding:32px 20px 64px}
-.eyebrow{font:700 12px/1.2 var(--sans);letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);display:block}
-h1{font:800 34px/1.1 var(--sans);letter-spacing:-.03em;margin:6px 0 10px}
-h2{font:700 18px/1.25 var(--sans);letter-spacing:-.01em;margin:30px 0 12px}
-p{color:var(--ink-2);margin:0 0 14px}
-.card{background:var(--surface);border-radius:var(--r-lg);padding:18px;box-shadow:var(--shadow-1),var(--card-border);margin:0 0 12px}
-a.card{display:flex;align-items:center;gap:16px;text-decoration:none;color:inherit}
-a.card:focus-visible{outline:3px solid var(--brand-ink);outline-offset:3px}
-.n{width:44px;height:44px;border-radius:14px;flex:0 0 auto;display:grid;place-items:center;background:var(--brand-soft);color:var(--brand-ink);font:800 15px var(--sans)}
-.t{font:700 17px var(--sans);display:block}
-.s{font:500 14px var(--sans);color:var(--ink-2);display:block}
-.chev{color:var(--ink-3);margin-left:auto;flex:0 0 auto}
-.sw{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}
-.sw div{flex:1 1 92px;border-radius:14px;padding:10px;font:700 11px var(--sans);min-height:66px;display:flex;align-items:flex-end;box-shadow:var(--card-border)}
-.note{background:var(--surface-2);border-radius:var(--r-lg);padding:16px 18px;font-size:14.5px;color:var(--ink-2)}
-code{font-family:var(--mono);font-size:13px;color:var(--ink)}
-</style>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mock · Design direction</title>
+<link rel="stylesheet" href="system.css">
 </head>
 <body>
-<div class="wrap">
+<div class="shell">
+  <div class="content content--single">
+    <main class="main" style="padding-top:40px">
 
-  <span class="eyebrow">Design rethink · mocks</span>
-  <h1>A Runna-shaped training app</h1>
-  <p>Visual references for <code>docs/design-rethink.md</code>. Throwaway HTML — hand-written,
-  self-contained, no framework, no build step, no external requests. Each page carries a small
-  dashed switcher at the top for its alternate states (empty, loading, error); that switcher is
-  mock chrome and not part of the design. Everything responds to
-  <code>prefers-color-scheme</code>, so switch your OS theme to see the dark palette.</p>
+      <span class="eyebrow">Design direction · second pass</span>
+      <h1 class="title">Training app mocks</h1>
+      <p class="lede">
+        Five screens on one shared system. Claret is the only chroma, nothing is rounded, and every
+        figure is mono and tabular. Resize past 900px to see the laptop layout — the tab bar
+        becomes a left rail and the content gains a second column.
+      </p>
 
-  <h2>Pages</h2>
+      <a class="rowitem" href="today.html">
+        <span class="d">01</span>
+        <span class="t">Today<span class="s">What to do right now. Lift day, rest day, loading.</span></span>
+        <span class="k">→</span>
+      </a>
+      <a class="rowitem" href="plan.html">
+        <span class="d">02</span>
+        <span class="t">Plan<span class="s">Weeks, current one open. Includes a deload week.</span></span>
+        <span class="k">→</span>
+      </a>
+      <a class="rowitem" href="lift-session.html">
+        <span class="d">03</span>
+        <span class="t">Lift session<span class="s">Mid-workout. Two taps to log a set, on a 390px screen.</span></span>
+        <span class="k">→</span>
+      </a>
+      <a class="rowitem" href="generate.html">
+        <span class="d">04</span>
+        <span class="t">Generate<span class="s">The three steps, a rejected import, a pending plan.</span></span>
+        <span class="k">→</span>
+      </a>
+      <a class="rowitem" href="history.html">
+        <span class="d">05</span>
+        <span class="t">History<span class="s">What was actually run, not what was planned.</span></span>
+        <span class="k">→</span>
+      </a>
 
-  <a class="card" href="today.html">
-    <span class="n">1</span>
-    <span><span class="t">Today</span><span class="s">Week strip, hero session card, rest day, loading</span></span>
-    <svg class="chev" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="m9 5 7 7-7 7"/></svg>
-  </a>
+      <div class="panel" style="margin-top:34px">
+        <div class="panel-head"><h2 class="h2">What changed from the first pass</h2><span class="eyebrow">Notes</span></div>
+        <div class="panel-body">
+          <p class="muted" style="font-size:14.5px">
+            The first pass read as childish, and the causes were specific: a rounded typeface in the
+            stack, 22px card radii with 999px pill buttons, weight 800 on almost everything, three
+            saturated hues at once, and filled numeral circles. All reversed. Hierarchy is now
+            carried by size and colour rather than by making everything bold, and elevation is a
+            hairline rather than a shadow.
+          </p>
+          <p class="muted" style="font-size:14.5px;margin-top:12px">
+            Two contrast failures were found and fixed while building this: the muted ink carrying
+            the eyebrows and figures measured 3.7:1 in light and 4.2:1 on the raised dark surface,
+            both under AA at 11–12px. See §3 of <span class="num">docs/design-rethink.md</span>.
+          </p>
+        </div>
+      </div>
 
-  <a class="card" href="plan.html">
-    <span class="n">2</span>
-    <span><span class="t">Plan</span><span class="s">Collapsible weeks with progress rings, reschedule chips, empty</span></span>
-    <svg class="chev" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="m9 5 7 7-7 7"/></svg>
-  </a>
-
-  <a class="card" href="lift-session.html">
-    <span class="n">3</span>
-    <span><span class="t">Lift session</span><span class="s">The working set, superset card, rest timer — two taps to log</span></span>
-    <svg class="chev" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="m9 5 7 7-7 7"/></svg>
-  </a>
-
-  <a class="card" href="generate.html">
-    <span class="n">4</span>
-    <span><span class="t">Generate</span><span class="s">Goal chips, three numbered steps, rejected import, pending plan</span></span>
-    <svg class="chev" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="m9 5 7 7-7 7"/></svg>
-  </a>
-
-  <a class="card" href="history.html">
-    <span class="n">5</span>
-    <span><span class="t">History</span><span class="s">Accumulation strip, dense rows with real results, skipped state</span></span>
-    <svg class="chev" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="m9 5 7 7-7 7"/></svg>
-  </a>
-
-  <h2>Palette</h2>
-  <div class="sw">
-    <div style="background:var(--surface);color:var(--ink)">surface</div>
-    <div style="background:var(--surface-2);color:var(--ink)">surface-2</div>
-    <div style="background:var(--brand);color:var(--on-brand)">brand</div>
-    <div style="background:var(--brand-soft);color:var(--brand-ink)">brand-soft</div>
-    <div style="background:var(--done-fill);color:#fff">done</div>
-    <div style="background:var(--warn);color:#fff">warn</div>
+      <p class="meta" style="margin-top:26px">Run session and Review are described in the plan but not mocked — Run session is a trimmed lift header plus the structure list, and Review deliberately changes least.</p>
+    </main>
   </div>
-
-  <h2>What is not shown</h2>
-  <p>Run session and Review are described in the plan (§4.4, §4.5) but not mocked — Run session
-  is a simpler variant of the lift header plus the structure list, and Review keeps the existing
-  mono tables almost unchanged, which is the point being made about it. Nothing here uses a
-  webfont: production self-hosts Plus Jakarta Sans, so the real thing will look rounder and
-  friendlier than these system-stack renderings.</p>
-
-  <div class="note">Data is real. Exercise names come from <code>seeds/exercises.sql</code>, the
-  weekly shape (Lift A · Easy run · Lift B · Intervals · Long run) from
-  <code>seeds/week1_sessions.sql</code>, and the goal tags from <code>GOAL_TAG_GROUPS</code> in
-  <code>src/types.ts</code>. Dates are placed in week 4 of an ongoing block so completed,
-  in-progress, skipped and planned states all have somewhere to appear.</div>
-
 </div>
 </body>
 </html>
