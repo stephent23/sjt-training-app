@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { GOAL_TAGS, type Settings } from '../types';
+import { GOAL_TAGS, parseGoalTags, type Settings } from '../types';
 
 export const settings = new Hono<{ Bindings: Env }>();
 
@@ -11,20 +11,8 @@ interface SettingsRow {
 
 const DEFAULTS: SettingsRow = { goals: '', days_per_week: 5, goal_tags: '[]' };
 
-/** goal_tags is a JSON array in one TEXT column (see migration 0006). A row
- * written before that column existed, or hand-edited, shouldn't 500 the whole
- * settings screen — an unreadable value reads as no tags. */
-function parseTags(raw: string): string[] {
-	try {
-		const parsed = JSON.parse(raw);
-		return Array.isArray(parsed) ? parsed.filter((t): t is string => typeof t === 'string') : [];
-	} catch {
-		return [];
-	}
-}
-
 function toSettings(row: SettingsRow): Settings {
-	return { goals: row.goals, days_per_week: row.days_per_week, goal_tags: parseTags(row.goal_tags) };
+	return { goals: row.goals, days_per_week: row.days_per_week, goal_tags: parseGoalTags(row.goal_tags) };
 }
 
 async function readRow(db: D1Database): Promise<SettingsRow> {

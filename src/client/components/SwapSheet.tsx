@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
-import type { Modality, SwapCandidate, SwapReason, SwapScope } from '../../types';
+import { MODALITIES, type Modality, type SwapCandidate, type SwapReason, type SwapScope } from '../../types';
 import { applySwap, createExercise, fetchSwapCandidates } from '../api';
 
 interface SwapSheetProps {
@@ -29,14 +29,17 @@ const REASONS: { value: SwapReason; label: string }[] = [
 	{ value: 'unavailable', label: "Doesn't exist here" },
 ];
 
-const MODALITIES: { value: Modality; label: string }[] = [
-	{ value: 'dumbbell', label: 'Dumbbell' },
-	{ value: 'machine', label: 'Machine' },
-	{ value: 'cable', label: 'Cable' },
-	{ value: 'bodyweight', label: 'Bodyweight' },
-];
+const modalityLabel = (m: Modality) => m.charAt(0).toUpperCase() + m.slice(1);
 
-export function SwapSheet({ sessionId, fromExerciseId, fromPattern, plannedSetId, excludeExerciseIds, onClose, onSwapped }: SwapSheetProps) {
+export function SwapSheet({
+	sessionId,
+	fromExerciseId,
+	fromPattern,
+	plannedSetId,
+	excludeExerciseIds,
+	onClose,
+	onSwapped,
+}: SwapSheetProps) {
 	const [reason, setReason] = useState<SwapReason | null>(null);
 	const [painType, setPainType] = useState<'shoulder' | 'back' | null>(null);
 	const [candidates, setCandidates] = useState<SwapCandidate[] | null>(null);
@@ -101,7 +104,14 @@ export function SwapSheet({ sessionId, fromExerciseId, fromPattern, plannedSetId
 		setConfirming(true);
 		setError(null);
 		try {
-			await applySwap({ session_id: sessionId, planned_set_id: plannedSetId, from_exercise_id: fromExerciseId, to_exercise_id: chosen, reason, scope });
+			await applySwap({
+				session_id: sessionId,
+				planned_set_id: plannedSetId,
+				from_exercise_id: fromExerciseId,
+				to_exercise_id: chosen,
+				reason,
+				scope,
+			});
 			onSwapped();
 		} catch (e) {
 			// A 409 (the substitute is already in this session) used to show the
@@ -136,7 +146,15 @@ export function SwapSheet({ sessionId, fromExerciseId, fromPattern, plannedSetId
 
 	return (
 		<div class="sheet-backdrop" onClick={onClose}>
-			<div class="sheet" role="dialog" aria-modal="true" aria-labelledby="swap-sheet-title" tabIndex={-1} ref={sheetRef} onClick={(e) => e.stopPropagation()}>
+			<div
+				class="sheet"
+				role="dialog"
+				aria-modal="true"
+				aria-labelledby="swap-sheet-title"
+				tabIndex={-1}
+				ref={sheetRef}
+				onClick={(e) => e.stopPropagation()}
+			>
 				<h2 id="swap-sheet-title">Swap exercise</h2>
 
 				{error && <p class="eyebrow eyebrow--accent">{error}</p>}
@@ -170,7 +188,12 @@ export function SwapSheet({ sessionId, fromExerciseId, fromPattern, plannedSetId
 							<div class="tap-row tap-row--stacked" role="group" aria-label="Alternatives">
 								{candidates.length === 0 && <p>Nothing else here works this movement.</p>}
 								{candidates.map((c) => (
-									<button type="button" key={c.id} class={`tap-btn ${chosen === c.id ? 'tap-btn--selected' : ''}`} onClick={() => setChosen(c.id)}>
+									<button
+										type="button"
+										key={c.id}
+										class={`tap-btn ${chosen === c.id ? 'tap-btn--selected' : ''}`}
+										onClick={() => setChosen(c.id)}
+									>
 										{c.name}
 										{c.hasHistory ? ' · logged before' : ''}
 									</button>
@@ -196,12 +219,12 @@ export function SwapSheet({ sessionId, fromExerciseId, fromPattern, plannedSetId
 										{MODALITIES.map((m) => (
 											<button
 												type="button"
-												key={m.value}
-												class={`tap-btn ${newExercise.modality === m.value ? 'tap-btn--selected' : ''}`}
-												aria-pressed={newExercise.modality === m.value}
-												onClick={() => setNewExercise({ ...newExercise, modality: m.value })}
+												key={m}
+												class={`tap-btn ${newExercise.modality === m ? 'tap-btn--selected' : ''}`}
+												aria-pressed={newExercise.modality === m}
+												onClick={() => setNewExercise({ ...newExercise, modality: m })}
 											>
-												{m.label}
+												{modalityLabel(m)}
 											</button>
 										))}
 									</div>
@@ -225,10 +248,18 @@ export function SwapSheet({ sessionId, fromExerciseId, fromPattern, plannedSetId
 							))}
 
 						<div class="tap-row" role="group" aria-label="Scope">
-							<button type="button" class={`tap-btn ${scope === 'this_session' ? 'tap-btn--selected' : ''}`} onClick={() => setScope('this_session')}>
+							<button
+								type="button"
+								class={`tap-btn ${scope === 'this_session' ? 'tap-btn--selected' : ''}`}
+								onClick={() => setScope('this_session')}
+							>
 								Just today
 							</button>
-							<button type="button" class={`tap-btn ${scope === 'permanent' ? 'tap-btn--selected' : ''}`} onClick={() => setScope('permanent')}>
+							<button
+								type="button"
+								class={`tap-btn ${scope === 'permanent' ? 'tap-btn--selected' : ''}`}
+								onClick={() => setScope('permanent')}
+							>
 								From now on
 							</button>
 						</div>

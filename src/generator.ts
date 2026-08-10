@@ -9,6 +9,7 @@ import { addDaysIso } from './dates';
 import { sqlIn } from './sql';
 import { progressExercise, type ExercisePrescription, type LoggedSetForProgression } from './progression';
 import { MAX_WEEKLY_RUN_GROWTH, progressRun, type LoggedRunForProgression } from './runProgression';
+import { parseGoalTags } from './types';
 import type {
 	Exercise,
 	LoggedRunEntry,
@@ -212,12 +213,18 @@ export async function buildExportContext(db: D1Database, weekCount: number): Pro
 
 	// Bulk query 3/5: logged_sets across the full 2-week window — feeds both the progression pass (last week's subset) and the raw history payload.
 	const { results: loggedSetRows } = windowSessionIds.length
-		? await db.prepare(`SELECT * FROM logged_sets WHERE session_id IN (${sqlIn(windowSessionIds.length)})`).bind(...windowSessionIds).all<LoggedSetRow>()
+		? await db
+				.prepare(`SELECT * FROM logged_sets WHERE session_id IN (${sqlIn(windowSessionIds.length)})`)
+				.bind(...windowSessionIds)
+				.all<LoggedSetRow>()
 		: { results: [] as LoggedSetRow[] };
 
 	// Bulk query 4/5: planned_runs, last week only.
 	const { results: plannedRunRows } = lastWeekSessionIds.length
-		? await db.prepare(`SELECT * FROM planned_runs WHERE session_id IN (${sqlIn(lastWeekSessionIds.length)})`).bind(...lastWeekSessionIds).all<PlannedRunRow>()
+		? await db
+				.prepare(`SELECT * FROM planned_runs WHERE session_id IN (${sqlIn(lastWeekSessionIds.length)})`)
+				.bind(...lastWeekSessionIds)
+				.all<PlannedRunRow>()
 		: { results: [] as PlannedRunRow[] };
 
 	// Bulk query 5/6: logged_runs across the full 2-week window.
@@ -391,18 +398,6 @@ export async function buildExportContext(db: D1Database, weekCount: number): Pro
 	};
 }
 
-/** Same lenient read as the settings route: goal_tags is JSON in a TEXT column,
- * and an unreadable value should mean "no tags", not a failed export. */
-function parseGoalTags(raw: string | undefined): string[] {
-	if (!raw) return [];
-	try {
-		const parsed = JSON.parse(raw);
-		return Array.isArray(parsed) ? parsed.filter((t): t is string => typeof t === 'string') : [];
-	} catch {
-		return [];
-	}
-}
-
 /**
  * Thin wrapper — what the `/export` route calls. Kept as a separate named
  * function (rather than inlining buildExportContext in the route) so the
@@ -558,14 +553,17 @@ function validateWeekStructure(week: WeekProposalInput, weekIndex: number): stri
 				const setAt = `${at}, set ${setIndex}`;
 				if (!isPositiveInt(set.exercise_id)) errors.push(`${setAt} has an invalid exercise_id (${JSON.stringify(set.exercise_id)})`);
 				if (!isNonNegativeInt(set.order_index)) errors.push(`${setAt} has an invalid order_index (${JSON.stringify(set.order_index)})`);
-				if (!isPositiveInt(set.target_sets)) errors.push(`${setAt} has an invalid target_sets (${JSON.stringify(set.target_sets)}) — must be a positive integer`);
+				if (!isPositiveInt(set.target_sets))
+					errors.push(`${setAt} has an invalid target_sets (${JSON.stringify(set.target_sets)}) — must be a positive integer`);
 				if (!isNonNegativeInt(set.rep_low)) errors.push(`${setAt} has an invalid rep_low (${JSON.stringify(set.rep_low)})`);
 				if (!isNonNegativeInt(set.rep_high)) errors.push(`${setAt} has an invalid rep_high (${JSON.stringify(set.rep_high)})`);
 				if (isNonNegativeInt(set.rep_low) && isNonNegativeInt(set.rep_high) && set.rep_high < set.rep_low) {
 					errors.push(`${setAt} has rep_high (${set.rep_high}) below rep_low (${set.rep_low})`);
 				}
 				if (!isNullableNonNegativeNumber(set.target_weight_kg)) {
-					errors.push(`${setAt} has an invalid target_weight_kg (${JSON.stringify(set.target_weight_kg)}) — must be null or a non-negative number`);
+					errors.push(
+						`${setAt} has an invalid target_weight_kg (${JSON.stringify(set.target_weight_kg)}) — must be null or a non-negative number`,
+					);
 				}
 				if (!isNonNegativeInt(set.rest_seconds)) errors.push(`${setAt} has an invalid rest_seconds (${JSON.stringify(set.rest_seconds)})`);
 				if (set.superset_group !== null && set.superset_group !== undefined && !Number.isInteger(set.superset_group)) {
@@ -582,7 +580,8 @@ function validateWeekStructure(week: WeekProposalInput, weekIndex: number): stri
 			if (!RUN_TYPES.includes(run.run_type)) {
 				errors.push(`${at} has an invalid run_type (${JSON.stringify(run.run_type)}) — must be one of ${RUN_TYPES.join(', ')}`);
 			}
-			if (!isNullableNonNegativeNumber(run.target_minutes)) errors.push(`${at} has an invalid target_minutes (${JSON.stringify(run.target_minutes)})`);
+			if (!isNullableNonNegativeNumber(run.target_minutes))
+				errors.push(`${at} has an invalid target_minutes (${JSON.stringify(run.target_minutes)})`);
 			if (!isNullableNonNegativeNumber(run.target_km)) errors.push(`${at} has an invalid target_km (${JSON.stringify(run.target_km)})`);
 			if (run.structure_json !== null && run.structure_json !== undefined) {
 				if (typeof run.structure_json !== 'string') {
@@ -659,7 +658,9 @@ function validateWeekAgainstBaseline(
 			}
 
 			if (context.painFlags.shoulder && exercise.shoulder_safe === 0) {
-				errors.push(`${exercise.name} is flagged shoulder-unsafe but a shoulder pain flag is active (week ${week.week_number}, ${session.date})`);
+				errors.push(
+					`${exercise.name} is flagged shoulder-unsafe but a shoulder pain flag is active (week ${week.week_number}, ${session.date})`,
+				);
 			}
 			if (context.painFlags.back && exercise.back_safe === 0) {
 				errors.push(`${exercise.name} is flagged back-unsafe but a back pain flag is active (week ${week.week_number}, ${session.date})`);
@@ -670,7 +671,9 @@ function validateWeekAgainstBaseline(
 			// substituted exercise_id with no matching baseline entry in the
 			// baseline week is unconstrained on weight — nothing to compare
 			// against.
-			const baseline = dateKeyed ? weightBaselineByKey.get(`${session.date}:${set.exercise_id}`) : weightBaselineByExercise.get(set.exercise_id);
+			const baseline = dateKeyed
+				? weightBaselineByKey.get(`${session.date}:${set.exercise_id}`)
+				: weightBaselineByExercise.get(set.exercise_id);
 			if (baseline !== undefined && baseline !== null && baseline > 0 && set.target_weight_kg !== null && set.target_weight_kg > baseline) {
 				const jump = (set.target_weight_kg - baseline) / baseline;
 				if (jump > 0.1) {
@@ -713,7 +716,9 @@ function validateSessionCount(week: WeekProposalInput, context: ExportContext, i
 	if (week.sessions.length >= floor && week.sessions.length <= target) return [];
 
 	const allowed = floor === target ? `${target}` : `${floor}-${target}`;
-	return [`Session count (${week.sessions.length}) is outside the allowed ${allowed} for days_per_week ${target} (week ${week.week_number})`];
+	return [
+		`Session count (${week.sessions.length}) is outside the allowed ${allowed} for days_per_week ${target} (week ${week.week_number})`,
+	];
 }
 
 /** First and last dates of a week, for the cross-week ordering check. Weeks are
@@ -753,7 +758,9 @@ export function validateProposal(proposal: MultiWeekProposalInput, context: Expo
 		errors.push(...validateSessionCount(week, context, index === 0));
 
 		if (index === 0) {
-			errors.push(...validateWeekAgainstBaseline(week, context.deterministicProposal.weeks[0], context, 'the deterministic proposal', true));
+			errors.push(
+				...validateWeekAgainstBaseline(week, context.deterministicProposal.weeks[0], context, 'the deterministic proposal', true),
+			);
 		} else {
 			const previousWeek = proposal.weeks[index - 1];
 			errors.push(...validateWeekAgainstBaseline(week, previousWeek, context, `week ${previousWeek.week_number}`, false));
@@ -764,7 +771,9 @@ export function validateProposal(proposal: MultiWeekProposalInput, context: Expo
 			const previousRange = weekDateRange(previousWeek);
 			const range = weekDateRange(week);
 			if (previousRange && range && range.first <= previousRange.last) {
-				errors.push(`Week ${week.week_number} starts on or before week ${previousWeek.week_number} ends (${range.first} vs ${previousRange.last})`);
+				errors.push(
+					`Week ${week.week_number} starts on or before week ${previousWeek.week_number} ends (${range.first} vs ${previousRange.last})`,
+				);
 			}
 		}
 	});
@@ -846,11 +855,15 @@ export async function importProposal(db: D1Database, input: MultiWeekProposalInp
 	// rejected with no replacement stored.
 	const statements: D1PreparedStatement[] = [];
 	if (existingPending) {
-		statements.push(db.prepare(`UPDATE generated_plans SET status = 'rejected', reviewed_at = datetime('now') WHERE id = ?`).bind(existingPending.id));
+		statements.push(
+			db.prepare(`UPDATE generated_plans SET status = 'rejected', reviewed_at = datetime('now') WHERE id = ?`).bind(existingPending.id),
+		);
 	}
 	statements.push(
 		db
-			.prepare(`INSERT INTO generated_plans (first_week_number, week_count, plan_json, deterministic_json) VALUES (?, ?, ?, ?) RETURNING id`)
+			.prepare(
+				`INSERT INTO generated_plans (first_week_number, week_count, plan_json, deterministic_json) VALUES (?, ?, ?, ?) RETURNING id`,
+			)
 			.bind(input.weeks[0].week_number, input.weeks.length, JSON.stringify(hydrated), JSON.stringify(context.deterministicProposal)),
 	);
 
@@ -923,7 +936,13 @@ export async function insertWeeksFromProposal(db: D1Database, plan: MultiWeekPro
 			children.push(
 				db
 					.prepare(`INSERT INTO planned_runs (session_id, run_type, target_minutes, target_km, structure_json) VALUES (?, ?, ?, ?, ?)`)
-					.bind(sessionId, session.plannedRun.run_type, session.plannedRun.target_minutes, session.plannedRun.target_km, session.plannedRun.structure_json),
+					.bind(
+						sessionId,
+						session.plannedRun.run_type,
+						session.plannedRun.target_minutes,
+						session.plannedRun.target_km,
+						session.plannedRun.structure_json,
+					),
 			);
 		}
 	});

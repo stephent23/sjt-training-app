@@ -13,7 +13,9 @@ swaps.get('/candidates/:exerciseId', async (c) => {
 	const from = await c.env.DB.prepare(`SELECT * FROM exercises WHERE id = ?`).bind(exerciseId).first<Exercise>();
 	if (!from) return c.json({ error: 'not found' }, 404);
 
-	const { results: samePatternExercises } = await c.env.DB.prepare(`SELECT * FROM exercises WHERE pattern = ?`).bind(from.pattern).all<Exercise>();
+	const { results: samePatternExercises } = await c.env.DB.prepare(`SELECT * FROM exercises WHERE pattern = ?`)
+		.bind(from.pattern)
+		.all<Exercise>();
 
 	const { results: historyRows } = await c.env.DB.prepare(
 		`SELECT DISTINCT exercise_id FROM logged_sets WHERE exercise_id IN (${sqlIn(samePatternExercises.length)})`,
@@ -40,18 +42,22 @@ swaps.post('/', async (c) => {
 		.first<{ id: number }>();
 	if (clash) return c.json({ error: 'that exercise is already in this session' }, 409);
 
-	await c.env.DB.prepare(
-		`INSERT INTO exercise_swaps (session_id, from_exercise_id, to_exercise_id, reason, scope, created_at)
-		 VALUES (?, ?, ?, ?, ?, datetime('now'))`,
-	)
-		.bind(body.session_id, body.from_exercise_id, body.to_exercise_id, body.reason, body.scope)
-		.run();
+	// One batch, so a swap either lands whole or not at all — and one round trip
+	// instead of three. Nothing here consumes another statement's result.
+	const writes = [
+		c.env.DB.prepare(
+			`INSERT INTO exercise_swaps (session_id, from_exercise_id, to_exercise_id, reason, scope, created_at)
+			 VALUES (?, ?, ?, ?, ?, datetime('now'))`,
+		).bind(body.session_id, body.from_exercise_id, body.to_exercise_id, body.reason, body.scope),
 
-	// Never carry a target weight across a swap — per-hand and total-stack
-	// numbers aren't comparable, so the substitute starts from its own history.
-	await c.env.DB.prepare(`UPDATE planned_sets SET exercise_id = ?, target_weight_kg = NULL WHERE id = ? AND session_id = ?`)
-		.bind(body.to_exercise_id, body.planned_set_id, body.session_id)
-		.run();
+		// Never carry a target weight across a swap — per-hand and total-stack
+		// numbers aren't comparable, so the substitute starts from its own history.
+		c.env.DB.prepare(`UPDATE planned_sets SET exercise_id = ?, target_weight_kg = NULL WHERE id = ? AND session_id = ?`).bind(
+			body.to_exercise_id,
+			body.planned_set_id,
+			body.session_id,
+		),
+	];
 
 	// "From now on" used to write its scope to exercise_swaps and do nothing
 	// else, so the two options behaved identically and the UI promised a change
@@ -61,19 +67,21 @@ swaps.post('/', async (c) => {
 	// the substitute are left alone: repointing them would create the duplicate
 	// the clash guard above exists to prevent.
 	if (body.scope === 'permanent') {
-		await c.env.DB.prepare(
-			`UPDATE planned_sets SET exercise_id = ?, target_weight_kg = NULL
-			 WHERE exercise_id = ?
-			   AND session_id IN (
-			     SELECT s.id FROM sessions s
-			     WHERE s.status = 'planned'
-			       AND s.date > (SELECT date FROM sessions WHERE id = ?)
-			       AND NOT EXISTS (SELECT 1 FROM planned_sets existing WHERE existing.session_id = s.id AND existing.exercise_id = ?)
-			   )`,
-		)
-			.bind(body.to_exercise_id, body.from_exercise_id, body.session_id, body.to_exercise_id)
-			.run();
+		writes.push(
+			c.env.DB.prepare(
+				`UPDATE planned_sets SET exercise_id = ?, target_weight_kg = NULL
+				 WHERE exercise_id = ?
+				   AND session_id IN (
+				     SELECT s.id FROM sessions s
+				     WHERE s.status = 'planned'
+				       AND s.date > (SELECT date FROM sessions WHERE id = ?)
+				       AND NOT EXISTS (SELECT 1 FROM planned_sets existing WHERE existing.session_id = s.id AND existing.exercise_id = ?)
+				   )`,
+			).bind(body.to_exercise_id, body.from_exercise_id, body.session_id, body.to_exercise_id),
+		);
 	}
+
+	await c.env.DB.batch(writes);
 
 	return c.json({ ok: true });
 });

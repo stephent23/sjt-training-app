@@ -83,7 +83,9 @@ export function saveFeedback(sessionId: number, feedback: SessionFeedback, detai
 	return updated;
 }
 
-export async function fetchSessions(params: { from?: string; to?: string; order?: 'asc' | 'desc'; limit?: number } = {}): Promise<SessionSummary[]> {
+export async function fetchSessions(
+	params: { from?: string; to?: string; order?: 'asc' | 'desc'; limit?: number } = {},
+): Promise<SessionSummary[]> {
 	const qs = new URLSearchParams();
 	if (params.from !== undefined) qs.set('from', params.from);
 	if (params.to !== undefined) qs.set('to', params.to);
@@ -127,7 +129,12 @@ export async function fetchPatterns(): Promise<string[]> {
 	return ((await res.json()) as { patterns: string[] }).patterns;
 }
 
-export async function createExercise(input: { name: string; pattern: string; increment_kg: number; modality: Modality }): Promise<Exercise> {
+export async function createExercise(input: {
+	name: string;
+	pattern: string;
+	increment_kg: number;
+	modality: Modality;
+}): Promise<Exercise> {
 	const res = await fetch('/api/exercises', {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
@@ -176,7 +183,7 @@ export async function updateSettings(patch: Partial<Settings>): Promise<void> {
  * unmodified, never re-serialised. */
 export async function fetchExportText(weeks: number): Promise<string> {
 	const res = await fetch(`/api/generator/export?weeks=${weeks}`);
-	if (!res.ok) throw new Error(`request failed: ${res.status}`);
+	if (!res.ok) throw await errorFrom(res);
 
 	const text = await res.text();
 	if (text.trim() === '') throw new Error('the export came back empty');
