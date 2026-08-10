@@ -1,5 +1,5 @@
 import { env } from 'cloudflare:test';
-import type { Exercise, Loading, Modality, PlannedSetStatus, RunType, SessionKind, SessionStatus } from '../src/types';
+import type { Exercise, Loading, LoggedRunEntry, Modality, PlannedSetStatus, RunType, SessionKind, SessionStatus } from '../src/types';
 
 // Re-exported so callers (e.g. test/sessions.today.test.ts) compare against
 // the exact same Europe/London-based "today" the route itself computes —
@@ -96,15 +96,38 @@ export async function insertPlannedRun(
 		.run();
 }
 
-export async function insertLoggedRun(
-	sessionId: number,
-	overrides: Partial<{ distance_km: number; duration_seconds: number; avg_hr: number | null; rpe_1_10: number | null; performed_on: string; note: string | null }> = {},
-): Promise<void> {
-	const l = { distance_km: 5, duration_seconds: 1800, avg_hr: 140, rpe_1_10: 4, performed_on: '2026-07-27', note: null, ...overrides };
+export async function insertLoggedRun(sessionId: number, overrides: Partial<LoggedRunEntry> = {}): Promise<void> {
+	const l: LoggedRunEntry = {
+		distance_km: 5,
+		duration_seconds: 1800,
+		avg_hr: 140,
+		max_hr: null,
+		avg_cadence_spm: null,
+		elevation_gain_m: null,
+		aerobic_training_effect: null,
+		rpe_1_10: 4,
+		performed_on: '2026-07-27',
+		note: null,
+		...overrides,
+	};
 	await env.DB.prepare(
-		`INSERT INTO logged_runs (session_id, distance_km, duration_seconds, avg_hr, rpe_1_10, performed_on, note) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO logged_runs (session_id, distance_km, duration_seconds, avg_hr, max_hr, avg_cadence_spm, elevation_gain_m,
+		                          aerobic_training_effect, rpe_1_10, performed_on, note)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 	)
-		.bind(sessionId, l.distance_km, l.duration_seconds, l.avg_hr, l.rpe_1_10, l.performed_on, l.note)
+		.bind(
+			sessionId,
+			l.distance_km,
+			l.duration_seconds,
+			l.avg_hr,
+			l.max_hr,
+			l.avg_cadence_spm,
+			l.elevation_gain_m,
+			l.aerobic_training_effect,
+			l.rpe_1_10,
+			l.performed_on,
+			l.note,
+		)
 		.run();
 }
 

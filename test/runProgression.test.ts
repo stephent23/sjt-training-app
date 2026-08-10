@@ -48,3 +48,43 @@ describe('progressRun', () => {
 		expect(result.next_target_km).toBeNull();
 	});
 });
+
+// Growth used to depend only on whether a long run existed at all. A run cut
+// half short, or one that took everything you had, earned the same 10% as a
+// comfortable one — so the plan kept climbing away from what was survivable.
+describe('progressRun — what the run actually cost', () => {
+	it('holds when the last long run came up well short of its target', () => {
+		const result = progressRun('long', 10, loggedRun({ distance_km: 7 }));
+		expect(result.action).toBe('hold_long_run');
+		expect(result.next_target_km).toBe(10);
+		expect(result.reason).toMatch(/short of the 10km/);
+	});
+
+	it('still grows when the run was only marginally short', () => {
+		// 9.3 of 10 is a route that measured a bit differently, not a bad run.
+		expect(progressRun('long', 10, loggedRun({ distance_km: 9.3 })).action).toBe('increase_long_run');
+	});
+
+	it('holds when the run was logged as very hard', () => {
+		const result = progressRun('long', 10, loggedRun({ distance_km: 10, rpe_1_10: 9 }));
+		expect(result.action).toBe('hold_long_run');
+		expect(result.reason).toMatch(/RPE 9/);
+	});
+
+	it('holds when heart rate says it was hard even if the RPE was generous', () => {
+		const result = progressRun('long', 10, loggedRun({ distance_km: 10, rpe_1_10: 4, avg_hr: 180, max_hr: 185 }));
+		expect(result.action).toBe('hold_long_run');
+		expect(result.reason).toMatch(/heart rate/);
+	});
+
+	it('grows on a run that was long enough and comfortable enough', () => {
+		const result = progressRun('long', 10, loggedRun({ distance_km: 10, rpe_1_10: 5, avg_hr: 145, max_hr: 165 }));
+		expect(result.action).toBe('increase_long_run');
+		expect(result.next_target_km).toBe(11);
+	});
+
+	it('grows when the effort fields are absent — absence is not evidence of strain', () => {
+		const result = progressRun('long', 10, loggedRun({ distance_km: 10, rpe_1_10: null, avg_hr: null, max_hr: null }));
+		expect(result.action).toBe('increase_long_run');
+	});
+});

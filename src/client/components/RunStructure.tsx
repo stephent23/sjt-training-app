@@ -9,7 +9,13 @@ export function parseRunStructure(json: string | null): RunStep[] | null {
 	if (!json) return null;
 	try {
 		const parsed = JSON.parse(json);
-		return Array.isArray(parsed?.steps) ? parsed.steps : null;
+		if (!Array.isArray(parsed?.steps)) return null;
+		// Individual steps are filtered too, not just the envelope: a step with
+		// no `effort` used to throw inside the render below, taking the whole
+		// screen with it. Import validation now rejects these, but plans stored
+		// before it did are still in the database.
+		const steps = (parsed.steps as RunStep[]).filter((s) => s && typeof s.kind === 'string' && typeof s.effort === 'string' && typeof s.minutes === 'number');
+		return steps.length > 0 ? steps : null;
 	} catch {
 		return null;
 	}

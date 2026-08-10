@@ -1,6 +1,6 @@
 import { useState } from 'preact/hooks';
 import type { SessionSummary } from '../../types';
-import { capitalize } from '../format';
+import { capitalize, loggedRunSummary } from '../format';
 import { weekDatesFor, WEEKDAY_LABELS } from '../weekDates';
 
 // Shared list-row rendering used by both Plan (upcoming) and History (past)
@@ -25,6 +25,12 @@ function metaLine(s: SessionSummary): string {
 	}
 
 	const typeLabel = s.run_type ? capitalize(s.run_type) : 'Run';
+
+	// Once it's been run, what it actually was beats what was asked for — a
+	// completed run used to read identically to one nobody had started.
+	if (s.logged_distance_km != null && s.logged_duration_seconds != null) {
+		return `${typeLabel} · ${loggedRunSummary(s.logged_distance_km, s.logged_duration_seconds)}`;
+	}
 	if (s.target_minutes) return `${typeLabel} · ${s.target_minutes} min`;
 	if (s.target_km) return `${typeLabel} · ${s.target_km} km`;
 	return typeLabel;

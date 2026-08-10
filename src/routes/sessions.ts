@@ -89,7 +89,11 @@ async function loadSessionDetail(db: D1Database, session: SessionRow): Promise<S
 		.first();
 
 	const loggedRun = await db
-		.prepare(`SELECT distance_km, duration_seconds, avg_hr, rpe_1_10, performed_on, note FROM logged_runs WHERE session_id = ?`)
+		.prepare(
+			`SELECT distance_km, duration_seconds, avg_hr, max_hr, avg_cadence_spm, elevation_gain_m, aerobic_training_effect,
+			        rpe_1_10, performed_on, note
+			 FROM logged_runs WHERE session_id = ?`,
+		)
 		.bind(session.id)
 		.first<LoggedRunEntry>();
 
@@ -142,7 +146,8 @@ sessions.get('/', async (c) => {
 		                       AND ps2.exercise_id = ls.exercise_id
 		                       AND ps2.status <> 'skipped')) AS logged_set_count,
 		   pr.run_type, pr.target_minutes, pr.target_km,
-		   (lr.id IS NOT NULL) AS has_logged_run
+		   (lr.id IS NOT NULL) AS has_logged_run,
+		   lr.distance_km AS logged_distance_km, lr.duration_seconds AS logged_duration_seconds
 		 FROM sessions s
 		 LEFT JOIN planned_sets ps ON ps.session_id = s.id
 		 LEFT JOIN planned_runs pr ON pr.session_id = s.id
@@ -261,22 +266,57 @@ sessions.post('/:id/runs', async (c) => {
 
 	if (!Number.isFinite(body.distance_km) || body.distance_km < 0) return c.json({ error: 'invalid distance_km' }, 400);
 	if (!Number.isInteger(body.duration_seconds) || body.duration_seconds < 0) return c.json({ error: 'invalid duration_seconds' }, 400);
-	if (body.rpe_1_10 !== null && body.rpe_1_10 !== undefined && (!Number.isInteger(body.rpe_1_10) || body.rpe_1_10 < 1 || body.rpe_1_10 > 10))
-		return c.json({ error: 'invalid rpe_1_10' }, 400);
+
+	// Every optional metric is bounded, including avg_hr — which used to be
+	// bound straight through unchecked, the one field here with no range at all.
+	// The upper bounds are deliberately generous: they exist to catch a
+	// mistyped or misplaced value, not to police what a real run can look like.
+	const optionalRanges: [keyof LogRunInput, number, number, boolean][] = [
+		['avg_hr', 20, 250, true],
+		['max_hr', 20, 250, true],
+		['avg_cadence_spm', 20, 300, true],
+		['elevation_gain_m', 0, 10000, false],
+		['aerobic_training_effect', 0, 5, false],
+		['rpe_1_10', 1, 10, true],
+	];
+	for (const [field, min, max, integer] of optionalRanges) {
+		const value = body[field];
+		if (value === null || value === undefined) continue;
+		if (typeof value !== 'number' || !Number.isFinite(value) || value < min || value > max || (integer && !Number.isInteger(value))) {
+			return c.json({ error: `invalid ${field}` }, 400);
+		}
+	}
 
 	await c.env.DB.prepare(
-		`INSERT INTO logged_runs (session_id, distance_km, duration_seconds, avg_hr, rpe_1_10, performed_on, logged_at, note)
-		 VALUES (?, ?, ?, ?, ?, ?, datetime('now'), ?)
+		`INSERT INTO logged_runs (session_id, distance_km, duration_seconds, avg_hr, max_hr, avg_cadence_spm, elevation_gain_m,
+		                          aerobic_training_effect, rpe_1_10, performed_on, logged_at, note)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?)
 		 ON CONFLICT (session_id) DO UPDATE SET
 		   distance_km = excluded.distance_km,
 		   duration_seconds = excluded.duration_seconds,
 		   avg_hr = excluded.avg_hr,
+		   max_hr = excluded.max_hr,
+		   avg_cadence_spm = excluded.avg_cadence_spm,
+		   elevation_gain_m = excluded.elevation_gain_m,
+		   aerobic_training_effect = excluded.aerobic_training_effect,
 		   rpe_1_10 = excluded.rpe_1_10,
 		   performed_on = excluded.performed_on,
 		   logged_at = datetime('now'),
 		   note = excluded.note`,
 	)
-		.bind(sessionId, body.distance_km, body.duration_seconds, body.avg_hr, body.rpe_1_10, body.performed_on, body.note)
+		.bind(
+			sessionId,
+			body.distance_km,
+			body.duration_seconds,
+			body.avg_hr ?? null,
+			body.max_hr ?? null,
+			body.avg_cadence_spm ?? null,
+			body.elevation_gain_m ?? null,
+			body.aerobic_training_effect ?? null,
+			body.rpe_1_10 ?? null,
+			body.performed_on,
+			body.note,
+		)
 		.run();
 
 	return c.json({ ok: true });

@@ -982,6 +982,54 @@ button:disabled {
 	margin: var(--s3) 0;
 }
 
+/* ---- Disclosure ---------------------------------------------------------------------
+   A styled <details>. The bare ones this replaces had no marker treatment and
+   no tap target, so on a phone they read as ordinary body text you couldn't
+   press. Chevron on the right, turning as it opens — the same affordance as
+   the exercise accordion, so "there's more under here" means one thing
+   everywhere. */
+
+.disclosure {
+	border-top: 1px solid var(--rule);
+	margin-top: var(--s4);
+}
+
+.disclosure-summary {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--s3);
+	min-height: 44px;
+	padding: var(--s3) 0;
+	font: 600 15px var(--sans);
+	color: var(--ink);
+	cursor: pointer;
+	list-style: none;
+}
+
+/* Safari draws its own triangle on top of the chevron without this. */
+.disclosure-summary::-webkit-details-marker {
+	display: none;
+}
+
+.disclosure-summary::after {
+	content: '\203A';
+	flex-shrink: 0;
+	color: var(--muted);
+	font-size: 1.25rem;
+	line-height: 1;
+	transform: rotate(90deg);
+	transition: transform 0.15s ease;
+}
+
+.disclosure[open] > .disclosure-summary::after {
+	transform: rotate(-90deg);
+}
+
+.disclosure-body {
+	padding-bottom: var(--s3);
+}
+
 /* ---- Loading / empty states -------------------------------------------------------- */
 
 .empty-state {
