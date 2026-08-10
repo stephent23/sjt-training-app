@@ -10,6 +10,11 @@ interface SetRowProps {
 	repLow: number;
 	repHigh: number;
 	incrementKg: number;
+	/** What the plan actually prescribes. Shown next to the weight control —
+	 * without it the only number on screen was last week's, so the target the
+	 * generator worked out was invisible at the moment you act on it. Null on a
+	 * calibration week, where there is genuinely no target yet. */
+	targetWeightKg: number | null;
 	isBodyweight: boolean;
 	defaultWeight: number;
 	defaultReps: number | null;
@@ -29,6 +34,7 @@ export function SetRow({
 	repLow,
 	repHigh,
 	incrementKg,
+	targetWeightKg,
 	isBodyweight,
 	defaultWeight,
 	defaultReps,
@@ -105,7 +111,7 @@ export function SetRow({
 			</div>
 
 			<div class="set-field">
-				<span class="eyebrow">Weight</span>
+				<span class="eyebrow">{targetWeightKg != null && !isBodyweight ? `Weight · target ${targetWeightKg}kg` : 'Weight'}</span>
 				{isBodyweight ? (
 					<p class="set-field-hint">Bodyweight — no added load</p>
 				) : (

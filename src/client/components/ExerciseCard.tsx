@@ -26,6 +26,16 @@ function soloProgressLabel(exercise: PlannedSetDetail): string {
 	return `${logged} of ${exercise.target_sets} logged`;
 }
 
+/** "3 × 8-10 @ 22kg". The weight was missing here, so the prescription the
+ * generator worked out never appeared on the card you tap to start the set —
+ * only last week's numbers did, one level down. Omitted for bodyweight work and
+ * on a calibration week, where there is no target to state. */
+function soloTargetLabel(exercise: PlannedSetDetail): string {
+	const reps = `${exercise.target_sets} × ${exercise.rep_low}-${exercise.rep_high}`;
+	if (exercise.loading === 'bodyweight' || exercise.target_weight_kg == null) return reps;
+	return `${reps} @ ${exercise.target_weight_kg}kg`;
+}
+
 function progressLabel(group: ExerciseGroup): string {
 	if (!group.isSuperset) return soloProgressLabel(group.members[0]);
 
@@ -49,6 +59,7 @@ export function ExerciseCard({ group, expanded, onToggle, onLog, onSwap, onSkipT
 	const [editingSlot, setEditingSlot] = useState<string | null>(null);
 
 	const allSkipped = group.members.every((m) => m.status === 'skipped');
+
 	const rounds = buildRounds(group);
 	const notes = group.members.filter((m) => m.notes);
 
@@ -66,9 +77,7 @@ export function ExerciseCard({ group, expanded, onToggle, onLog, onSwap, onSkipT
 				<div class="plan-row-main">
 					{group.isSuperset && <span class="eyebrow eyebrow--accent">Superset</span>}
 					<span class="eyebrow">
-						{group.isSuperset
-							? `${group.rounds} rounds`
-							: `${group.members[0].target_sets} × ${group.members[0].rep_low}-${group.members[0].rep_high}`}
+						{group.isSuperset ? `${group.rounds} rounds` : soloTargetLabel(group.members[0])}
 					</span>
 					{group.members.map((member) => (
 						<span key={member.id} class="plan-row-title">
@@ -132,6 +141,7 @@ export function ExerciseCard({ group, expanded, onToggle, onLog, onSwap, onSkipT
 										repLow={slot.exercise.rep_low}
 										repHigh={slot.exercise.rep_high}
 										incrementKg={slot.exercise.increment_kg}
+										targetWeightKg={slot.exercise.target_weight_kg}
 										isBodyweight={slot.exercise.loading === 'bodyweight'}
 										defaultWeight={defaults.weight_kg}
 										defaultReps={defaults.reps}
