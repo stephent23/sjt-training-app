@@ -85,9 +85,11 @@ branches simply carry the earlier commits with them.
       data-state note; prompt behind a styled disclosure; upload-or-paste answer; problems as a
       copyable list; one `aria-live` region. `.error-list` and `.btn-small` added, `.prompt-preview`
       capped at 45vh. The import path now has tests — it had none.*
-- [ ] **10 · Collapsible weeks on Plan.** Opt-in `collapsible` prop on `SessionList`; current week
-      open, rest closed, independent toggles, count in the collapsed header. First test for
-      `SessionList`.
+- [x] **10 · Collapsible weeks on Plan.** Opt-in `collapsible` prop on `SessionList`; current week
+      open, rest closed, independent toggles, count in the collapsed header. *Done: Plan fetches
+      from today onwards, so the first group is the current week by construction — no calendar
+      arithmetic needed. Toggles are independent, not an accordion, since comparing this week with
+      next is reasonable. First test for `SessionList`, which had none.*
 - [ ] **11 · Swaps and adding an exercise.** Make `scope: 'permanent'` actually repoint future
       planned sessions; loading and error states in the sheet; a back affordance; new
       `POST /api/exercises` with a minimal form, reachable from the sheet's empty state. Optional
