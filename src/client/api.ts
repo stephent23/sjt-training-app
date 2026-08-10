@@ -1,5 +1,7 @@
 import type {
 	ApplySwapInput,
+	Exercise,
+	Modality,
 	LogRunInput,
 	LogSetInput,
 	PlannedSetStatus,
@@ -103,13 +105,36 @@ export async function fetchSwapCandidates(exerciseId: number, pain: 'shoulder' |
 	return data.candidates;
 }
 
+/** Non-ok responses carry a reason worth showing — a 409 here means the
+ * substitute is already in this session, which the person can act on. */
+async function errorFrom(res: Response): Promise<Error> {
+	const body = (await res.json().catch(() => null)) as { error?: string } | null;
+	return new Error(body?.error ?? `request failed: ${res.status}`);
+}
+
 export async function applySwap(input: ApplySwapInput): Promise<void> {
 	const res = await fetch('/api/swaps', {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify(input),
 	});
-	if (!res.ok) throw new Error(`request failed: ${res.status}`);
+	if (!res.ok) throw await errorFrom(res);
+}
+
+export async function fetchPatterns(): Promise<string[]> {
+	const res = await fetch('/api/exercises/patterns');
+	if (!res.ok) throw await errorFrom(res);
+	return ((await res.json()) as { patterns: string[] }).patterns;
+}
+
+export async function createExercise(input: { name: string; pattern: string; increment_kg: number; modality: Modality }): Promise<Exercise> {
+	const res = await fetch('/api/exercises', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(input),
+	});
+	if (!res.ok) throw await errorFrom(res);
+	return ((await res.json()) as { exercise: Exercise }).exercise;
 }
 
 // Moves a session to a different date — a planning-time action done at home,

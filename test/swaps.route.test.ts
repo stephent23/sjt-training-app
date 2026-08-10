@@ -32,6 +32,86 @@ describe('GET /api/swaps/candidates/:exerciseId', () => {
 	});
 });
 
+// "From now on" used to write its scope to exercise_swaps and do nothing else,
+// so it behaved identically to "just today" while the UI promised otherwise.
+describe('POST /api/swaps — scope', () => {
+	async function seedThreeWeeks() {
+		const from = await insertExercise({ name: 'Goblet squat', pattern: 'squat', loading: 'total' });
+		const to = await insertExercise({ name: 'Leg press', pattern: 'squat', loading: 'total' });
+
+		const today = await insertSession({ date: '2026-08-10', week_number: 1 });
+		const next = await insertSession({ date: '2026-08-17', week_number: 2 });
+		const later = await insertSession({ date: '2026-08-24', week_number: 3 });
+		const past = await insertSession({ date: '2026-08-03', week_number: 0 });
+
+		for (const session of [today, next, later, past]) await insertPlannedSet(session, from, { order_index: 1, target_weight_kg: 24 });
+
+		// insertPlannedSet doesn't hand back an id, so read it off the session.
+		const detail = (await (await SELF.fetch(`https://training-app.test/api/sessions/${today}`)).json()) as SessionDetail;
+		return { from, to, today, next, later, past, plannedSetId: detail.plannedSets[0].id };
+	}
+
+	async function exerciseIdsFor(sessionId: number): Promise<number[]> {
+		const detail = (await (await SELF.fetch(`https://training-app.test/api/sessions/${sessionId}`)).json()) as SessionDetail;
+		return detail.plannedSets.map((ps) => ps.exercise_id);
+	}
+
+	function swapBody(seed: Awaited<ReturnType<typeof seedThreeWeeks>>, scope: 'this_session' | 'permanent'): ApplySwapInput {
+		return { session_id: seed.today, planned_set_id: seed.plannedSetId, from_exercise_id: seed.from, to_exercise_id: seed.to, reason: 'preference', scope };
+	}
+
+	it('leaves future sessions alone for a just-today swap', async () => {
+		const seed = await seedThreeWeeks();
+		await SELF.fetch('https://training-app.test/api/swaps', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify(swapBody(seed, 'this_session')),
+		});
+
+		expect(await exerciseIdsFor(seed.today)).toEqual([seed.to]);
+		expect(await exerciseIdsFor(seed.next)).toEqual([seed.from]);
+	});
+
+	it('repoints every future planned session for a from-now-on swap', async () => {
+		const seed = await seedThreeWeeks();
+		await SELF.fetch('https://training-app.test/api/swaps', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify(swapBody(seed, 'permanent')),
+		});
+
+		expect(await exerciseIdsFor(seed.today)).toEqual([seed.to]);
+		expect(await exerciseIdsFor(seed.next)).toEqual([seed.to]);
+		expect(await exerciseIdsFor(seed.later)).toEqual([seed.to]);
+	});
+
+	it('leaves the past alone — a week already trained keeps what was actually done', async () => {
+		const seed = await seedThreeWeeks();
+		await SELF.fetch('https://training-app.test/api/swaps', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify(swapBody(seed, 'permanent')),
+		});
+
+		expect(await exerciseIdsFor(seed.past)).toEqual([seed.from]);
+	});
+
+	it('skips a future session that already contains the substitute, rather than duplicating it', async () => {
+		const seed = await seedThreeWeeks();
+		await insertPlannedSet(seed.next, seed.to, { order_index: 2 });
+
+		await SELF.fetch('https://training-app.test/api/swaps', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify(swapBody(seed, 'permanent')),
+		});
+
+		// Still one of each — the duplicate the clash guard exists to prevent
+		// must not be created by the bulk update either.
+		expect((await exerciseIdsFor(seed.next)).sort()).toEqual([seed.from, seed.to].sort());
+	});
+});
+
 describe('POST /api/swaps', () => {
 	it('records the swap and repoints this session onto the substitute, clearing the carried weight', async () => {
 		const from = await insertExercise({ name: 'Goblet squat', pattern: 'squat', loading: 'total' });
