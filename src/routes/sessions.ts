@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { sqlIn } from '../sql';
+import { RUN_METRIC_FIELDS } from '../types';
 import type {
 	LoggedRunEntry,
 	LoggedSetEntry,
@@ -269,21 +270,13 @@ sessions.post('/:id/runs', async (c) => {
 
 	// Every optional metric is bounded, including avg_hr — which used to be
 	// bound straight through unchecked, the one field here with no range at all.
-	// The upper bounds are deliberately generous: they exist to catch a
-	// mistyped or misplaced value, not to police what a real run can look like.
-	const optionalRanges: [keyof LogRunInput, number, number, boolean][] = [
-		['avg_hr', 20, 250, true],
-		['max_hr', 20, 250, true],
-		['avg_cadence_spm', 20, 300, true],
-		['elevation_gain_m', 0, 10000, false],
-		['aerobic_training_effect', 0, 5, false],
-		['rpe_1_10', 1, 10, true],
-	];
-	for (const [field, min, max, integer] of optionalRanges) {
-		const value = body[field];
+	// The bounds are deliberately generous: they exist to catch a mistyped or
+	// misplaced value, not to police what a real run can look like.
+	for (const { key, min, max, integer } of RUN_METRIC_FIELDS) {
+		const value = body[key];
 		if (value === null || value === undefined) continue;
 		if (typeof value !== 'number' || !Number.isFinite(value) || value < min || value > max || (integer && !Number.isInteger(value))) {
-			return c.json({ error: `invalid ${field}` }, 400);
+			return c.json({ error: `invalid ${key}` }, 400);
 		}
 	}
 

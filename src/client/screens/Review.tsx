@@ -1,5 +1,12 @@
 import { useEffect, useState } from 'preact/hooks';
-import type { LoggedRunEntry, LoggedSetEntry, PlannedSetDetail, SessionFeedback } from '../../types';
+import {
+	RUN_METRIC_FIELDS,
+	type LoggedRunEntry,
+	type LoggedSetEntry,
+	type PlannedSetDetail,
+	type RunMetricField,
+	type SessionFeedback,
+} from '../../types';
 import { logRun, logSet, saveFeedback, setExerciseStatus, setSessionStatus } from '../api';
 import { FeedbackCard } from '../components/FeedbackCard';
 import { SessionScreenFallback } from '../components/SessionScreenFallback';
@@ -54,10 +61,22 @@ function ReviewSetRow({ setIndex, entry, onCommit }: ReviewSetRowProps) {
 				/>
 			</td>
 			<td>
-				<input type="number" inputmode="numeric" value={reps} onInput={(e) => setReps((e.target as HTMLInputElement).value)} onChange={commit} />
+				<input
+					type="number"
+					inputmode="numeric"
+					value={reps}
+					onInput={(e) => setReps((e.target as HTMLInputElement).value)}
+					onChange={commit}
+				/>
 			</td>
 			<td>
-				<input type="number" inputmode="numeric" value={rir} onInput={(e) => setRir((e.target as HTMLInputElement).value)} onChange={commit} />
+				<input
+					type="number"
+					inputmode="numeric"
+					value={rir}
+					onInput={(e) => setRir((e.target as HTMLInputElement).value)}
+					onChange={commit}
+				/>
 			</td>
 		</tr>
 	);
@@ -82,9 +101,7 @@ function ReviewExercise({ exercise, onCommitSet, onUnskip }: ReviewExerciseProps
 	return (
 		<section class={skipped ? 'review-exercise--skipped' : undefined}>
 			<h2 class="section-heading">{exercise.exercise_name}</h2>
-			<p class="exercise-target">
-				{skipped ? 'Skipped' : `${exercise.target_sets} × ${exercise.rep_low}-${exercise.rep_high}`}
-			</p>
+			<p class="exercise-target">{skipped ? 'Skipped' : `${exercise.target_sets} × ${exercise.rep_low}-${exercise.rep_high}`}</p>
 
 			{skipped && (
 				// Without this an accidental skip is unreachable: once the session
@@ -128,24 +145,7 @@ interface ReviewRunProps {
 	onCommit: (input: LoggedRunMetrics) => void;
 }
 
-/** The watch fields, in the order the Garmin summary screen lists them. Each is
- * optional and each is bounded server-side; the bounds are repeated here only
- * so a typo isn't committed and then bounced by a 400 the person never sees. */
-const WATCH_FIELDS = [
-	{ key: 'avg_hr', label: 'Avg HR', min: 20, max: 250, integer: true },
-	{ key: 'max_hr', label: 'Max HR', min: 20, max: 250, integer: true },
-	{ key: 'avg_cadence_spm', label: 'Cadence (spm)', min: 20, max: 300, integer: true },
-	{ key: 'elevation_gain_m', label: 'Elevation (m)', min: 0, max: 10000, integer: false },
-	{ key: 'aerobic_training_effect', label: 'Training effect', min: 0, max: 5, integer: false },
-	{ key: 'rpe_1_10', label: 'RPE (1-10)', min: 1, max: 10, integer: true },
-] as const;
-
-type WatchField = (typeof WATCH_FIELDS)[number]['key'];
-type LoggedRunMetrics = Pick<LoggedRunEntry, 'distance_km' | 'duration_seconds' | 'note'> & Record<WatchField, number | null>;
-
-function textOf(value: number | null | undefined): string {
-	return value == null ? '' : String(value);
-}
+type LoggedRunMetrics = Pick<LoggedRunEntry, 'distance_km' | 'duration_seconds' | 'note'> & Record<RunMetricField, number | null>;
 
 function ReviewRun({ loggedRun, onCommit }: ReviewRunProps) {
 	const initial = () => ({
@@ -153,7 +153,7 @@ function ReviewRun({ loggedRun, onCommit }: ReviewRunProps) {
 		minutes: loggedRun ? String(Math.floor(loggedRun.duration_seconds / 60)) : '',
 		seconds: loggedRun ? String(loggedRun.duration_seconds % 60) : '',
 		note: loggedRun?.note ?? '',
-		...Object.fromEntries(WATCH_FIELDS.map((f) => [f.key, textOf(loggedRun?.[f.key])])),
+		...Object.fromEntries(RUN_METRIC_FIELDS.map((f) => [f.key, loggedRun?.[f.key] == null ? '' : String(loggedRun[f.key])])),
 	});
 
 	const [fields, setFields] = useState<Record<string, string>>(initial);
@@ -177,8 +177,8 @@ function ReviewRun({ loggedRun, onCommit }: ReviewRunProps) {
 		if (!Number.isFinite(distanceKm) || distanceKm <= 0) return;
 		if (durationSeconds <= 0) return;
 
-		const metrics = {} as Record<WatchField, number | null>;
-		for (const field of WATCH_FIELDS) {
+		const metrics = {} as Record<RunMetricField, number | null>;
+		for (const field of RUN_METRIC_FIELDS) {
 			const raw = fields[field.key];
 			if (raw === '') {
 				metrics[field.key] = null;
@@ -190,7 +190,12 @@ function ReviewRun({ loggedRun, onCommit }: ReviewRunProps) {
 			metrics[field.key] = value;
 		}
 
-		onCommit({ distance_km: distanceKm, duration_seconds: durationSeconds, note: fields.note.trim() === '' ? null : fields.note, ...metrics });
+		onCommit({
+			distance_km: distanceKm,
+			duration_seconds: durationSeconds,
+			note: fields.note.trim() === '' ? null : fields.note,
+			...metrics,
+		});
 	}
 
 	const pace = formatPace(Number(fields.distance), (Number(fields.minutes) || 0) * 60 + (Number(fields.seconds) || 0));
@@ -210,8 +215,22 @@ function ReviewRun({ loggedRun, onCommit }: ReviewRunProps) {
 							<td>Duration</td>
 							<td>
 								<div class="duration-inputs">
-									<input type="number" inputmode="numeric" placeholder="min" value={fields.minutes} onInput={set('minutes')} onChange={commit} />
-									<input type="number" inputmode="numeric" placeholder="sec" value={fields.seconds} onInput={set('seconds')} onChange={commit} />
+									<input
+										type="number"
+										inputmode="numeric"
+										placeholder="min"
+										value={fields.minutes}
+										onInput={set('minutes')}
+										onChange={commit}
+									/>
+									<input
+										type="number"
+										inputmode="numeric"
+										placeholder="sec"
+										value={fields.seconds}
+										onInput={set('seconds')}
+										onChange={commit}
+									/>
 								</div>
 							</td>
 						</tr>
@@ -232,7 +251,7 @@ function ReviewRun({ loggedRun, onCommit }: ReviewRunProps) {
 				<div class="disclosure-body table-scroll">
 					<table class="review-table">
 						<tbody>
-							{WATCH_FIELDS.map((field) => (
+							{RUN_METRIC_FIELDS.map((field) => (
 								<tr key={field.key}>
 									<td>{field.label}</td>
 									<td>
@@ -317,7 +336,8 @@ export function Review({ sessionId }: ReviewProps) {
 	// "done" means — and it excludes skipped exercises, which is what stopped
 	// a session with skipped work ever reading as finished.
 	const totals = sessionSetTotals(plannedSets);
-	const progressLine = session.kind === 'lift' ? `${totals.logged} of ${totals.target} sets logged` : loggedRun ? 'Run logged' : 'Not yet logged';
+	const progressLine =
+		session.kind === 'lift' ? `${totals.logged} of ${totals.target} sets logged` : loggedRun ? 'Run logged' : 'Not yet logged';
 
 	return (
 		<main class="screen">

@@ -96,7 +96,8 @@ DELOADS
 If the block is four weeks or longer, include one deload week — usually the last, or week 4 of a
 6+ week block. A deload drops load and volume rather than repeating: cut working weights about
 10-15%, drop a set from the main lifts, keep the movements, and make the runs easy (no tempo, no
-intervals, shorter long run). You may drop one session that week. Mark it "focus": "deload".
+intervals, shorter long run). You may drop one session that week — that's allowed in any week after
+the first, whether or not you label it. Mark it "focus": "deload" so I can see what it is.
 Deload rather than holding again if I've had two rough sessions in a row, or reps have kept
 missing target.
 

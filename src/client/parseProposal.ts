@@ -48,21 +48,28 @@ export function extractProposal(text: string): ParsedPaste {
 	const trimmed = text.replace(/^﻿/, '').trim();
 	if (trimmed === '') return { ok: false, error: "Paste the assistant's answer first." };
 
-	const fenced = [...trimmed.matchAll(FENCE)].map((m) => m[1]);
-	const candidates = [trimmed, ...longestFirst(fenced), ...longestFirst(balancedRegions(trimmed))];
+	// Tiers are functions, not an array, so the brace scan — which walks every
+	// character of the reply — never runs for a paste that was bare JSON.
+	const tiers: (() => string[])[] = [
+		() => [trimmed],
+		() => longestFirst([...trimmed.matchAll(FENCE)].map((m) => m[1])),
+		() => longestFirst(balancedRegions(trimmed)),
+	];
 
 	let sawJson = false;
-	for (const candidate of candidates) {
-		let parsed: unknown;
-		try {
-			parsed = JSON.parse(candidate);
-		} catch {
-			continue; // prose never parses, so trying the whole paste first is free
-		}
-		if (typeof parsed !== 'object' || parsed === null) continue;
-		sawJson = true;
-		if (Array.isArray((parsed as MultiWeekProposalInput).weeks)) {
-			return { ok: true, value: parsed as MultiWeekProposalInput };
+	for (const tier of tiers) {
+		for (const candidate of tier()) {
+			let parsed: unknown;
+			try {
+				parsed = JSON.parse(candidate);
+			} catch {
+				continue; // prose never parses, so trying the whole paste first is free
+			}
+			if (typeof parsed !== 'object' || parsed === null) continue;
+			sawJson = true;
+			if (Array.isArray((parsed as MultiWeekProposalInput).weeks)) {
+				return { ok: true, value: parsed as MultiWeekProposalInput };
+			}
 		}
 	}
 

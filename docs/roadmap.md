@@ -98,11 +98,25 @@ branches simply carry the earlier commits with them.
       `GET /api/exercises/patterns` — the first write path to that table — reachable from the
       sheet. Pattern must be an existing one: a novel pattern would orphan the exercise from swaps
       in both directions.* Per-lap `splits_json` dropped: most typing, least signal.
-- [ ] **12 · Simplification pass.** A dedicated refactor over everything this campaign touched:
-      delete dead code and unused CSS (`.plan-row--today` is defined and never applied), collapse
-      duplication the stages introduced, shorten anything that grew a wrapper it didn't need, and
-      re-read every new comment for whether it still earns its place. No behaviour change — the
-      suite must stay green throughout. Run the `simplify` skill over the full diff against `main`.
+- [x] **12 · Simplification pass.** Four review agents over the full diff (reuse, simplification,
+      efficiency, altitude). *Applied: one `parseGoalTags`, `MODALITIES`/`LOADINGS` and
+      `RUN_METRIC_FIELDS` shared from `src/types.ts` instead of hand-typed twice each;
+      `fetchExportText` uses the same `errorFrom` as its new siblings; `withExport` lets the action
+      supply its own closing line (the generic one was overwriting the KB message); `SessionList`
+      stores the open weeks directly instead of an XOR against a default; `parseProposal` defers
+      the brace scan so a bare-JSON paste never pays for it; the swap route's writes go in one
+      `db.batch`. Files touched were run through the repo's own Prettier config, which is some of
+      the diff.*
+      **Skipped deliberately:** parallelising the import/collision queries and the two exercise
+      lookups (a weekly and an occasional action — sequential reads clearer than the saved
+      round trip); splitting `LogRunInput` back out from `LoggedRunEntry` (duplicating the field
+      list today to preserve a seam nothing needs yet); extracting a `CollapsibleWeekList` (a
+      boolean prop is the smaller thing); moving the add-exercise form out of the swap sheet
+      (there is no exercise-management screen for it to move to).
+      **Worth knowing:** the altitude review noted `weekStartDate` is only a hint to the assistant
+      — `validateProposal` still accepts any real calendar date, so a backdated plan can still be
+      imported. Left as-is because importing a plan that starts later is legitimate, but it means
+      the cold-start guard is advisory, not enforced.
 
 ## Merge checklist
 

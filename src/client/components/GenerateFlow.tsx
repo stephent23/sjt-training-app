@@ -44,16 +44,17 @@ export function GenerateFlow({ onImported }: GenerateFlowProps) {
 	const [canReplace, setCanReplace] = useState(false);
 	const [busy, setBusy] = useState(false);
 
-	/** Both step-1 actions need the export; only what they do with it differs. */
-	async function withExport(action: (text: string) => Promise<void> | void, working: string, done: string) {
+	/** Both step-1 actions need the export; only what they do with it differs.
+	 * The action returns the line to show when it's done, so one with something
+	 * specific to say isn't overwritten by a generic one. */
+	async function withExport(action: (text: string) => Promise<string>) {
 		setDownloadError(null);
 		setDownloading(true);
-		setStatus(working);
+		setStatus('Preparing your data…');
 		try {
 			const text = await fetchExportText(weeks);
 			setDataNote(describeExport(JSON.parse(text) as Partial<ExportPayload>));
-			await action(text);
-			setStatus(done);
+			setStatus(await action(text));
 		} catch (e) {
 			setDownloadError(e instanceof Error ? e.message : 'Something went wrong.');
 			setStatus('');
@@ -66,23 +67,20 @@ export function GenerateFlow({ onImported }: GenerateFlowProps) {
 		// Goes through downloadExport rather than the text we just fetched: it
 		// saves from a blob, which is what makes the download work in the
 		// installed PWA where a plain anchor writes a 0-byte file.
-		return withExport(() => downloadExport(weeks), 'Preparing your data…', 'Downloaded.');
+		return withExport(async () => {
+			await downloadExport(weeks);
+			return 'Downloaded.';
+		});
 	}
 
 	function copyPromptAndData() {
-		return withExport(
-			async (text) => {
-				const kb = Math.round(text.length / 1024);
-				await navigator.clipboard.writeText(`${PROMPT}\n\n----- MY TRAINING DATA (JSON) -----\n${text}`);
-				setStatus(
-					kb > LARGE_PASTE_KB
-						? `Copied, but it's ≈${kb} KB — if the chat truncates it, download the file and attach it instead.`
-						: `Copied ≈${kb} KB — paste it into your assistant.`,
-				);
-			},
-			'Preparing your data…',
-			'Copied.',
-		);
+		return withExport(async (text) => {
+			const kb = Math.round(text.length / 1024);
+			await navigator.clipboard.writeText(`${PROMPT}\n\n----- MY TRAINING DATA (JSON) -----\n${text}`);
+			return kb > LARGE_PASTE_KB
+				? `Copied, but it's ≈${kb} KB — if the chat truncates it, download the file and attach it instead.`
+				: `Copied ≈${kb} KB — paste it into your assistant.`;
+		});
 	}
 
 	async function copyPrompt() {
@@ -159,7 +157,10 @@ export function GenerateFlow({ onImported }: GenerateFlowProps) {
 
 			<div class="row">
 				<span class="eyebrow">Step 2 · The prompt</span>
-				<p>Paste it into ChatGPT, Claude or Gemini with the file attached. Add anything else it should know — an injury, a busy week coming up.</p>
+				<p>
+					Paste it into ChatGPT, Claude or Gemini with the file attached. Add anything else it should know — an injury, a busy week coming
+					up.
+				</p>
 				<button type="button" class="btn-secondary" onClick={copyPrompt}>
 					Copy the prompt
 				</button>
@@ -208,7 +209,11 @@ export function GenerateFlow({ onImported }: GenerateFlowProps) {
 							</button>
 						) : (
 							<>
-								<button type="button" class="btn-secondary btn-small" onClick={() => navigator.clipboard.writeText(importErrors.join('\n'))}>
+								<button
+									type="button"
+									class="btn-secondary btn-small"
+									onClick={() => navigator.clipboard.writeText(importErrors.join('\n'))}
+								>
 									Copy these problems
 								</button>
 								<p class="eyebrow">Paste them back into the same chat and ask for a corrected plan.</p>

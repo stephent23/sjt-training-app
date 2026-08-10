@@ -1,10 +1,7 @@
 import { Hono } from 'hono';
-import type { Exercise, Loading, Modality } from '../types';
+import { LOADINGS, MODALITIES, type Exercise, type Loading, type Modality } from '../types';
 
 export const exercises = new Hono<{ Bindings: Env }>();
-
-const MODALITIES: Modality[] = ['dumbbell', 'machine', 'cable', 'bodyweight'];
-const LOADINGS: Loading[] = ['per_hand', 'total', 'bodyweight'];
 
 interface CreateExerciseInput {
 	name: string;
@@ -50,7 +47,9 @@ exercises.post('/', async (c) => {
 	const increment = loading === 'bodyweight' ? 0 : Number(body.increment_kg);
 	if (!Number.isFinite(increment) || increment < 0 || increment > 50) return c.json({ error: 'invalid increment_kg' }, 400);
 
-	const duplicate = await c.env.DB.prepare(`SELECT id FROM exercises WHERE lower(name) = lower(?) LIMIT 1`).bind(name).first<{ id: number }>();
+	const duplicate = await c.env.DB.prepare(`SELECT id FROM exercises WHERE lower(name) = lower(?) LIMIT 1`)
+		.bind(name)
+		.first<{ id: number }>();
 	if (duplicate) return c.json({ error: `${name} is already in the catalogue` }, 409);
 
 	const row = await c.env.DB.prepare(
