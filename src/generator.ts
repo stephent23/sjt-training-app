@@ -61,6 +61,9 @@ export interface ExportContext {
 	historyWindow: HistoryWindow;
 	skippedSessions: SessionRow[];
 	goals: string;
+	/** Tick-box goals from settings — a fixed vocabulary the prompt can explain,
+	 * alongside the free text. See GOAL_TAG_GROUPS in src/types.ts. */
+	goalTags: string[];
 	daysPerWeek: number;
 	exerciseCatalogue: Exercise[];
 	painFlags: PainFlags;
@@ -150,8 +153,11 @@ interface LoggedRunRow {
  * copies, no further queries.
  */
 export async function buildExportContext(db: D1Database, weekCount: number): Promise<ExportContext> {
-	const settingsRow = await db.prepare(`SELECT * FROM settings WHERE id = 1`).first<{ id: number; goals: string; days_per_week: number }>();
+	const settingsRow = await db
+		.prepare(`SELECT * FROM settings WHERE id = 1`)
+		.first<{ id: number; goals: string; days_per_week: number; goal_tags: string }>();
 	const goals = settingsRow?.goals ?? '';
+	const goalTags = parseGoalTags(settingsRow?.goal_tags);
 	const daysPerWeek = settingsRow?.days_per_week ?? 5;
 
 	const { results: exerciseCatalogue } = await db.prepare(`SELECT * FROM exercises`).all<Exercise>();
@@ -177,6 +183,7 @@ export async function buildExportContext(db: D1Database, weekCount: number): Pro
 			historyWindow: { loggedSets: [], loggedRuns: [] },
 			skippedSessions: [],
 			goals,
+			goalTags,
 			daysPerWeek,
 			exerciseCatalogue,
 			painFlags,
@@ -376,10 +383,23 @@ export async function buildExportContext(db: D1Database, weekCount: number): Pro
 		historyWindow,
 		skippedSessions,
 		goals,
+		goalTags,
 		daysPerWeek,
 		exerciseCatalogue,
 		painFlags,
 	};
+}
+
+/** Same lenient read as the settings route: goal_tags is JSON in a TEXT column,
+ * and an unreadable value should mean "no tags", not a failed export. */
+function parseGoalTags(raw: string | undefined): string[] {
+	if (!raw) return [];
+	try {
+		const parsed = JSON.parse(raw);
+		return Array.isArray(parsed) ? parsed.filter((t): t is string => typeof t === 'string') : [];
+	} catch {
+		return [];
+	}
 }
 
 /**

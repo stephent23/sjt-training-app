@@ -54,9 +54,10 @@ branches simply carry the earlier commits with them.
       `week.focus` string. *Done: 15 new tests. Two existing fixtures built every week from week 1's
       template without shifting the date — unrealistic, and the new overlap rule caught them.
       `RunStructure` hardening moved to stage 4, where the run work lives.*
-- [ ] **3 · Structured goals** (migration 0006). `settings.goal_tags` JSON array; validated slug
+- [x] **3 · Structured goals** (migration 0006). `settings.goal_tags` JSON array; validated slug
       vocabulary in `src/types.ts`; `GoalsEditor` becomes always-visible with objective, emphasis
-      and constraint tick boxes plus free text; export carries `goalTags`.
+      and constraint tick boxes plus free text; export carries `goalTags`. *Done. Migration applied
+      locally only — **run `npm run db:migrate:remote` before deploying** (see merge checklist).*
 - [ ] **4 · Run data** (migration 0007). `logged_runs` gains `max_hr`, `avg_cadence_spm`,
       `elevation_gain_m`, `aerobic_training_effect`, all nullable. Validate them — and `avg_hr`,
       which is currently bound unchecked. Optionals behind a "From your watch" disclosure; add the
@@ -88,6 +89,18 @@ branches simply carry the earlier commits with them.
       duplication the stages introduced, shorten anything that grew a wrapper it didn't need, and
       re-read every new comment for whether it still earns its place. No behaviour change — the
       suite must stay green throughout. Run the `simplify` skill over the full diff against `main`.
+
+## Merge checklist
+
+Migrations added by this campaign have been applied to the **local** database only. Deliberately —
+the README records an outage caused by code shipping ahead of the remote schema, and nothing here
+has been deployed. Before deploying any of these branches:
+
+```
+npm run db:migrate:remote
+```
+
+Migrations added so far: `0006_structured_goals.sql`.
 
 ## Notes for whoever picks this up
 
