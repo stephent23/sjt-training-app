@@ -959,6 +959,9 @@ button:disabled {
 	margin: var(--s4) 0;
 	font-size: 0.9rem;
 	color: var(--muted);
+	/* Inputs never want to be as wide as a laptop. No effect on a phone, where
+	   the column is already narrower than this. */
+	max-width: 60ch;
 }
 
 .field input,
@@ -1256,4 +1259,147 @@ select:focus-visible,
 		max-width: 680px;
 		padding: var(--s6) var(--s5);
 	}
+}
+
+/* ---- Numbered steps (Generate) ----------------------------------------------
+   A rule and a mono numeral rather than a filled badge: the number tells you
+   where you are in a three-part process, which is information, not decoration.
+   The body is indented under the numeral so the sequence reads as a column —
+   except on the narrowest screens, where 34px of indent costs more than the
+   alignment is worth. */
+
+.step {
+	border-top: 1px solid var(--rule);
+	padding: var(--s5) 0 var(--s6);
+}
+
+.step:first-of-type {
+	border-top: 0;
+	padding-top: 0;
+}
+
+.step-head {
+	display: flex;
+	align-items: baseline;
+	gap: var(--s3);
+}
+
+.step-n {
+	flex: 0 0 auto;
+	width: 22px;
+	font-family: var(--mono);
+	font-size: 11px;
+	font-weight: 500;
+	letter-spacing: 0.1em;
+	color: var(--muted-2);
+}
+
+.step--active .step-n {
+	color: var(--accent);
+}
+
+.step-body {
+	margin-left: 34px;
+}
+
+@media (max-width: 520px) {
+	.step-body {
+		margin-left: 0;
+	}
+}
+
+/* ---- Panel ------------------------------------------------------------------
+   A hairline box for content that is genuinely secondary to what sits beside
+   it. Used by the Generate aside; deliberately not a "card" — there are no
+   shadows in this system and nothing floats. */
+
+.panel {
+	border: 1px solid var(--rule);
+	border-radius: var(--radius);
+	background: var(--surface);
+}
+
+.panel-head {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: var(--s1) var(--s3);
+	padding: var(--s3) var(--s4);
+	border-bottom: 1px solid var(--rule);
+}
+
+.panel-head > * {
+	min-width: 0;
+}
+
+/* ---- Split screen -----------------------------------------------------------
+   One column on a phone, two on a laptop, with genuinely secondary material in
+   the second. Generate uses it to put the prompt beside the three steps rather
+   than two screens below them — on a phone the same prompt stays where it was,
+   inside a disclosure, because there is nowhere else for it to go. */
+
+.screen-aside {
+	display: none;
+}
+
+@media (min-width: 900px) {
+	.screen--split {
+		max-width: 1080px;
+	}
+
+	.screen-split {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) 320px;
+		gap: var(--s6);
+		align-items: start;
+	}
+
+	.screen-aside {
+		display: block;
+		position: sticky;
+		top: var(--s5);
+	}
+
+	/* The disclosure exists so a phone can reach the prompt at all. With the
+	   aside on screen it would be the same text twice. */
+	.disclosure--prompt {
+		display: none;
+	}
+}
+
+/* A link that is really an action — Today's "Start the session" navigates, so
+   it is an anchor, but it has to look and size like the primary button. Without
+   this it inherits the global link underline and left-aligns its label. */
+a.btn-primary,
+a.btn-secondary {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	text-decoration: none;
+}
+
+/* A whole-row link carries its affordance through the chevron and the row's own
+   hairline, so it does not need the global link underline — which struck a line
+   under the date, the title and the meta separately and made every list row
+   look ruled. */
+a.row,
+a.plan-row {
+	text-decoration: none;
+}
+
+/* An expanded exercise card becomes a .panel, which draws a border round it —
+   but .exercise-card-body has no horizontal padding of its own (it never needed
+   any while the card was open to the page), so its contents sat flush against
+   that new border. Scoped to the boxed case so a collapsed card is unaffected. */
+.exercise-card.panel > .exercise-card-body {
+	padding: var(--s4);
+}
+
+/* The prescription line — "3 × 8-10 @ 22kg" — is a figure, not a label, and
+   .eyebrow's uppercasing turns the unit into "20KG", which reads as shouting.
+   Keeps the mono, size and colour; drops the shouting. */
+.eyebrow--plain {
+	text-transform: none;
+	letter-spacing: 0.02em;
 }

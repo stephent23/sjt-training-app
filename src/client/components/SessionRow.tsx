@@ -18,6 +18,12 @@ function statusBadge(s: SessionSummary) {
 }
 
 function metaLine(s: SessionSummary): string {
+	// A skipped session has no result to show, and showing the planned target
+	// anyway made it look like an ordinary upcoming row — the only tell was the
+	// small status badge above. Say plainly that it didn't happen instead, so
+	// skipped reads from the meta line itself and not just from a colour.
+	if (s.status === 'skipped') return 'Not done';
+
 	if (s.kind === 'lift') {
 		const exercises = `${s.exercise_count} exercise${s.exercise_count === 1 ? '' : 's'}`;
 		const sets = `${s.planned_set_count} set${s.planned_set_count === 1 ? '' : 's'}`;
@@ -34,6 +40,15 @@ function metaLine(s: SessionSummary): string {
 	if (s.target_minutes) return `${typeLabel} · ${s.target_minutes} min`;
 	if (s.target_km) return `${typeLabel} · ${s.target_km} km`;
 	return typeLabel;
+}
+
+/** "Week 4 · 5 of 5 done" — the non-collapsible heading (Today, History)
+ * doesn't fold anything away, so it has no need for `weekSummary`'s
+ * lift/run breakdown, but it can still say how much of the week actually
+ * happened rather than just naming it. */
+function weekHeading(week: number, items: SessionSummary[]): string {
+	const done = items.filter((s) => s.status === 'completed').length;
+	return `Week ${week} · ${done} of ${items.length} done`;
 }
 
 /** "5 sessions · 2 lifts, 3 runs" — what a collapsed week still says about
@@ -110,7 +125,7 @@ export function SessionList({ sessions, linkFor, emptyMessage, onReschedule, col
 							<span class="plan-row-chevron">{isOpen(groupIndex) ? '⌄' : '›'}</span>
 						</button>
 					) : (
-						<h2 class="section-heading">Week {g.week}</h2>
+						<h2 class="section-heading">{weekHeading(g.week, g.items)}</h2>
 					)}
 					{isOpen(groupIndex) &&
 						g.items.map((s) => (
