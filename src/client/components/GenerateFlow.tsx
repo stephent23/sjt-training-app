@@ -125,103 +125,136 @@ export function GenerateFlow({ onImported }: GenerateFlowProps) {
 		await submit(await file.text(), false);
 	}
 
+	// The three steps, with the prompt beside them on a laptop and inside a
+	// disclosure on a phone. `.step--active` marks where you are: step 1 until
+	// the export has been fetched, then step 3 — step 2 is a trip out to another
+	// app, and there is nothing to do here while it happens.
 	return (
-		<div>
-			<p class="eyebrow" role="status" aria-live="polite">
-				{status || ' '}
-			</p>
-
-			<div class="row">
-				<span class="eyebrow">Step 1 · Your data</span>
-				<label class="field">
-					How many weeks
-					<input
-						type="number"
-						inputmode="numeric"
-						min={1}
-						max={12}
-						value={weeks}
-						onInput={(e) => setWeeks(Number((e.target as HTMLInputElement).value))}
-					/>
-				</label>
-				<p>Download the file to attach it, or copy the prompt and your data together as one paste — easier on a phone.</p>
-				<button type="button" class="btn-primary" onClick={handleDownload} disabled={downloading}>
-					{downloading ? 'Preparing…' : 'Download your training data'}
-				</button>
-				<button type="button" class="btn-secondary" onClick={copyPromptAndData} disabled={downloading}>
-					Copy prompt + data as one paste
-				</button>
-				{downloadError && <p class="eyebrow eyebrow--accent">{downloadError}</p>}
-				{dataNote && <p class="eyebrow">{dataNote}</p>}
-			</div>
-
-			<div class="row">
-				<span class="eyebrow">Step 2 · The prompt</span>
-				<p>
-					Paste it into ChatGPT, Claude or Gemini with the file attached. Add anything else it should know — an injury, a busy week coming
-					up.
+		<div class="screen-split">
+			<div>
+				<p class="hint" role="status" aria-live="polite">
+					{status || ' '}
 				</p>
-				<button type="button" class="btn-secondary" onClick={copyPrompt}>
-					Copy the prompt
-				</button>
-				<details class="disclosure">
-					<summary class="disclosure-summary">Read the prompt</summary>
-					<div class="disclosure-body">
-						<pre class="prompt-preview">{PROMPT}</pre>
+
+				<div class={`step ${dataNote === null ? 'step--active' : ''}`}>
+					<div class="step-head">
+						<span class="step-n">01</span>
+						<h2>Your data</h2>
 					</div>
-				</details>
-			</div>
-
-			<div class="row">
-				<span class="eyebrow">Step 3 · The answer</span>
-				<p>Upload the JSON file your assistant produced, or paste its reply. The explanation can stay in — we'll find the plan.</p>
-				<label class="field">
-					Upload the answer
-					<input type="file" accept="application/json,.json,text/plain" onChange={handleFile} disabled={busy} />
-				</label>
-
-				<details class="disclosure">
-					<summary class="disclosure-summary">Or paste it instead</summary>
-					<div class="disclosure-body">
+					<div class="step-body">
+						<p class="hint">Download the file to attach it, or copy the prompt and your data together as one paste — easier on a phone.</p>
 						<label class="field">
-							Assistant's reply
-							<textarea rows={6} value={pasted} onInput={(e) => setPasted((e.target as HTMLTextAreaElement).value)} />
+							How many weeks
+							<input
+								type="number"
+								inputmode="numeric"
+								min={1}
+								max={12}
+								value={weeks}
+								onInput={(e) => setWeeks(Number((e.target as HTMLInputElement).value))}
+							/>
 						</label>
-						<button type="button" class="btn-primary" onClick={() => submit(pasted, false)} disabled={busy || pasted.trim() === ''}>
-							{busy ? 'Importing…' : 'Import'}
+						<button type="button" class="btn-primary" onClick={handleDownload} disabled={downloading}>
+							{downloading ? 'Preparing…' : 'Download your training data'}
 						</button>
+						<button type="button" class="btn-secondary" onClick={copyPromptAndData} disabled={downloading}>
+							Copy prompt + data as one paste
+						</button>
+						{downloadError && <p class="eyebrow eyebrow--accent">{downloadError}</p>}
+						{dataNote && <p class="hint">{dataNote}</p>}
 					</div>
-				</details>
+				</div>
 
-				{importErrors.length > 0 && (
-					<>
-						<p class="eyebrow eyebrow--accent">
-							{importErrors.length === 1 ? 'That plan was rejected' : `${importErrors.length} problems — the plan was rejected`}
+				<div class="step">
+					<div class="step-head">
+						<span class="step-n">02</span>
+						<h2>The prompt</h2>
+					</div>
+					<div class="step-body">
+						<p class="hint">
+							Paste it into ChatGPT, Claude or Gemini with the file attached. Add anything else it should know — an injury, a busy week
+							coming up.
 						</p>
-						<ul class="error-list">
-							{importErrors.map((message, i) => (
-								<li key={i}>{message}</li>
-							))}
-						</ul>
-						{canReplace ? (
-							<button type="button" class="btn-secondary" onClick={() => submit(pasted, true)} disabled={busy || pasted.trim() === ''}>
-								Replace the pending plan
-							</button>
-						) : (
-							<>
-								<button
-									type="button"
-									class="btn-secondary btn-small"
-									onClick={() => navigator.clipboard.writeText(importErrors.join('\n'))}
-								>
-									Copy these problems
+						<button type="button" class="btn-secondary" onClick={copyPrompt}>
+							Copy the prompt
+						</button>
+						<details class="disclosure disclosure--prompt">
+							<summary class="disclosure-summary">Read the prompt</summary>
+							<div class="disclosure-body">
+								<pre class="prompt-preview">{PROMPT}</pre>
+							</div>
+						</details>
+					</div>
+				</div>
+
+				<div class={`step ${dataNote !== null ? 'step--active' : ''}`}>
+					<div class="step-head">
+						<span class="step-n">03</span>
+						<h2>The answer</h2>
+					</div>
+					<div class="step-body">
+						<p class="hint">
+							Upload the JSON file your assistant produced, or paste its reply. The explanation can stay in — we'll find the plan.
+						</p>
+						<label class="field">
+							Upload the answer
+							<input type="file" accept="application/json,.json,text/plain" onChange={handleFile} disabled={busy} />
+						</label>
+
+						<details class="disclosure">
+							<summary class="disclosure-summary">Or paste it instead</summary>
+							<div class="disclosure-body">
+								<label class="field">
+									Assistant's reply
+									<textarea rows={6} value={pasted} onInput={(e) => setPasted((e.target as HTMLTextAreaElement).value)} />
+								</label>
+								<button type="button" class="btn-primary" onClick={() => submit(pasted, false)} disabled={busy || pasted.trim() === ''}>
+									{busy ? 'Importing…' : 'Import'}
 								</button>
-								<p class="eyebrow">Paste them back into the same chat and ask for a corrected plan.</p>
+							</div>
+						</details>
+
+						{importErrors.length > 0 && (
+							<>
+								<p class="eyebrow eyebrow--accent">
+									{importErrors.length === 1 ? 'That plan was rejected' : `${importErrors.length} problems — the plan was rejected`}
+								</p>
+								<ul class="error-list">
+									{importErrors.map((message, i) => (
+										<li key={i}>{message}</li>
+									))}
+								</ul>
+								{canReplace ? (
+									<button type="button" class="btn-secondary" onClick={() => submit(pasted, true)} disabled={busy || pasted.trim() === ''}>
+										Replace the pending plan
+									</button>
+								) : (
+									<>
+										<button
+											type="button"
+											class="btn-secondary btn-small"
+											onClick={() => navigator.clipboard.writeText(importErrors.join('\n'))}
+										>
+											Copy these problems
+										</button>
+										<p class="hint">Paste them back into the same chat and ask for a corrected plan.</p>
+									</>
+								)}
 							</>
 						)}
-					</>
-				)}
+					</div>
+				</div>
 			</div>
+
+			<aside class="screen-aside">
+				<div class="panel">
+					<div class="panel-head">
+						<h2>The prompt</h2>
+						<span class="eyebrow">{PROMPT.split('\n').length} lines</span>
+					</div>
+					<pre class="prompt-preview">{PROMPT}</pre>
+				</div>
+			</aside>
 		</div>
 	);
 }

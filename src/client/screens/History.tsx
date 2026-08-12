@@ -18,6 +18,7 @@ export function History() {
 	return (
 		<main class="screen">
 			<h1>History</h1>
+			<p class="lede">Everything logged, newest first. Tap a session to see what happened, or fix what you recorded.</p>
 			{error ? (
 				<>
 					<p>{error}</p>

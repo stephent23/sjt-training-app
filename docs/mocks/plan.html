@@ -1,209 +1,139 @@
 <!doctype html>
 <!--
   THROWAWAY VISUAL REFERENCE — not production code.
-  Mock of the Plan screen for docs/design-rethink.md §4.2. Self-contained, no external
-  requests. Week 4 of an ongoing block; the weekly shape (Lift A / Easy run / Lift B /
-  Intervals / Long run) is the one in seeds/week1_sessions.sql. Shows the current week
-  open with a progress ring, later weeks collapsed, one row with the reschedule chips
-  revealed, plus the cold-start empty state.
+
+  Plan, on the refined system (docs/mocks/system.css). Markup only.
+
+  Weeks collapse, current week open — behaviour the real app now has. A folded
+  week still states what is in it, so folding it doesn't make it a mystery.
+  Week 6 is a deload and says so.
+
+  Desktop call: .content--single. There is nothing genuinely secondary on this
+  screen — the week list IS the screen, and inventing a sidebar for it would be
+  filling a slot rather than answering a need.
+
+  States: normal, and empty.
 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Mock · Plan</title>
-<style>
-:root{
---bg:#f4f5f8;--surface:#fff;--surface-2:#eef0f5;--line:#e4e7ef;
---ink:#12141a;--ink-2:#565d6e;--ink-3:#676e7e;
---brand:#3d34d4;--brand-ink:#3d34d4;--on-brand:#fff;--brand-soft:#eceafc;
---done-fill:#17795e;--done-ink:#146a53;--done-soft:#e3f4ee;
---r-lg:22px;--r-pill:999px;
---shadow-1:0 1px 2px rgba(16,18,26,.06),0 10px 24px -16px rgba(16,18,26,.28);
---card-border:0 0 0 0 transparent;
---sans:"Plus Jakarta Sans","SF Pro Rounded",system-ui,-apple-system,"Segoe UI Variable Display","Segoe UI",Roboto,sans-serif;
---mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
---nav-h:62px;color-scheme:light dark;
-}
-@media(prefers-color-scheme:dark){:root{
---bg:#0f1116;--surface:#171a21;--surface-2:#1f232c;--line:#272c37;
---ink:#f3f5f9;--ink-2:#99a1b3;--ink-3:#8b93a5;
---brand:#5b51e8;--brand-ink:#a79eff;--brand-soft:#1e1f3d;
---done-fill:#1f9b78;--done-ink:#5be0ae;--done-soft:#14312a;
---shadow-1:none;--card-border:inset 0 0 0 1px rgba(255,255,255,.06);}}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);font:400 16px/1.5 var(--sans);-webkit-font-smoothing:antialiased}
-.phone{max-width:430px;margin:0 auto;padding:0 16px calc(var(--nav-h) + 28px);min-height:100dvh}
-.eyebrow{font:700 12px/1.2 var(--sans);letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);display:block}
-.h1{font:800 28px/1.15 var(--sans);letter-spacing:-.02em;margin:14px 0 14px}
-.h2{font:700 19px/1.25 var(--sans);letter-spacing:-.01em;margin:0}
-.muted{color:var(--ink-2)}
-.mono{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:12.5px}
-.card{background:var(--surface);border-radius:var(--r-lg);padding:16px 18px;box-shadow:var(--shadow-1),var(--card-border);margin:0 0 14px}
-.btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:52px;border:0;border-radius:var(--r-pill);font:700 16px var(--sans);cursor:pointer}
-.btn--primary{background:var(--brand);color:var(--on-brand)}
-.btn--sm{width:auto;min-height:44px;padding:0 16px;font-size:14px;background:var(--surface-2);color:var(--ink);border-radius:var(--r-pill);border:0;font-weight:700;cursor:pointer}
-.btn:focus-visible,.btn--sm:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
-.pill{display:inline-flex;align-items:center;border-radius:var(--r-pill);padding:4px 10px;font:700 11.5px var(--sans)}
-.pill--brand{background:var(--brand-soft);color:var(--brand-ink)}
-.pill--done{background:var(--done-soft);color:var(--done-ink)}
-.badge{width:34px;height:34px;border-radius:11px;display:grid;place-items:center;flex:0 0 auto;background:var(--brand-soft);color:var(--brand-ink)}
-.badge--run{background:var(--surface-2);color:var(--ink)}
-.ic{width:19px;height:19px;display:block}
-.hdr{display:flex;align-items:center;gap:13px;width:100%;background:none;border:0;color:inherit;padding:0;cursor:pointer;text-align:left;min-height:48px}
-.row{display:flex;align-items:center;gap:11px;width:100%;padding:12px 0;text-decoration:none;color:inherit}
-.row+.row,.rows{border-top:1px solid var(--line)}
-.rows{margin-top:12px;padding-top:2px}
-.row-main{flex:1 1 auto;min-width:0}
-.row-title{font:700 15px/1.3 var(--sans);display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.row-meta{display:block;font:500 13px/1.4 var(--sans);color:var(--ink-2)}
-.row--done .row-title{color:var(--ink-2)}
-.row--today{box-shadow:inset 3px 0 0 var(--brand);padding-left:12px;margin-left:-12px;border-radius:3px}
-.chev{color:var(--ink-3);flex:0 0 auto}
-.tick{width:24px;height:24px;border-radius:50%;background:var(--done-fill);color:#fff;display:grid;place-items:center;flex:0 0 auto}
-.day{width:34px;flex:0 0 auto;text-align:center}
-.day b{display:block;font:800 17px var(--sans);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
-.day s{display:block;text-decoration:none;font:700 10px var(--sans);letter-spacing:.08em;color:var(--ink-3)}
-.ring{position:relative;width:48px;height:48px;border-radius:50%;display:grid;place-items:center;flex:0 0 auto}
-.ring::before{content:"";position:absolute;inset:6px;border-radius:50%;background:var(--surface)}
-.ring span{position:relative;font:800 12px var(--sans);font-variant-numeric:tabular-nums}
-.chips{display:flex;flex-wrap:wrap;gap:7px;margin:4px 0 12px}
-.chip{min-height:48px;flex:1 1 40px;border:0;border-radius:13px;background:var(--surface-2);color:var(--ink);font:700 14px var(--sans);cursor:pointer}
-.chip[aria-pressed="true"]{background:var(--brand);color:var(--on-brand)}
-.skel{background:var(--surface-2);border-radius:10px}
-.tabbar{position:fixed;left:50%;transform:translateX(-50%);bottom:0;width:100%;max-width:430px;display:flex;background:var(--surface);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom);z-index:20}
-.tabbar a{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-height:var(--nav-h);color:var(--ink-3);font:600 11px var(--sans);text-decoration:none}
-.tabbar a[aria-current]{color:var(--brand-ink)}
-.demo{display:flex;gap:6px;border:1px dashed var(--line);border-radius:14px;padding:6px;margin:12px 0 4px}
-.demo button{flex:1;min-height:38px;border:0;border-radius:9px;background:var(--surface-2);color:var(--ink-2);font:700 12px var(--sans);cursor:pointer}
-.demo button.on{background:var(--brand);color:var(--on-brand)}
-[hidden]{display:none!important}
-@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
-</style>
+<link rel="stylesheet" href="system.css">
 </head>
 <body>
-<div class="phone">
+<div class="shell">
 
-  <div class="demo">
-    <button class="on" data-state="plan">Plan</button>
-    <button data-state="empty">Empty</button>
-    <button data-state="loading">Loading</button>
-  </div>
+  <nav class="nav" aria-label="Sections">
+    <span class="brand">Training</span>
+    <a href="today.html">Today</a>
+    <a href="plan.html" aria-current="page">Plan</a>
+    <a href="generate.html">Generate</a>
+    <a href="history.html">History</a>
+  </nav>
 
-  <h1 class="h1">Plan</h1>
+  <div class="content content--single">
+    <main class="main">
 
-  <!-- ── Current week: open, ring in the header ───────────────────────────── -->
-  <div data-panel="plan">
-    <div class="card">
-      <button class="hdr">
-        <span class="ring" style="background:conic-gradient(var(--done-fill) 8%,var(--surface-2) 0)"><span>0/5</span></span>
-        <span class="row-main">
-          <span class="h2">Week 4</span>
-          <span class="row-meta">5 sessions · 2 lifts, 3 runs · Build</span>
-        </span>
-        <svg class="ic chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="m5 9 7 7 7-7"/></svg>
-      </button>
+      <div class="demo" role="group" aria-label="Mock state">
+        <button class="on" data-state="plan">Plan</button>
+        <button data-state="empty">Empty</button>
+      </div>
 
-      <div class="rows">
-        <a class="row row--today" href="#">
-          <span class="day"><b>24</b><s>MON</s></span>
-          <span class="badge"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M4 9v6M8 7v10M16 7v10M20 9v6M8 12h8"/></svg></span>
-          <span class="row-main"><span class="row-title">Lift A</span><span class="row-meta">6 exercises · 18 sets</span></span>
-          <span class="pill pill--brand">Today</span>
-        </a>
+      <span class="eyebrow">From today</span>
+      <h1 class="title">Plan</h1>
+      <p class="lede">Two weeks scheduled. Generate more when you get to the end of them.</p>
 
-        <a class="row" href="#">
-          <span class="day"><b>25</b><s>TUE</s></span>
-          <span class="badge badge--run"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M4 18c4 0 4-6 8-6s4-6 8-6"/></svg></span>
-          <span class="row-main"><span class="row-title">Easy run</span><span class="row-meta">30 min · 5 km</span></span>
-          <svg class="ic chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="m9 5 7 7-7 7"/></svg>
-        </a>
+      <!-- ============ PLAN ============ -->
+      <section data-view="plan">
 
-        <!-- Reschedule: no longer a permanent full-width button under every row.
-             Revealed in place, same seven 48px day chips as today. -->
-        <a class="row" href="#">
-          <span class="day"><b>26</b><s>WED</s></span>
-          <span class="badge"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M4 9v6M8 7v10M16 7v10M20 9v6M8 12h8"/></svg></span>
-          <span class="row-main"><span class="row-title">Lift B</span><span class="row-meta">6 exercises · 18 sets</span></span>
-          <svg class="ic chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="m9 5 7 7-7 7"/></svg>
-        </a>
-        <div style="padding-left:45px">
-          <span class="eyebrow" style="margin:2px 0 6px">Move to</span>
-          <div class="chips">
-            <button class="chip">M</button><button class="chip">T</button>
-            <button class="chip" aria-pressed="true">W</button><button class="chip">T</button>
-            <button class="chip">F</button><button class="chip">S</button><button class="chip">S</button>
-          </div>
+        <button class="sectionhead sectionhead--toggle" aria-expanded="true" data-week="w5">
+          <span><span class="h2">Week 5</span> <span class="meta">5 sessions · 2 lifts, 3 runs</span></span>
+          <span class="meta" aria-hidden="true">–</span>
+        </button>
+        <div data-weekbody="w5">
+          <a class="rowitem rowitem--today" href="#">
+            <span class="d">Mon 07</span>
+            <span class="t">Lift A<span class="s">Goblet squat · Neutral-grip DB press · +4</span></span>
+            <span class="k">17 sets</span>
+          </a>
+          <a class="rowitem" href="#">
+            <span class="d">Tue 08</span>
+            <span class="t">Easy run<span class="s">Conversational</span></span>
+            <span class="k">32 min</span>
+          </a>
+          <a class="rowitem" href="#">
+            <span class="d">Wed 09</span>
+            <span class="t">Lift B<span class="s">Cable pull-through · Pull-ups · +4</span></span>
+            <span class="k">17 sets</span>
+          </a>
+          <a class="rowitem" href="#">
+            <span class="d">Thu 10</span>
+            <span class="t">Intervals<span class="s">5 × 3 min comfortably hard</span></span>
+            <span class="k">42 min</span>
+          </a>
+          <a class="rowitem" href="#">
+            <span class="d">Sat 12</span>
+            <span class="t">Long run<span class="s">Steady</span></span>
+            <span class="k">9.9 km</span>
+          </a>
         </div>
 
-        <a class="row" href="#">
-          <span class="day"><b>27</b><s>THU</s></span>
-          <span class="badge badge--run"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M4 18c4 0 4-6 8-6s4-6 8-6"/></svg></span>
-          <span class="row-main"><span class="row-title">Intervals</span><span class="row-meta">42.5 min · 5 × 3 min hard</span></span>
-          <button class="btn--sm" style="min-height:40px;padding:0 12px">Move</button>
-        </a>
+        <button class="sectionhead sectionhead--toggle" aria-expanded="false" data-week="w6">
+          <span><span class="h2">Week 6</span> <span class="meta">4 sessions · 2 lifts, 2 runs</span> <span class="flag flag--accent">Deload</span></span>
+          <span class="meta" aria-hidden="true">+</span>
+        </button>
+        <div data-weekbody="w6" hidden>
+          <a class="rowitem" href="#">
+            <span class="d">Mon 14</span>
+            <span class="t">Lift A<span class="s">Working weights down ~12%, a set off each</span></span>
+            <span class="k">12 sets</span>
+          </a>
+          <a class="rowitem" href="#">
+            <span class="d">Wed 16</span>
+            <span class="t">Lift B<span class="s">Working weights down ~12%, a set off each</span></span>
+            <span class="k">12 sets</span>
+          </a>
+          <a class="rowitem" href="#">
+            <span class="d">Thu 17</span>
+            <span class="t">Easy run<span class="s">No quality session this week</span></span>
+            <span class="k">30 min</span>
+          </a>
+          <a class="rowitem" href="#">
+            <span class="d">Sat 19</span>
+            <span class="t">Long run<span class="s">Shortened</span></span>
+            <span class="k">7.5 km</span>
+          </a>
+        </div>
+      </section>
 
-        <a class="row" href="#">
-          <span class="day"><b>29</b><s>SAT</s></span>
-          <span class="badge badge--run"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M4 18c4 0 4-6 8-6s4-6 8-6"/></svg></span>
-          <span class="row-main"><span class="row-title">Long run</span><span class="row-meta">60 min · 9 km</span></span>
-          <svg class="ic chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="m9 5 7 7-7 7"/></svg>
-        </a>
-      </div>
-    </div>
-
-    <!-- ── Later weeks: collapsed, summary line intact ───────────────────── -->
-    <div class="card">
-      <button class="hdr">
-        <span class="ring" style="background:conic-gradient(var(--surface-2) 0 100%)"><span>0/5</span></span>
-        <span class="row-main"><span class="h2">Week 5</span><span class="row-meta">5 sessions · 2 lifts, 3 runs</span></span>
-        <svg class="ic chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="m9 5 7 7-7 7"/></svg>
-      </button>
-    </div>
-
-    <div class="card">
-      <button class="hdr">
-        <span class="ring" style="background:conic-gradient(var(--surface-2) 0 100%)"><span>0/4</span></span>
-        <span class="row-main"><span class="h2">Week 6 <span class="pill" style="background:var(--surface-2);color:var(--ink-2);margin-left:4px">Deload</span></span><span class="row-meta">4 sessions · 2 lifts, 2 runs</span></span>
-        <svg class="ic chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="m9 5 7 7-7 7"/></svg>
-      </button>
-    </div>
+      <!-- ============ EMPTY ============ -->
+      <section data-view="empty" hidden>
+        <p class="empty">Nothing planned. Head to Generate to build the next few weeks from what you've logged.</p>
+        <div class="row"><button class="btn btn--primary">Generate a plan</button></div>
+      </section>
+    </main>
   </div>
-
-  <!-- ── Empty: the cold-start screen. A card and a route out, not a sentence. ─ -->
-  <div data-panel="empty" hidden>
-    <div class="card" style="text-align:center;padding:34px 20px">
-      <div style="font:800 22px var(--sans);letter-spacing:-.02em">No plan yet</div>
-      <p class="muted" style="margin:8px 0 22px">Export your data, hand it to an assistant, bring a plan back.</p>
-      <button class="btn btn--primary">Generate a plan</button>
-    </div>
-  </div>
-
-  <!-- ── Loading: three skeleton week cards, the first taller ─────────────── -->
-  <div data-panel="loading" hidden>
-    <div class="card">
-      <div class="hdr"><div class="skel" style="width:48px;height:48px;border-radius:50%"></div>
-        <div style="flex:1"><div class="skel" style="width:90px;height:18px"></div><div class="skel" style="width:170px;height:12px;margin-top:8px"></div></div></div>
-      <div class="rows"><div class="skel" style="height:44px;margin:10px 0"></div><div class="skel" style="height:44px;margin:10px 0"></div><div class="skel" style="height:44px;margin:10px 0"></div></div>
-    </div>
-    <div class="card"><div class="hdr"><div class="skel" style="width:48px;height:48px;border-radius:50%"></div><div style="flex:1"><div class="skel" style="width:90px;height:18px"></div></div></div></div>
-    <div class="card"><div class="hdr"><div class="skel" style="width:48px;height:48px;border-radius:50%"></div><div style="flex:1"><div class="skel" style="width:90px;height:18px"></div></div></div></div>
-  </div>
-
 </div>
 
-<nav class="tabbar">
-  <a href="today.html"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M4 11 12 4l8 7v8a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1z"/></svg>Today</a>
-  <a href="plan.html" aria-current="page"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><rect x="3.5" y="5" width="17" height="15" rx="3"/><path d="M8 3v4M16 3v4M3.5 10h17"/></svg>Plan</a>
-  <a href="history.html"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5.5l3.5 2"/></svg>History</a>
-  <a href="generate.html"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M12 4v16M4 12h16"/></svg>Generate</a>
-</nav>
-
 <script>
-document.querySelectorAll('.demo button').forEach(b => b.onclick = () => {
-  document.querySelectorAll('.demo button').forEach(x => x.classList.toggle('on', x === b));
-  document.querySelectorAll('[data-panel]').forEach(p => p.hidden = p.dataset.panel !== b.dataset.state);
-});
+  const buttons = [...document.querySelectorAll('.demo button')];
+  buttons.forEach((b) => b.addEventListener('click', () => {
+    buttons.forEach((x) => x.classList.toggle('on', x === b));
+    document.querySelectorAll('[data-view]').forEach((v) => { v.hidden = v.dataset.view !== b.dataset.state; });
+  }));
+
+  // Independent toggles, not an accordion — comparing this week with next is a
+  // reasonable thing to want.
+  document.querySelectorAll('[data-week]').forEach((head) => {
+    head.addEventListener('click', () => {
+      const body = document.querySelector(`[data-weekbody="${head.dataset.week}"]`);
+      const open = body.hidden;
+      body.hidden = !open;
+      head.setAttribute('aria-expanded', String(open));
+      head.querySelector('[aria-hidden]').textContent = open ? '–' : '+';
+    });
+  });
 </script>
 </body>
 </html>

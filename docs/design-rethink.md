@@ -84,164 +84,135 @@ and the owner's actual complaint is that the app does not feel like an app.
 
 ## 2. Typeface
 
-The single highest-leverage change, and the one that most makes or breaks the resemblance.
+**Keep IBM Plex Sans.** The first pass recommended replacing it with Plus Jakarta Sans, on the
+grounds that Plex is "a humanist grotesque with an engineering-drawing flavour — precisely wrong
+for friendly-geometric". That reasoning was sound for the target it had; the target moved. The
+engineering-drawing flavour is exactly what the sophisticated reading wants, and swapping it for a
+geometric face was one of the things that made the first mocks read as childish. A rounded face in
+the stack (`SF Pro Rounded` sat in the fallbacks) made it worse.
 
-IBM Plex Sans is a humanist grotesque with an engineering-drawing flavour — precisely wrong for
-friendly-geometric. Recommend self-hosting **Plus Jakarta Sans** (OFL, variable, 200–800) as
-`--sans`. It has the geometric roundness with enough personality not to read as Poppins, and the
-heavy weights hold up at display sizes, which is the whole point (`800` for numerals). Figtree or
-Outfit are acceptable substitutes; Poppins is not — its perfectly circular bowls fall apart in
-running text.
+So: no new font, no new bytes, nothing to self-host. What changes is how it is used.
 
-Mechanically this is the same operation the repo already does: one `.woff2` in `public/fonts/`,
-one `@font-face`, one `<link rel="preload">` in `public/index.html`. Keep
-`ibm-plex-mono-latin.woff2` for the table figures; drop `ibm-plex-sans-var-latin.woff2` entirely
-so the byte count does not grow.
+- **Three weights, and that is the entire set.** 400 for body, 500 for emphasis and controls, 600
+  for headings. The first pass used 800 for headings, chips, pills, buttons and numerals at once,
+  which flattens hierarchy — when everything is bold, nothing is. Hierarchy now comes from size
+  and colour, which is the harder and quieter way to do it.
+- **Every figure is IBM Plex Mono, tabular.** Weights, reps, RIR, distances, paces, dates, counts,
+  week numbers. This single rule does more for the sophisticated read than any other: columns of
+  figures that line up make the app read as an instrument rather than a toy, and it costs nothing
+  because the mono face is already self-hosted.
+- **Eyebrows are mono, uppercase, letterspaced** (`.13em`) — small, quiet, and clearly a label
+  rather than a heading.
 
-**Check before committing**: confirm the chosen variable font ships `tnum`. If it does not,
-numerals in the week strip and progress counters will shimmer as they change, and `--mono` has to
-keep those too.
+No `tnum` verification is needed any more, which was an open risk in the first pass: Plex Mono is
+already tabular by construction.
 
 ---
 
 ## 3. Tokens
 
-Drop-in replacement for the `:root` block. Names change (`--paper` → `--surface`, `--accent` →
-`--brand`) because the meanings changed; keep the old names as aliases for one or two stages of
-the migration (§6) so the file stays green while screens move over.
+The full set lives in `docs/mocks/system.css` and is the file to port — it is written to drop into
+`public/styles.css`. Reproduced here with the reasoning.
 
 ```css
 :root {
-	/* Surfaces — a tinted ground so white cards lift off it. This is the
-	   mechanism the whole look rests on; a white-on-white page has no cards. */
-	--bg: #f4f5f8;
-	--surface: #ffffff;
-	--surface-2: #eef0f5;   /* inset: chips, tracks, code, quiet buttons */
-	--surface-3: #e6e9f1;   /* pressed state of the above */
-	--line: #e4e7ef;        /* hairline — now rare, used inside cards only */
+	/* Warm stone neutrals, biased slightly toward the claret so the accent
+	   belongs to the page rather than sitting on top of it. */
+	--bg: #f5f3f1;
+	--surface: #fffefd;
+	--surface-2: #eeeae7;
+	--line: #e0dad5;
+	--line-strong: #cdc4bd;
+	--ink: #1b1614;
+	--ink-2: #5d5450;
+	--ink-3: #6f645e;
 
-	/* Ink */
-	--ink: #12141a;
-	--ink-2: #565d6e;       /* secondary text, meta lines */
-	--ink-3: #676e7e;       /* eyebrows, disabled labels */
+	--accent: #96262b; /* the existing claret, unchanged */
+	--accent-ink: #96262b;
+	--accent-soft: #f7ecec;
+	--on-accent: #fffefd;
 
-	/* Brand — used confidently: primary fills, selected chips, rings, today */
-	--brand: #3d34d4;       /* fill */
-	--brand-ink: #3d34d4;   /* brand-coloured text on --surface/--bg */
-	--on-brand: #ffffff;    /* text/icons on a --brand fill */
-	--brand-soft: #eceafc;  /* tinted card / selected-adjacent background */
+	--done: #4a5a4d; /* desaturated moss — state, not a second brand */
+	--done-soft: #eaeeea;
 
-	/* Completion */
-	--done-fill: #17795e;   /* tick backgrounds, ring fill */
-	--done-ink: #146a53;    /* "Done" text */
-	--done-soft: #e3f4ee;
-
-	/* Destructive / alert — the old claret, kept, demoted to this role only */
-	--warn: #96262b;
-	--warn-soft: #fbeced;
-
-	/* Radius — the other half of the look. Cards are properly round. */
-	--r-sm: 10px;   /* chips, inputs */
-	--r-md: 16px;   /* inner blocks, sheets */
-	--r-lg: 22px;   /* cards */
-	--r-pill: 999px;
-
-	/* Elevation. Dark mode replaces these with lightness + a hairline (below):
-	   a shadow on a near-black ground is invisible, so cards would vanish. */
-	--shadow-1: 0 1px 2px rgba(16, 18, 26, 0.06), 0 10px 24px -16px rgba(16, 18, 26, 0.28);
-	--shadow-2: 0 2px 6px rgba(16, 18, 26, 0.07), 0 18px 40px -20px rgba(16, 18, 26, 0.35);
-	--card-border: 0 0 0 0 transparent;
-
-	/* Spacing — unchanged scale, plus one step up. Runna's generosity is
-	   mostly this: 20px inside a card where the old system used 16. */
-	--s1: 0.25rem;
-	--s2: 0.5rem;
-	--s3: 0.75rem;
-	--s4: 1rem;
-	--s5: 1.5rem;
-	--s6: 2rem;
-	--s7: 2.75rem;
-
-	/* Type */
-	--sans: "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-	--mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
-	--t-display: 800 clamp(38px, 11vw, 52px) / 1.02 var(--sans);
-	--t-h1: 800 28px / 1.15 var(--sans);
-	--t-h2: 700 20px / 1.25 var(--sans);
-	--t-body: 400 16px / 1.5 var(--sans);
-	--t-label: 600 14px / 1.35 var(--sans);
-	--t-eyebrow: 700 12px / 1.2 var(--sans);
-
-	--nav-h: 60px;
+	--r: 3px;
+	--sans: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+	--mono: 'IBM Plex Mono', ui-monospace, Consolas, monospace;
+	--nav-h: 56px;
 	color-scheme: light dark;
-}
-
-@media (prefers-color-scheme: dark) {
-	:root {
-		--bg: #0f1116;
-		--surface: #171a21;
-		--surface-2: #1f232c;
-		--surface-3: #272c37;
-		--line: #272c37;
-
-		--ink: #f3f5f9;
-		--ink-2: #99a1b3;
-		--ink-3: #8b93a5;
-
-		--brand: #5b51e8;
-		--brand-ink: #a79eff;
-		--on-brand: #ffffff;
-		--brand-soft: #1e1f3d;
-
-		--done-fill: #1f9b78;
-		--done-ink: #5be0ae;
-		--done-soft: #14312a;
-
-		--warn: #d4666b;
-		--warn-soft: #33191b;
-
-		/* Elevation by lightness, not shadow. --surface is already lighter than
-		   --bg; the hairline is what stops a card dissolving into it at the
-		   edges on an OLED phone. */
-		--shadow-1: none;
-		--shadow-2: none;
-		--card-border: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
-	}
 }
 ```
 
-Cards therefore carry `box-shadow: var(--shadow-1), var(--card-border);` — one declaration that
-does the right thing in both modes.
+Dark redefines only those tokens, never a component: `--bg #14120f`, `--surface #1c1917`,
+`--surface-2 #262220`, `--line #332e2b`, `--line-strong #453e3a`, `--ink #f3efec`,
+`--ink-2 #a89f99`, `--ink-3 #948a83`, `--accent #d4666b`, `--accent-ink #e08a8e`,
+`--accent-soft #2b1a1b`, `--on-accent #14120f`, `--done #8fa894`, `--done-soft #20261f`.
+
+### What changed from the first pass, and why
+
+**Claret survives as the accent.** `#96262b` light, `#d4666b` dark — the values already in
+`public/styles.css`, unchanged. The first pass replaced it with a saturated indigo and kept claret
+only for destructive actions. Three saturated hues (indigo brand, green done, claret warn) were
+competing for the same page. There is now **one chroma**. `--done` is a desaturated moss chosen
+specifically so it reads as a state and not as a second brand, and every state also carries a word
+so colour is never the sole signal.
+
+**Nothing is rounded.** `--r: 3px` — one radius, everywhere, and no pills. The first pass had 22px
+cards, 999px buttons and 50% step circles, which is the single loudest childish signal in it. The
+existing system's `--radius: 2px` was closer to right than the replacement was.
+
+**No shadows at all.** `--shadow-1` is gone. Elevation was doing work a hairline does more quietly,
+and it was the other half of the "app-like" softness. This also removes the awkward dark-mode
+special case the first pass needed, where shadows had to become an inset border.
+
+**The neutrals are warm, not blue-grey.** They carry a slight claret bias so the accent sits inside
+the palette rather than on top of it. A pure mid-grey reads as unconsidered.
 
 ### Contrast
 
-Computed WCAG 2.1 ratios for every pair the design actually uses. Recheck with a tool before
-committing; these are calculated, not measured.
+Measured, not estimated. All values are the token against the ground it is actually used on:
 
-| Pair | Light | Dark | Needs |
-|---|---|---|---|
-| `--ink` on `--surface` | 18.4:1 | 16.1:1 | 4.5 |
-| `--ink-2` on `--surface` | 6.6:1 | 6.7:1 | 4.5 |
-| `--ink-3` on `--bg` | 4.7:1 | 5.6:1 | 4.5 |
-| `--brand-ink` on `--surface` | 8.0:1 | 7.4:1 | 4.5 |
-| `--on-brand` on `--brand` (primary button) | 8.0:1 | 5.6:1 | 4.5 |
-| `--done-ink` on `--surface` | 6.5:1 | 11.6:1 | 4.5 |
-| white tick on `--done-fill` | 5.3:1 | 4.0:1 | 3.0 (graphic) |
-| `--on-brand` on `--warn` (destructive) | 7.7:1 | 5.0:1 | 4.5 |
+| Pair | Light | Dark |
+|---|---|---|
+| `--ink` on `--bg` | 16.2 | 16.4 |
+| `--ink-2` on `--bg` | 6.7 | 7.2 |
+| `--ink-3` on `--bg` | 5.2 | 4.9 |
+| `--ink-3` on `--surface-2` | 4.8 | 4.7 |
+| `--accent` on `--bg` | 7.3 | 5.3 |
+| `--on-accent` on `--accent` | 8.0 | 5.3 |
+| `--done` on `--bg` | 6.6 | 7.3 |
 
-Two constraints fall out and must be written into the stylesheet as comments:
-
-- **`--ink-3` is for `--surface` and `--bg` only** — on `--surface-2` it lands at 4.3:1. Chip
-  labels use `--ink`, not `--ink-3`.
-- **Dark `--done-fill` is a graphic fill only.** A white tick on it passes the 3:1 graphics
-  threshold; white *text* on it does not. "Done" as a word always uses `--done-ink`.
-
-Focus rings become `3px solid var(--brand-ink)` at `2px` offset — except on a `--brand`-filled
-control, where brand-on-brand is invisible: those get `outline: 3px solid var(--ink)`, which is
-near-black in light and near-white in dark, so it reads either way.
+Everything clears AA for small text. Two values were moved to get there, and the reason is worth
+recording: `--ink-3` carries the eyebrows and the mono figures at 11–12.5px, and the tones this
+started at measured **3.7 light** and **4.2 dark on `--surface-2`** — both under AA at that size.
+They were darkened and lightened respectively until they cleared it. This is exactly the failure
+the first pass's own contrast table missed, because it checked tokens against `--bg` only and not
+against the raised surface they also sit on.
 
 ---
 
+## 3b. Laptop and desktop
+
+The first pass was phone-only — every mock was `max-width: 430px` full stop, so a desktop browser
+showed a phone column stranded in a field of grey. The app is a PWA used in the gym, but it is also
+opened on a laptop to plan a week and to run the Generate flow, which involves a file, a prompt and
+a chat window side by side. That case deserves a real layout.
+
+One breakpoint, at **900px**:
+
+- The bottom tab bar becomes a **200px left rail**, with the labels left-aligned and the current
+  item marked by a soft claret fill rather than an underline.
+- Content becomes **two columns**: a main column and a 340px `.aside`. What goes in the aside is a
+  per-screen decision, not a slot to fill — Generate puts the full prompt there so it sits beside
+  the steps instead of two screens below them. Screens with nothing genuinely secondary use
+  `.content--single` and simply centre a 760px column.
+- **The measure stays capped either way.** A 1400px window must not produce 1400px lines.
+
+Nothing else changes across the breakpoint: same tokens, same components, same tap targets. The
+44px minimums stay at desktop sizes too — they cost nothing with a mouse and they mean the phone
+and laptop layouts are the same system rather than two designs.
+
+---
 ## 4. Page by page
 
 Each entry: **what leads** (the one thing the eye should hit first), **what recedes**, and the

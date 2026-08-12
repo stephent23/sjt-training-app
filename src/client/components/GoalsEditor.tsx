@@ -116,7 +116,7 @@ export function GoalsEditor() {
 						</button>
 					))}
 				</div>
-				<span class="eyebrow">Every generated week has to match this — a deload week may drop one.</span>
+				<p class="hint">Every generated week has to match this — a deload week may drop one.</p>
 			</div>
 
 			<p class="eyebrow" role="status" aria-live="polite">

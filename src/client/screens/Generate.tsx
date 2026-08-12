@@ -77,10 +77,13 @@ export function Generate() {
 		}
 	}
 
+	// `screen--split` only widens the column; the two-column layout itself lives
+	// inside GenerateFlow, because the proposal-review state has nothing
+	// secondary to put beside it.
 	return (
-		<main class="screen">
+		<main class="screen screen--split">
 			<h1>Generate</h1>
-			<p class="exercise-target">Export your data, hand it to any AI assistant, bring the plan back.</p>
+			<p class="lede">Export your data, hand it to any AI assistant, bring the plan back.</p>
 
 			<GoalsEditor />
 

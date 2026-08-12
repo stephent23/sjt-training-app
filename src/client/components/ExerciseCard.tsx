@@ -69,16 +69,28 @@ export function ExerciseCard({ group, expanded, onToggle, onLog, onSwap, onSkipT
 		onLog(exercise, setIndex, weight, reps, rir);
 	}
 
+	// An open card reads as a panel (bordered box, head + body) rather than a
+	// flat run of controls — `.panel` on the wrapper, `.panel-head` on the
+	// summary. Solo only: `.panel`'s `border` shorthand and `.exercise-card--
+	// superset`'s `border-left` have equal specificity, and `.panel` sits later
+	// in the stylesheet, so adding it to a superset card would silently erase
+	// the unbroken left rule that marks the group. The head still gets its
+	// separation from the body via `.panel-head`'s own border-bottom either way.
+	const isPanel = expanded && !group.isSuperset;
+
 	return (
 		<div
-			class={`row exercise-card ${allSkipped ? 'exercise-card--skipped' : ''} ${expanded ? 'exercise-card--expanded' : ''} ${group.isSuperset ? 'exercise-card--superset' : ''}`}
+			class={`row exercise-card ${allSkipped ? 'exercise-card--skipped' : ''} ${expanded ? 'exercise-card--expanded' : ''} ${isPanel ? 'panel' : ''} ${group.isSuperset ? 'exercise-card--superset' : ''}`}
 		>
-			<button type="button" class="plan-row exercise-card-summary" aria-expanded={expanded} onClick={onToggle}>
+			<button
+				type="button"
+				class={`plan-row exercise-card-summary ${expanded ? 'panel-head' : ''}`}
+				aria-expanded={expanded}
+				onClick={onToggle}
+			>
 				<div class="plan-row-main">
 					{group.isSuperset && <span class="eyebrow eyebrow--accent">Superset</span>}
-					<span class="eyebrow">
-						{group.isSuperset ? `${group.rounds} rounds` : soloTargetLabel(group.members[0])}
-					</span>
+					<span class="eyebrow eyebrow--plain">{group.isSuperset ? `${group.rounds} rounds` : soloTargetLabel(group.members[0])}</span>
 					{group.members.map((member) => (
 						<span key={member.id} class="plan-row-title">
 							{member.exercise_name}
