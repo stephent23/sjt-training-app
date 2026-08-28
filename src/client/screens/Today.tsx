@@ -76,6 +76,9 @@ export function Today() {
 			) : (
 				<SessionList sessions={sessions} linkFor={linkFor} emptyMessage="Nothing planned today. Enjoy the rest." />
 			)}
+			<a class="btn-secondary" href="#/run/new" role="button">
+				Add a run
+			</a>
 		</main>
 	);
 }

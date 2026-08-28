@@ -4,8 +4,10 @@ import { SessionList } from '../components/SessionRow';
 import { useSessionList } from '../useSessionList';
 
 // History is for reviewing what happened, not for logging — every row goes
-// to Review, even if a past session was never marked complete.
+// to Review, except a hand-recorded run, which goes to the editor it was
+// created in, since there's nothing generated to review there.
 function linkFor(s: SessionSummary): string {
+	if (s.origin === 'manual') return `#/run/${s.id}/edit`;
 	return `#/review/${s.id}`;
 }
 
@@ -19,6 +21,9 @@ export function History() {
 		<main class="screen">
 			<h1>History</h1>
 			<p class="lede">Everything logged, newest first. Tap a session to see what happened, or fix what you recorded.</p>
+			<a class="btn-secondary" href="#/run/new" role="button">
+				Add a run
+			</a>
 			{error ? (
 				<>
 					<p>{error}</p>

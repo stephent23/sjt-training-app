@@ -175,4 +175,17 @@ describe('GET /api/sessions', () => {
 		const { sessions } = await fetchSessions('?from=2026-01-01&to=2026-12-31&limit=2');
 		expect(sessions).toHaveLength(2);
 	});
+
+	// A manual run (migrations/0008_manual_runs.sql) has to be visually
+	// distinguishable from a planned one on the list, or there's no way to
+	// tell a run the generator scheduled from one recorded by hand after the
+	// fact.
+	it('reports origin: planned for an ordinary session and manual for one inserted as such', async () => {
+		const plannedId = await insertSession({ date: '2026-07-01', label: 'Planned' });
+		const manualId = await insertSession({ date: '2026-07-02', kind: 'run', label: 'Manual run', origin: 'manual' });
+
+		const { sessions } = await fetchSessions('?from=2026-07-01&to=2026-07-02&order=asc');
+		expect(sessions.find((s) => s.id === plannedId)?.origin).toBe('planned');
+		expect(sessions.find((s) => s.id === manualId)?.origin).toBe('manual');
+	});
 });

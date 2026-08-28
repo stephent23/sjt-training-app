@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
+import { validateRunMetrics } from '../runValidation';
 import { sqlIn } from '../sql';
-import { RUN_METRIC_FIELDS } from '../types';
 import type {
 	LoggedRunEntry,
 	LoggedSetEntry,
@@ -137,7 +137,7 @@ sessions.get('/', async (c) => {
 		// logged_sets has no status column of its own, hence the correlation
 		// back to planned_sets on (session_id, exercise_id).
 		`SELECT
-		   s.id, s.date, s.kind, s.label, s.status, s.week_number,
+		   s.id, s.date, s.kind, s.label, s.status, s.week_number, s.origin,
 		   COUNT(DISTINCT CASE WHEN ps.status <> 'skipped' THEN ps.id END) AS exercise_count,
 		   COALESCE(SUM(CASE WHEN ps.status <> 'skipped' THEN ps.target_sets END), 0) AS planned_set_count,
 		   (SELECT COUNT(*) FROM logged_sets ls
@@ -272,13 +272,8 @@ sessions.post('/:id/runs', async (c) => {
 	// bound straight through unchecked, the one field here with no range at all.
 	// The bounds are deliberately generous: they exist to catch a mistyped or
 	// misplaced value, not to police what a real run can look like.
-	for (const { key, min, max, integer } of RUN_METRIC_FIELDS) {
-		const value = body[key];
-		if (value === null || value === undefined) continue;
-		if (typeof value !== 'number' || !Number.isFinite(value) || value < min || value > max || (integer && !Number.isInteger(value))) {
-			return c.json({ error: `invalid ${key}` }, 400);
-		}
-	}
+	const metricsError = validateRunMetrics(body as unknown as Record<string, unknown>);
+	if (metricsError) return c.json({ error: metricsError }, 400);
 
 	await c.env.DB.prepare(
 		`INSERT INTO logged_runs (session_id, distance_km, duration_seconds, avg_hr, max_hr, avg_cadence_spm, elevation_gain_m,
