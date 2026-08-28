@@ -26,7 +26,12 @@ import type {
 	WeekProposalInput,
 } from './types';
 
-/** Last-2-weeks raw history payload — full rows, not derived stats (plan §4). */
+/** Raw history payload — full rows, not derived stats (plan §4). Asymmetric on
+ * purpose: loggedSets covers the anchor week and the one before it (all the
+ * deterministic weight-progression formula ever reads), while loggedRuns
+ * reaches back RUN_HISTORY_WEEKS — runs happen less often per week than lift
+ * sessions and vary more (pace, terrain, recovery), so two weeks isn't enough
+ * data points for a human or an assistant to see a real trend in. */
 export interface HistoryWindow {
 	loggedSets: (LoggedSetEntry & { session_id: number; exercise_id: number })[];
 	loggedRuns: (LoggedRunEntry & { session_id: number })[];
@@ -130,6 +135,11 @@ interface LoggedSetRow {
  * the export drops. Derived from LoggedRunEntry so a new watch metric reaches
  * the AI reviewer without a second field list to remember. */
 type LoggedRunRow = LoggedRunEntry & { id: number; session_id: number };
+
+/** How many weeks of run history to export, counting back from the anchor
+ * week inclusive. Wider than the 2-week lift window on purpose — see the doc
+ * comment on HistoryWindow. */
+export const RUN_HISTORY_WEEKS = 6;
 
 /** The smallest positive multiple-of-7-days shift that lands strictly after
  * `today` — used to move a stale anchor week's dates into the future while
@@ -285,19 +295,23 @@ export async function buildExportContext(db: D1Database, weekCount: number, toda
 				.all<PlannedRunRow>()
 		: { results: [] as PlannedRunRow[] };
 
-	// Bulk query 5/6: logged_runs across the full 2-week window.
-	const { results: loggedRunRows } = windowSessionIds.length
-		? // Columns listed rather than SELECT * so `logged_at` (an internal audit
-			// timestamp) doesn't leak into the exported history window.
-			await db
-				.prepare(
-					`SELECT id, session_id, distance_km, duration_seconds, avg_hr, max_hr, avg_cadence_spm, elevation_gain_m,
-					        aerobic_training_effect, rpe_1_10, interval_pace_seconds_per_km, performed_on, note
-					 FROM logged_runs WHERE session_id IN (${sqlIn(windowSessionIds.length)})`,
-				)
-				.bind(...windowSessionIds)
-				.all<LoggedRunRow>()
-		: { results: [] as LoggedRunRow[] };
+	// Bulk query 5/6: logged_runs across the wider RUN_HISTORY_WEEKS window —
+	// joined against sessions rather than gathering ids into an IN (...) list
+	// first, since this window isn't the same one windowSessionIds describes.
+	// Columns listed rather than SELECT * so `logged_at` (an internal audit
+	// timestamp) doesn't leak into the exported history window. Not filtered by
+	// origin — a manual run's data belongs here even though it's excluded from
+	// the copy-forward template above (see the sessionsToProgress comment).
+	const { results: loggedRunRows } = await db
+		.prepare(
+			`SELECT lr.id, lr.session_id, lr.distance_km, lr.duration_seconds, lr.avg_hr, lr.max_hr, lr.avg_cadence_spm,
+			        lr.elevation_gain_m, lr.aerobic_training_effect, lr.rpe_1_10, lr.interval_pace_seconds_per_km,
+			        lr.performed_on, lr.note
+			 FROM logged_runs lr JOIN sessions s ON s.id = lr.session_id
+			 WHERE s.week_number BETWEEN ? AND ?`,
+		)
+		.bind(anchorWeekNumber - RUN_HISTORY_WEEKS + 1, anchorWeekNumber)
+		.all<LoggedRunRow>();
 
 	// Bulk query 6/6: session feedback across the window — this is what makes
 	// the shoulder_safe/back_safe checks in validateWeekAgainstBaseline able to

@@ -24,11 +24,13 @@ WHAT'S IN THE FILE
   Replace them with real periodisation.
 - reasons — why week 1's numbers came out the way they did. Keys are "YYYY-MM-DD:<exercise_id>"
   for lifts and "YYYY-MM-DD:run" for runs. Week 1 only; there is nothing here for later weeks.
-- historyWindow.loggedSets / .loggedRuns — my raw logged rows from the last two weeks. Ignore
-  session_id, it's an internal id that joins to nothing you can see; use performed_on and
-  exercise_id. Runs may carry distance_km, duration_seconds, avg_hr, max_hr, avg_cadence_spm,
-  elevation_gain_m, aerobic_training_effect, rpe_1_10 and interval_pace_seconds_per_km (the average
-  pace during the work segments of an interval/tempo run) — any of them may be null.
+- historyWindow.loggedSets — my raw logged lift sets from the last two weeks. loggedRuns reaches
+  back six weeks instead of two — runs happen less often per week and vary more (pace, terrain,
+  recovery), so two weeks isn't enough to see a real trend. Ignore session_id on either, it's an
+  internal id that joins to nothing you can see; use performed_on and exercise_id. Runs may carry
+  distance_km, duration_seconds, avg_hr, max_hr, avg_cadence_spm, elevation_gain_m,
+  aerobic_training_effect, rpe_1_10 and interval_pace_seconds_per_km (the average pace during the
+  work segments of an interval/tempo run) — any of them may be null.
 - skippedSessions — sessions I didn't do.
 - painFlags — { shoulder, back }. True means I reported real pain (2 or 3 out of 3).
 - goals, goalTags — what I'm training for, as free text and as tick-box tags. These outrank
