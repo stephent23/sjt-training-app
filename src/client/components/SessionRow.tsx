@@ -11,8 +11,9 @@ import { weekDatesFor, WEEKDAY_LABELS } from '../weekDates';
 // Planned is the default, unremarkable state — no badge needed. Completed
 // and skipped are both worth calling out explicitly so a row's status is
 // visible without opening it, especially once more than one row can share
-// a day.
-function statusBadge(s: SessionSummary) {
+// a day. Exported so Today's single-session fast path (which doesn't go
+// through SessionList) can show the same badge rather than a second copy.
+export function statusBadge(s: SessionSummary) {
 	if (s.status === 'planned') return null;
 	return <span class="eyebrow--accent"> · {capitalize(s.status)}</span>;
 }

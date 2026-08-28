@@ -1,6 +1,6 @@
 import type { SessionSummary } from '../../types';
 import { todayIso } from '../../dates';
-import { SessionList } from '../components/SessionRow';
+import { SessionList, statusBadge } from '../components/SessionRow';
 import { pendingCount } from '../sync';
 import { useSessionList } from '../useSessionList';
 
@@ -28,6 +28,7 @@ function TodaySession({ session, href }: { session: SessionSummary; href: string
 		<section>
 			<span class="eyebrow">
 				{session.date} · Week {session.week_number}
+				{statusBadge(session)}
 			</span>
 			<h2>{session.label}</h2>
 			<p class="exercise-target">{detail}</p>
