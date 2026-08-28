@@ -95,7 +95,11 @@ function LoadedLiftSession({ sessionId, detail, error, setDetail, reload, onBack
 		// persists the optimistic status — and what stops Today routing this
 		// session straight back into #/lift/:id.
 		setDetail({ ...detail, session: { ...detail.session, status } });
-		location.hash = '#/';
+		// Completing goes straight to Review so niggles/energy can be logged
+		// while the session is still fresh — the same reasoning "Log what you
+		// ran" already applies to runs. Skipping has nothing to add there, so it
+		// goes back to Today as before.
+		location.hash = status === 'completed' ? `#/review/${sessionId}` : '#/';
 	}
 
 	return (

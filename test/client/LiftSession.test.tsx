@@ -60,8 +60,15 @@ function text(root: HTMLElement, selector: string): string[] {
 	return [...root.querySelectorAll(selector)].map((el) => el.textContent ?? '');
 }
 
+function buttonWith(root: HTMLElement, text: string): HTMLButtonElement {
+	const button = [...root.querySelectorAll('button')].find((el) => (el.textContent ?? '').includes(text));
+	if (!button) throw new Error(`no button matching ${text}`);
+	return button;
+}
+
 beforeEach(() => {
 	vi.restoreAllMocks();
+	location.hash = '';
 });
 
 afterEach(() => {
@@ -71,6 +78,7 @@ afterEach(() => {
 		container = null;
 	}
 	localStorage.clear();
+	location.hash = '';
 });
 
 describe('LiftSession', () => {
@@ -139,5 +147,26 @@ describe('LiftSession', () => {
 		await tick();
 
 		expect(root.querySelectorAll('.set-row--collapsed')).toHaveLength(4);
+	});
+
+	// Finishing a gym session used to drop you back on Today with no route to
+	// the niggles/energy questions except finding your way there by hand — the
+	// same problem "Log what you ran" originally fixed for runs.
+	it('goes straight to Review once the gym session is marked complete', async () => {
+		const root = await mountLiftSession(sessionDetail());
+
+		buttonWith(root, 'Mark complete').click();
+		await tick();
+
+		expect(location.hash).toBe('#/review/8');
+	});
+
+	it('marking skipped still goes back to Today, not Review', async () => {
+		const root = await mountLiftSession(sessionDetail());
+
+		buttonWith(root, 'Mark skipped').click();
+		await tick();
+
+		expect(location.hash).toBe('#/');
 	});
 });
