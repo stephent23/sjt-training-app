@@ -28,13 +28,13 @@ const MAX_WEEKS = 12;
 generator.get('/export', async (c) => {
 	const weeksParam = Number(c.req.query('weeks') ?? '1');
 	const weeks = Number.isInteger(weeksParam) && weeksParam >= 1 && weeksParam <= MAX_WEEKS ? weeksParam : 1;
-	const context = await generateNextWeeks(c.env.DB, weeks);
 
 	// The clock lives here, not in buildExportContext — see ExportPayload's doc
 	// comment. weekStartDate is what a from-scratch plan should be built on;
-	// with prior sessions it's ignored, since week 1's dates come from the
-	// previous week + 7.
+	// with prior sessions it's ignored, since week 1's dates are shifted
+	// forward from the anchor week instead.
 	const today = todayIso();
+	const context = await generateNextWeeks(c.env.DB, weeks, today);
 	const payload: ExportPayload = { ...context, today, weekStartDate: weekStartOnOrAfter(today) };
 	return c.json(payload);
 });
@@ -45,7 +45,7 @@ generator.get('/export', async (c) => {
 // plan is already pending.
 generator.post('/import', async (c) => {
 	const body = await c.req.json<MultiWeekProposalInput>();
-	const result = await importProposal(c.env.DB, body, c.req.query('replace') === 'true');
+	const result = await importProposal(c.env.DB, body, todayIso(), c.req.query('replace') === 'true');
 	// `errors` is the list; `error` is the same thing joined, kept because it is
 	// what every existing caller reads. The list is what lets the UI show one
 	// line per problem, and hand them all back to the assistant that caused them.
@@ -74,7 +74,8 @@ generator.post('/:id/accept', async (c) => {
 	if (!row) return c.json({ error: 'not found' }, 404);
 
 	const plan = JSON.parse(row.plan_json) as MultiWeekProposal;
-	await insertWeeksFromProposal(c.env.DB, plan);
+	const result = await insertWeeksFromProposal(c.env.DB, plan);
+	if (!result.ok) return c.json({ error: result.errors.join('; '), errors: result.errors }, 409);
 
 	await c.env.DB.prepare(`UPDATE generated_plans SET status = 'accepted', reviewed_at = datetime('now') WHERE id = ?`).bind(id).run();
 

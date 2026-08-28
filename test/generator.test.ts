@@ -8,6 +8,13 @@ async function setDaysPerWeek(n: number) {
 	await env.DB.prepare(`UPDATE settings SET days_per_week = ? WHERE id = 1`).bind(n).run();
 }
 
+// The clock is an argument, never read inside the module (see ExportPayload's
+// doc comment). Every fixture in this file anchors on a week dated 2026-08-03,
+// and the proposal shifts forward by whole weeks until every date lands after
+// `today` — one week is enough from here, so the +7/+14/+21 dates the
+// assertions below use are exactly what a real 2026-08-04 export would emit.
+const TODAY = '2026-08-04';
+
 describe('buildExportContext / generateNextWeeks', () => {
 	it('produces a deterministic week 1 shifted 7 days forward, with reasons keyed to the new date', async () => {
 		const exerciseId = await insertExercise({ name: 'Goblet squat', pattern: 'squat', increment_kg: 2 });
@@ -17,7 +24,7 @@ describe('buildExportContext / generateNextWeeks', () => {
 		await insertLoggedSet(sessionId, exerciseId, { set_index: 2, weight_kg: 20, reps: 10, rir: 1, performed_on: '2026-08-03' });
 		await insertLoggedSet(sessionId, exerciseId, { set_index: 3, weight_kg: 20, reps: 10, rir: 1, performed_on: '2026-08-03' });
 
-		const context = await generateNextWeeks(env.DB, 1);
+		const context = await generateNextWeeks(env.DB, 1, TODAY);
 
 		expect(context.deterministicProposal.weeks).toHaveLength(1);
 		const week1 = context.deterministicProposal.weeks[0];
@@ -44,7 +51,7 @@ describe('buildExportContext / generateNextWeeks', () => {
 		await insertPlannedSet(sessionId, exerciseId, { order_index: 1, target_sets: 3, rep_low: 8, rep_high: 10, target_weight_kg: 20, rest_seconds: 120 });
 		await insertLoggedSet(sessionId, exerciseId, { set_index: 1, weight_kg: 20, reps: 10, rir: 1, performed_on: '2026-08-03' });
 
-		const context = await buildExportContext(env.DB, 3);
+		const context = await buildExportContext(env.DB, 3, TODAY);
 
 		expect(context.deterministicProposal.weeks).toHaveLength(3);
 		const [week1, week2, week3] = context.deterministicProposal.weeks;
@@ -70,7 +77,7 @@ describe('buildExportContext / generateNextWeeks', () => {
 	});
 
 	it('returns weekCount empty weeks when there are no sessions at all yet', async () => {
-		const context = await buildExportContext(env.DB, 3);
+		const context = await buildExportContext(env.DB, 3, TODAY);
 		expect(context.deterministicProposal).toEqual({
 			weeks: [
 				{ week_number: 1, sessions: [] },
@@ -97,9 +104,9 @@ describe('importProposal', () => {
 
 	it('validates and persists a single-week pending row, hydrating exercise names onto the stored plan', async () => {
 		const { exerciseId } = await seedOneSessionWeek();
-		const context = await buildExportContext(env.DB, 1);
+		const context = await buildExportContext(env.DB, 1, TODAY);
 
-		const result = await importProposal(env.DB, context.deterministicProposal);
+		const result = await importProposal(env.DB, context.deterministicProposal, TODAY);
 		expect(result.ok).toBe(true);
 		if (!result.ok) throw new Error('expected ok');
 
@@ -120,11 +127,11 @@ describe('importProposal', () => {
 
 	it('validates and persists a valid 3-week chain, with first_week_number/week_count correct', async () => {
 		await seedOneSessionWeek();
-		const context = await buildExportContext(env.DB, 3);
+		const context = await buildExportContext(env.DB, 3, TODAY);
 
 		// The flat-copy deterministic proposal is itself a valid chain (each
 		// week is identical to the last, so no jump exceeds the cap anywhere).
-		const result = await importProposal(env.DB, context.deterministicProposal);
+		const result = await importProposal(env.DB, context.deterministicProposal, TODAY);
 		expect(result.ok).toBe(true);
 		if (!result.ok) throw new Error('expected ok');
 
@@ -140,7 +147,7 @@ describe('importProposal', () => {
 	});
 
 	it('rejects an empty weeks array with a clear validation error', async () => {
-		const result = await importProposal(env.DB, { weeks: [] });
+		const result = await importProposal(env.DB, { weeks: [] }, TODAY);
 		expect(result.ok).toBe(false);
 		if (result.ok) throw new Error('expected failure');
 		expect(result.errors.join(' ')).toMatch(/at least one week/);
@@ -148,12 +155,12 @@ describe('importProposal', () => {
 
 	it('rejects a second import while one is already pending', async () => {
 		await seedOneSessionWeek();
-		const context = await buildExportContext(env.DB, 1);
+		const context = await buildExportContext(env.DB, 1, TODAY);
 
-		const first = await importProposal(env.DB, context.deterministicProposal);
+		const first = await importProposal(env.DB, context.deterministicProposal, TODAY);
 		expect(first.ok).toBe(true);
 
-		const second = await importProposal(env.DB, context.deterministicProposal);
+		const second = await importProposal(env.DB, context.deterministicProposal, TODAY);
 		expect(second.ok).toBe(false);
 		if (second.ok) throw new Error('expected failure');
 		expect(second.errors.join(' ')).toMatch(/already pending/);
@@ -161,11 +168,11 @@ describe('importProposal', () => {
 
 	it('rejects an unknown exercise_id', async () => {
 		await seedOneSessionWeek();
-		const context = await buildExportContext(env.DB, 1);
+		const context = await buildExportContext(env.DB, 1, TODAY);
 		const input = JSON.parse(JSON.stringify(context.deterministicProposal)) as MultiWeekProposalInput;
 		input.weeks[0].sessions[0].plannedSets[0].exercise_id = 999999;
 
-		const result = await importProposal(env.DB, input);
+		const result = await importProposal(env.DB, input, TODAY);
 		expect(result.ok).toBe(false);
 		if (result.ok) throw new Error('expected failure');
 		expect(result.errors.join(' ')).toMatch(/Unknown exercise_id/);
@@ -173,12 +180,12 @@ describe('importProposal', () => {
 
 	it('rejects a weight jump over 10% vs the deterministic baseline in week 1', async () => {
 		await seedOneSessionWeek();
-		const context = await buildExportContext(env.DB, 1);
+		const context = await buildExportContext(env.DB, 1, TODAY);
 		const input = JSON.parse(JSON.stringify(context.deterministicProposal)) as MultiWeekProposalInput;
 		const baseline = input.weeks[0].sessions[0].plannedSets[0].target_weight_kg!;
 		input.weeks[0].sessions[0].plannedSets[0].target_weight_kg = baseline * 1.5; // +50%, way over the 10% cap
 
-		const result = await importProposal(env.DB, input);
+		const result = await importProposal(env.DB, input, TODAY);
 		expect(result.ok).toBe(false);
 		if (result.ok) throw new Error('expected failure');
 		expect(result.errors.join(' ')).toMatch(/exceeds 10%/);
@@ -186,7 +193,7 @@ describe('importProposal', () => {
 
 	it('rejects a week-3-vs-week-2 jump over 10% even though week-3-vs-week-1 is a decrease (proves the chain, not a fixed baseline, is checked)', async () => {
 		const { exerciseId } = await seedOneSessionWeek();
-		const context = await buildExportContext(env.DB, 3);
+		const context = await buildExportContext(env.DB, 3, TODAY);
 		const template = context.deterministicProposal.weeks[0].sessions[0];
 
 		// week 1 (the real, deterministic-baseline-checked week): weight 20kg —
@@ -222,7 +229,7 @@ describe('importProposal', () => {
 			],
 		};
 
-		const result = await importProposal(env.DB, input);
+		const result = await importProposal(env.DB, input, TODAY);
 		expect(result.ok).toBe(false);
 		if (result.ok) throw new Error('expected failure');
 		expect(result.errors.join(' ')).toMatch(new RegExp(`Weight jump for exercise_id ${exerciseId}.*\\(week 4\\) exceeds 10% vs week 3`));
@@ -231,7 +238,7 @@ describe('importProposal', () => {
 	it('accepts a substituted exercise_id in week 2 with an unconstrained weight (no baseline in week 1 for that id)', async () => {
 		await seedOneSessionWeek();
 		const otherExerciseId = await insertExercise({ name: 'Leg press', pattern: 'squat', increment_kg: 5 });
-		const context = await buildExportContext(env.DB, 2);
+		const context = await buildExportContext(env.DB, 2, TODAY);
 		const template = context.deterministicProposal.weeks[0].sessions[0];
 
 		const input: MultiWeekProposalInput = {
@@ -250,7 +257,7 @@ describe('importProposal', () => {
 			],
 		};
 
-		const result = await importProposal(env.DB, input);
+		const result = await importProposal(env.DB, input, TODAY);
 		expect(result.ok).toBe(true);
 	});
 });

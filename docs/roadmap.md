@@ -117,6 +117,44 @@ branches simply carry the earlier commits with them.
       — `validateProposal` still accepts any real calendar date, so a backdated plan can still be
       imported. Left as-is because importing a plan that starts later is legitimate, but it means
       the cold-start guard is advisory, not enforced.
+- [x] **13 · Manual runs, a truthful export anchor, and re-planning over scheduled weeks**
+      (migration 0008). Three fixes landing together because the second two only became visible
+      while building the first. *Done:*
+      - **Manual runs.** `POST/PUT/DELETE /api/runs` records a run that was never planned, or
+        corrects/removes one that was — a real `sessions` row (`origin: 'manual'`), never routed
+        through the generator. `RunEditor` (add via `#/run/new`, correct via `#/run/:id/edit`,
+        reachable from Today, History, and a new "Edit run details" link on Review) shares its
+        field logic (`src/client/runFields.ts`) and markup (`RunMetricsFields`) with `ReviewRun`,
+        which is now a thin wrapper over both rather than a second copy of a ten-field form.
+      - **The export anchor was wrong.** `buildExportContext` picked its two-week history window
+        by `MAX(week_number)` — the newest *scheduled* week. Once multi-week accept could insert
+        several unlogged future weeks in one go, that stopped being the newest *logged* week, so
+        the export silently read two empty weeks: `historyWindow` came back blank, `painFlags`
+        was always false (disabling the shoulder/back-safety checks on both export and import),
+        and `reasons` filled up with "no sets logged" holds after a week that was fully logged.
+        No test caught it — every fixture in the suite seeded exactly one past-dated week, where
+        the two numbers coincide. Fixed by splitting "newest scheduled" (still used to number the
+        new proposal, so it can't collide with weeks already on the calendar) from "newest
+        logged" (used for the window and progression), and by replacing the flat `+7` date shift
+        with the smallest multiple of 7 days that actually clears today — mid-week generation
+        used to propose dates in the week already half gone.
+      - **A re-plan can now land over already-scheduled weeks.** Import used to refuse outright if
+        any proposed date already had a session. Now it replaces every *untouched* session in the
+        proposal's date span and refuses only where something was actually trained — completed,
+        skipped, or logged against even while still `'planned'` — naming the offending dates.
+        Accept re-checks the same span rather than trusting import, since a session can be logged
+        in the human-sized gap between reviewing a plan and accepting it.
+
+      A manual run is deliberately invisible to the copy-forward pass that builds next week's
+      template (an unplanned session would break `validateSessionCount`'s exact-count rule and
+      then propagate into every future week), but its logged data still reaches `historyWindow` —
+      the assistant reviewing the plan sees it, even though it isn't a template for anything.
+
+      Built as three parallel implementation passes behind one shared migration and `types.ts`
+      contract, each landing tests first: server routes, the client screen, and
+      `src/generator.ts`/`src/routes/generator.ts` (kept to a single owner throughout, since all
+      three fixes touch that file). 434 tests, `npm run typecheck` and `npm run build:client` all
+      clean.
 
 ## Merge checklist
 
@@ -128,7 +166,7 @@ has been deployed. Before deploying any of these branches:
 npm run db:migrate:remote
 ```
 
-Migrations added so far: `0006_structured_goals.sql`, `0007_run_metrics.sql`.
+Migrations added so far: `0006_structured_goals.sql`, `0007_run_metrics.sql`, `0008_manual_runs.sql`.
 
 ## Notes for whoever picks this up
 

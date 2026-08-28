@@ -6,10 +6,11 @@
 // persists whatever comes back.
 
 import { addDaysIso } from './dates';
+import { deleteSessionStatements } from './sessionDelete';
 import { sqlIn } from './sql';
 import { progressExercise, type ExercisePrescription, type LoggedSetForProgression } from './progression';
 import { MAX_WEEKLY_RUN_GROWTH, progressRun, type LoggedRunForProgression } from './runProgression';
-import { parseGoalTags } from './types';
+import { parseGoalTags, RUN_TYPES } from './types';
 import type {
 	Exercise,
 	LoggedRunEntry,
@@ -130,6 +131,17 @@ interface LoggedSetRow {
  * the AI reviewer without a second field list to remember. */
 type LoggedRunRow = LoggedRunEntry & { id: number; session_id: number };
 
+/** The smallest positive multiple-of-7-days shift that lands strictly after
+ * `today` — used to move a stale anchor week's dates into the future while
+ * preserving its day-of-week pattern. A single +7 is only enough when the
+ * anchor is less than a week behind today; a longer-neglected plan needs
+ * more. */
+function smallestWeeklyShiftAfter(dateIso: string, today: string): number {
+	let k = 1;
+	while (addDaysIso(dateIso, 7 * k) <= today) k++;
+	return k;
+}
+
 /**
  * Runs the deterministic progression pass over the most recently scheduled
  * week to produce week 1, then — for weekCount > 1 — appends flat copies of
@@ -147,7 +159,7 @@ type LoggedRunRow = LoggedRunEntry & { id: number; session_id: number };
  * window, not a single session); the speculative weeks are pure in-memory
  * copies, no further queries.
  */
-export async function buildExportContext(db: D1Database, weekCount: number): Promise<ExportContext> {
+export async function buildExportContext(db: D1Database, weekCount: number, today: string): Promise<ExportContext> {
 	const settingsRow = await db
 		.prepare(`SELECT * FROM settings WHERE id = 1`)
 		.first<{ id: number; goals: string; days_per_week: number; goal_tags: string }>();
@@ -157,10 +169,17 @@ export async function buildExportContext(db: D1Database, weekCount: number): Pro
 
 	const { results: exerciseCatalogue } = await db.prepare(`SELECT * FROM exercises`).all<Exercise>();
 
+	// maxWeekNumber ("newest scheduled week") and anchorWeekNumber ("newest
+	// LOGGED week") are different questions. Multi-week accept inserts weeks
+	// maxWeekNumber+1..+N as unlogged 'planned' rows in one go, so right after
+	// that MAX(week_number) points at a week nobody has trained yet. The
+	// proposal is still numbered from maxWeekNumber (no gaps, no duplicate week
+	// headings in the client), but progression has to read from whatever week
+	// was actually logged.
 	const maxWeekRow = await db.prepare(`SELECT MAX(week_number) AS w FROM sessions`).first<{ w: number | null }>();
-	const lastWeekNumber = maxWeekRow?.w ?? null;
+	const maxWeekNumber = maxWeekRow?.w ?? null;
 
-	if (lastWeekNumber === null) {
+	if (maxWeekNumber === null) {
 		const painFlags: PainFlags = { shoulder: false, back: false }; // no sessions => no feedback to read
 		// No sessions exist at all yet — nothing to progress from for week 1,
 		// and with no week-1 baseline there's nothing to flat-copy for weeks
@@ -185,29 +204,68 @@ export async function buildExportContext(db: D1Database, weekCount: number): Pro
 		};
 	}
 
-	const priorWeekNumber = lastWeekNumber - 1;
+	const anchorWeekRow = await db
+		.prepare(
+			`SELECT MAX(s.week_number) AS w FROM sessions s
+			 WHERE EXISTS (SELECT 1 FROM logged_sets ls WHERE ls.session_id = s.id)
+			    OR EXISTS (SELECT 1 FROM logged_runs lr WHERE lr.session_id = s.id)`,
+		)
+		.first<{ w: number | null }>();
+	const anchorWeekNumber = anchorWeekRow?.w ?? null;
 
-	// Bulk query 1/5: sessions across the last two weeks (just one if this is week 1).
+	if (anchorWeekNumber === null) {
+		// Sessions exist (a plan was scheduled), but nothing has ever been
+		// logged against any of them — a plan nobody has started. There's
+		// nothing to progress from, so this is the same empty shape as
+		// cold-start, just numbered on from the sessions that already exist
+		// instead of from 1.
+		const painFlags: PainFlags = { shoulder: false, back: false };
+		return {
+			deterministicProposal: {
+				weeks: Array.from({ length: weekCount }, (_, i) => ({ week_number: maxWeekNumber + i + 1, sessions: [] })),
+			},
+			speculativeFromWeek: 2,
+			reasons: {},
+			historyWindow: { loggedSets: [], loggedRuns: [] },
+			skippedSessions: [],
+			goals,
+			goalTags,
+			daysPerWeek,
+			exerciseCatalogue,
+			painFlags,
+		};
+	}
+
+	const priorWeekNumber = anchorWeekNumber - 1;
+
+	// Bulk query 1/5: sessions across the last two LOGGED-anchored weeks (just one if this is week 1).
 	const { results: windowSessions } = await db
 		.prepare(`SELECT * FROM sessions WHERE week_number IN (?, ?) ORDER BY date`)
-		.bind(priorWeekNumber, lastWeekNumber)
+		.bind(priorWeekNumber, anchorWeekNumber)
 		.all<SessionRow>();
 
-	const lastWeekSessions = windowSessions.filter((s) => s.week_number === lastWeekNumber);
-	const lastWeekSessionIds = lastWeekSessions.map((s) => s.id);
+	const anchorWeekSessions = windowSessions.filter((s) => s.week_number === anchorWeekNumber);
+	// A run recorded by hand (migrations/0008_manual_runs.sql) must not become a
+	// template for every future week — validateSessionCount requires week 1 to
+	// hold exactly days_per_week sessions, so an extra copied-forward session
+	// would break the export's own re-importability. Its logged data still
+	// reaches historyWindow below (that query is over the unfiltered window),
+	// it just isn't copied forward or counted as skipped.
+	const sessionsToProgress = anchorWeekSessions.filter((s) => s.origin !== 'manual');
+	const sessionsToProgressIds = sessionsToProgress.map((s) => s.id);
 	const windowSessionIds = windowSessions.map((s) => s.id);
 
-	// Bulk query 2/5: planned_sets joined with exercises, last week only — this is what's actually being progressed.
-	const { results: plannedSetRows } = lastWeekSessionIds.length
+	// Bulk query 2/5: planned_sets joined with exercises, anchor week only (manual sessions excluded) — this is what's actually being progressed.
+	const { results: plannedSetRows } = sessionsToProgressIds.length
 		? await db
 				.prepare(
 					`SELECT ps.id, ps.session_id, ps.exercise_id, ps.order_index, ps.target_sets, ps.rep_low, ps.rep_high,
 					        ps.target_weight_kg, ps.rest_seconds, ps.notes, ps.superset_group, e.increment_kg
 					 FROM planned_sets ps JOIN exercises e ON e.id = ps.exercise_id
-					 WHERE ps.session_id IN (${sqlIn(lastWeekSessionIds.length)})
+					 WHERE ps.session_id IN (${sqlIn(sessionsToProgressIds.length)})
 					 ORDER BY ps.session_id, ps.order_index`,
 				)
-				.bind(...lastWeekSessionIds)
+				.bind(...sessionsToProgressIds)
 				.all<PlannedSetJoinRow>()
 		: { results: [] as PlannedSetJoinRow[] };
 
@@ -219,11 +277,11 @@ export async function buildExportContext(db: D1Database, weekCount: number): Pro
 				.all<LoggedSetRow>()
 		: { results: [] as LoggedSetRow[] };
 
-	// Bulk query 4/5: planned_runs, last week only.
-	const { results: plannedRunRows } = lastWeekSessionIds.length
+	// Bulk query 4/5: planned_runs, anchor week only (manual sessions excluded).
+	const { results: plannedRunRows } = sessionsToProgressIds.length
 		? await db
-				.prepare(`SELECT * FROM planned_runs WHERE session_id IN (${sqlIn(lastWeekSessionIds.length)})`)
-				.bind(...lastWeekSessionIds)
+				.prepare(`SELECT * FROM planned_runs WHERE session_id IN (${sqlIn(sessionsToProgressIds.length)})`)
+				.bind(...sessionsToProgressIds)
 				.all<PlannedRunRow>()
 		: { results: [] as PlannedRunRow[] };
 
@@ -259,7 +317,7 @@ export async function buildExportContext(db: D1Database, weekCount: number): Pro
 	};
 
 	const reasons: Record<string, string> = {};
-	const skippedSessions: SessionRow[] = lastWeekSessions.filter((s) => s.status === 'skipped');
+	const skippedSessions: SessionRow[] = sessionsToProgress.filter((s) => s.status === 'skipped');
 
 	const plannedSetsBySession = new Map<number, PlannedSetJoinRow[]>();
 	for (const row of plannedSetRows) {
@@ -272,8 +330,22 @@ export async function buildExportContext(db: D1Database, weekCount: number): Pro
 
 	const proposedSessions: ProposedSessionInput[] = [];
 
-	for (const session of lastWeekSessions) {
-		const newDate = addDaysIso(session.date, 7);
+	// The anchor week can be several weeks behind today (multi-week accept
+	// schedules ahead; the anchor only moves once something is actually
+	// logged), so a flat +7 can propose a date that's already in the past.
+	// Shift by whichever multiple of 7 days clears today, computed once from
+	// the earliest date among the sessions being progressed — the tightest
+	// constraint, since it needs the largest shift — and applied uniformly to
+	// every session in the week so it moves as a unit (day-of-week pattern
+	// preserved, no need for it to also clear today session-by-session).
+	const earliestDate = sessionsToProgress.reduce<string | null>(
+		(min, s) => (min === null || s.date < min ? s.date : min),
+		null,
+	);
+	const shiftDays = earliestDate !== null ? 7 * smallestWeeklyShiftAfter(earliestDate, today) : 7;
+
+	for (const session of sessionsToProgress) {
+		const newDate = addDaysIso(session.date, shiftDays);
 
 		if (session.kind === 'lift') {
 			const rows = plannedSetsBySession.get(session.id) ?? [];
@@ -340,7 +412,11 @@ export async function buildExportContext(db: D1Database, weekCount: number): Pro
 		}
 	}
 
-	const week1: WeekProposalInput = { week_number: lastWeekNumber + 1, sessions: proposedSessions };
+	// Numbered from maxWeekNumber (the newest SCHEDULED week), not the anchor —
+	// a duplicate week number would split a week heading in the client's
+	// SessionList grouping, whereas a numbering gap (when the anchor is behind
+	// maxWeekNumber) is harmless.
+	const week1: WeekProposalInput = { week_number: maxWeekNumber + 1, sessions: proposedSessions };
 
 	// Weeks 2..weekCount: flat copies of week 1 — structurally identical
 	// sessions/plannedSets/plannedRun values, dates shifted an additional 7
@@ -358,7 +434,7 @@ export async function buildExportContext(db: D1Database, weekCount: number): Pro
 			plannedSets: session.plannedSets.map((set) => ({ ...set })),
 			plannedRun: session.plannedRun ? { ...session.plannedRun } : null,
 		}));
-		weeks.push({ week_number: lastWeekNumber + w, sessions });
+		weeks.push({ week_number: maxWeekNumber + w, sessions });
 	}
 
 	// `reasons` is only ever populated for week 1 (above). Weeks 2..N are flat
@@ -404,11 +480,9 @@ export async function buildExportContext(db: D1Database, weekCount: number): Pro
  * seam where Phase 2 would swap this for a live API call stays obvious;
  * nothing is persisted here since nothing has been reviewed yet.
  */
-export async function generateNextWeeks(db: D1Database, weekCount: number): Promise<ExportContext> {
-	return buildExportContext(db, weekCount);
+export async function generateNextWeeks(db: D1Database, weekCount: number, today: string): Promise<ExportContext> {
+	return buildExportContext(db, weekCount, today);
 }
-
-const RUN_TYPES: readonly RunType[] = ['easy', 'tempo', 'intervals', 'long'];
 
 /** True only for a real calendar date in YYYY-MM-DD form. The regex alone
  * would accept 2026-02-31 / 2026-13-01, which insert happily (sessions.date
@@ -803,6 +877,58 @@ export function hydrateProposal(input: WeekProposalInput, exercises: Exercise[])
 	};
 }
 
+interface SpanCheckRow {
+	id: number;
+	date: string;
+	status: string;
+	has_sets: number;
+	has_run: number;
+}
+
+/** Every session whose date falls within [first, last], split into ones a
+ * proposal may freely replace (still 'planned', with nothing logged against
+ * them yet) and ones that are protected because real training happened on
+ * that day — completed, skipped, or carrying a logged set/run even while
+ * still nominally 'planned' (logging doesn't move a session off 'planned'
+ * until it's explicitly completed, so status alone isn't enough). Shared by
+ * importProposal's eager check and insertWeeksFromProposal's re-check at
+ * accept time, so the two can't drift on what counts as "already trained". */
+async function findReplaceableSessions(db: D1Database, first: string, last: string): Promise<{ replaceableIds: number[]; protectedDates: string[] }> {
+	const { results } = await db
+		.prepare(
+			`SELECT s.id, s.date, s.status,
+			        EXISTS (SELECT 1 FROM logged_sets ls WHERE ls.session_id = s.id) AS has_sets,
+			        EXISTS (SELECT 1 FROM logged_runs lr WHERE lr.session_id = s.id) AS has_run
+			 FROM sessions s WHERE s.date >= ?1 AND s.date <= ?2 ORDER BY s.date`,
+		)
+		.bind(first, last)
+		.all<SpanCheckRow>();
+
+	const replaceableIds: number[] = [];
+	const protectedDates: string[] = [];
+	for (const row of results) {
+		if (row.status !== 'planned' || row.has_sets || row.has_run) protectedDates.push(row.date);
+		else replaceableIds.push(row.id);
+	}
+	return { replaceableIds, protectedDates };
+}
+
+/** The [min, max] calendar-date span covered by every session across every
+ * week of a proposal — used to decide which existing sessions a re-plan might
+ * touch. Null when the proposal has no sessions at all (an all-empty-weeks
+ * proposal, which validateSessionCount would reject anyway, but this runs
+ * before that). */
+function proposalDateSpan(sessions: { date: string }[]): { first: string; last: string } | null {
+	if (sessions.length === 0) return null;
+	let first = sessions[0].date;
+	let last = sessions[0].date;
+	for (const s of sessions) {
+		if (s.date < first) first = s.date;
+		if (s.date > last) last = s.date;
+	}
+	return { first, last };
+}
+
 /**
  * Validates and persists a pasted-back proposal as a pending `generated_plans`
  * row. Rebuilds the deterministic baseline fresh via buildExportContext
@@ -812,7 +938,7 @@ export function hydrateProposal(input: WeekProposalInput, exercises: Exercise[])
  * self-contained and avoids needing the client to round-trip extra state it
  * has no reason to keep.
  */
-export async function importProposal(db: D1Database, input: MultiWeekProposalInput, replace = false): Promise<ImportResult> {
+export async function importProposal(db: D1Database, input: MultiWeekProposalInput, today: string, replace = false): Promise<ImportResult> {
 	if (input.weeks.length === 0) {
 		return { ok: false, errors: ['proposal must include at least one week'] };
 	}
@@ -827,25 +953,25 @@ export async function importProposal(db: D1Database, input: MultiWeekProposalInp
 		return { ok: false, errors: ['A plan is already pending review — accept or reject it before importing another.'] };
 	}
 
-	const context = await buildExportContext(db, input.weeks.length);
+	const context = await buildExportContext(db, input.weeks.length, today);
 	const errors = validateProposal(input, context);
 	if (errors.length > 0) {
 		return { ok: false, errors };
 	}
 
-	// Nothing stopped a proposal from being scheduled on top of days that
-	// already have sessions. Accepting it double-booked the day: two rows for
-	// the same date, both showing on Today, with no indication which is real.
-	// Checked here rather than in validateProposal because it's the only rule
-	// that needs the database rather than the export context.
-	const proposedDates = input.weeks.flatMap((week) => week.sessions.map((session) => session.date));
-	if (proposedDates.length > 0) {
-		const { results: clashes } = await db
-			.prepare(`SELECT DISTINCT date FROM sessions WHERE date IN (${sqlIn(proposedDates.length)}) ORDER BY date`)
-			.bind(...proposedDates)
-			.all<{ date: string }>();
-		if (clashes.length > 0) {
-			return { ok: false, errors: clashes.map((c) => `${c.date} already has a session scheduled — move it or delete the existing one`) };
+	// A re-plan is allowed to land on top of already-scheduled dates — that's
+	// the whole point of regenerating when circumstances change — but only
+	// where nothing has actually been trained yet. Checked here (eagerly, but
+	// writing nothing) rather than in validateProposal because it's the only
+	// rule that needs the database rather than the export context; the actual
+	// deletion happens at accept time in insertWeeksFromProposal, which
+	// re-checks the same span in case things changed in the meantime.
+	const proposedSessions = input.weeks.flatMap((week) => week.sessions);
+	const span = proposalDateSpan(proposedSessions);
+	if (span) {
+		const { protectedDates } = await findReplaceableSessions(db, span.first, span.last);
+		if (protectedDates.length > 0) {
+			return { ok: false, errors: protectedDates.map((d) => `${d} already has training you've done — the plan can't overwrite it`) };
 		}
 	}
 
@@ -891,10 +1017,29 @@ export async function importProposal(db: D1Database, input: MultiWeekProposalInp
  * before the failure point. The remaining (much smaller) window is a failure
  * *between* the two batches, which orphans sessions that have no planned
  * sets — visible and hand-fixable, rather than silently duplicated data.
+ *
+ * Also re-checks the proposal's date span against the database before writing
+ * anything: import already checked this eagerly, but accepting happens after
+ * a human-sized review gap, long enough to go and train one of the days the
+ * plan is about to overwrite. A session that was untouched at import time but
+ * has since been trained on refuses the whole accept (409) rather than
+ * silently deleting logged work. Untouched sessions inside the span are
+ * deleted in their own batch, ahead of the two below — a small, already
+ * -tolerated failure window (see above), not forced into one atomic call.
  */
-export async function insertWeeksFromProposal(db: D1Database, plan: MultiWeekProposal): Promise<void> {
+export async function insertWeeksFromProposal(db: D1Database, plan: MultiWeekProposal): Promise<{ ok: true } | { ok: false; errors: string[] }> {
 	const flattened = plan.weeks.flatMap((week) => week.sessions.map((session) => ({ session, week_number: week.week_number })));
-	if (flattened.length === 0) return;
+	if (flattened.length === 0) return { ok: true };
+
+	const span = proposalDateSpan(flattened.map(({ session }) => session));
+	if (span) {
+		const { replaceableIds, protectedDates } = await findReplaceableSessions(db, span.first, span.last);
+		if (protectedDates.length > 0) {
+			return { ok: false, errors: protectedDates.map((d) => `${d} already has training you've done — the plan can't overwrite it`) };
+		}
+		const deleteStatements = deleteSessionStatements(db, replaceableIds);
+		if (deleteStatements.length > 0) await db.batch(deleteStatements);
+	}
 
 	const sessionRows = await db.batch<{ id: number }>(
 		flattened.map(({ session, week_number }) =>
@@ -948,4 +1093,5 @@ export async function insertWeeksFromProposal(db: D1Database, plan: MultiWeekPro
 	});
 
 	if (children.length > 0) await db.batch(children);
+	return { ok: true };
 }
