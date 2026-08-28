@@ -10,6 +10,13 @@ export type SessionStatus = 'planned' | 'completed' | 'skipped';
 export type RunType = 'easy' | 'tempo' | 'intervals' | 'long';
 export type PlannedSetStatus = 'planned' | 'skipped';
 
+/** Where a session came from. 'planned' is everything the generator wrote;
+ * 'manual' is a run recorded by hand after the fact. The distinction exists
+ * because the export copies the anchor week forward to build the next plan,
+ * and a run that was never planned must not become a fixture of every future
+ * week — see migrations/0008_manual_runs.sql. */
+export type SessionOrigin = 'planned' | 'manual';
+
 export interface Exercise {
 	id: number;
 	name: string;
@@ -30,6 +37,7 @@ export interface SessionRow {
 	label: string;
 	status: SessionStatus;
 	week_number: number;
+	origin: SessionOrigin;
 }
 
 export interface LoggedSetEntry {
@@ -132,6 +140,7 @@ export interface SessionSummary {
 	label: string;
 	status: SessionStatus;
 	week_number: number;
+	origin: SessionOrigin;
 	exercise_count: number;
 	planned_set_count: number;
 	logged_set_count: number;
@@ -256,6 +265,24 @@ export const RUN_METRIC_FIELDS = [
 ] as const;
 
 export type RunMetricField = (typeof RUN_METRIC_FIELDS)[number]['key'];
+
+export const RUN_TYPES: readonly RunType[] = ['easy', 'tempo', 'intervals', 'long'];
+
+/** A run recorded by hand rather than planned — what the run editor sends,
+ * for a brand-new run and for a correction to one already recorded alike. The
+ * optional watch metrics are the same RUN_METRIC_FIELDS list the logging route
+ * and the Review form already share, so all three agree on what a plausible
+ * cadence is.
+ *
+ * There is no `label`: it is derived from the run type server-side, because a
+ * second name for "easy run" is a second thing to keep in step. */
+export interface ManualRunInput extends Record<RunMetricField, number | null> {
+	date: string;
+	run_type: RunType;
+	distance_km: number;
+	duration_seconds: number;
+	note: string | null;
+}
 
 export interface Settings {
 	goals: string;

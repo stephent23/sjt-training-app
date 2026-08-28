@@ -38,7 +38,7 @@ function logged(setIndex: number): LoggedSetEntry {
 
 function detail(plannedSets: PlannedSetDetail[]): SessionDetail {
 	return {
-		session: { id: 1, date: '2026-08-10', kind: 'lift', label: 'Lift B', status: 'planned', week_number: 2 },
+		session: { id: 1, date: '2026-08-10', kind: 'lift', label: 'Lift B', status: 'planned', week_number: 2, origin: 'planned' },
 		plannedSets,
 		plannedRun: null,
 		loggedRun: null,

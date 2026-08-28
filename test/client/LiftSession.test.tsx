@@ -17,7 +17,7 @@ const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 // Wednesday's real shape: solo work, a superset, and skipped accessories.
 function sessionDetail(): SessionDetail {
 	return {
-		session: { id: 8, date: '2026-08-05', kind: 'lift', label: 'Lift B — push bias', status: 'planned', week_number: 1 },
+		session: { id: 8, date: '2026-08-05', kind: 'lift', label: 'Lift B — push bias', status: 'planned', week_number: 1, origin: 'planned' },
 		plannedSets: [
 			plannedSet({ id: 1, order_index: 1, exercise_id: 1, exercise_name: 'Neutral-grip DB press', target_sets: 4, rest_seconds: 150, logged: loggedSets(4) }),
 			plannedSet({ id: 7, order_index: 7, exercise_id: 26, exercise_name: 'DB bicep curl', target_sets: 3, rest_seconds: 0, superset_group: 1 }),
