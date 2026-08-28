@@ -42,6 +42,7 @@ function sessionDetail(overrides: Partial<SessionDetail> = {}): SessionDetail {
 			elevation_gain_m: null,
 			aerobic_training_effect: null,
 			rpe_1_10: null,
+			interval_pace_seconds_per_km: null,
 			performed_on: '2026-08-10',
 			note: 'Felt strong',
 		},
@@ -108,6 +109,13 @@ async function type(input: HTMLInputElement, value: string) {
 /** Fills the two-box duration row. Minutes first, seconds second. */
 async function typeDuration(root: HTMLElement, minutes: string, seconds: string) {
 	const [min, sec] = inputsFor(root, 'Duration');
+	await type(min, minutes);
+	await type(sec, seconds);
+}
+
+/** Fills the two-box interval-pace row, when it's shown. */
+async function typeIntervalPace(root: HTMLElement, minutes: string, seconds: string) {
+	const [min, sec] = inputsFor(root, 'Interval pace');
 	await type(min, minutes);
 	await type(sec, seconds);
 }
@@ -199,6 +207,7 @@ describe('RunEditor — adding a run by hand', () => {
 			elevation_gain_m: null,
 			aerobic_training_effect: null,
 			rpe_1_10: null,
+			interval_pace_seconds_per_km: null,
 			note: null,
 		});
 
@@ -288,6 +297,103 @@ describe('RunEditor — adding a run by hand', () => {
 
 		release(json({ id: 42 }));
 		await waitFor(() => location.hash === '#/review/42', 'the redirect after the save lands');
+	});
+});
+
+// Garmin gives an interval-only pace for interval/tempo runs, distinct from
+// overall pace — see the doc comment on LoggedRunEntry. Easy/long runs have no
+// "work segment" to average one over, so the field is hidden rather than just
+// left blank for them.
+describe('RunEditor — interval pace', () => {
+	it('shows the interval pace field only for intervals and tempo run types', async () => {
+		vi.stubGlobal('fetch', vi.fn(async () => json({ id: 42 })));
+		const root = mount();
+
+		expect(maybeButtonWith(root, 'nonsense')).toBeUndefined(); // sanity: maybeButtonWith really can return undefined
+		expect(() => inputFor(root, 'Interval pace')).toThrow(); // nothing tapped yet — no run type
+
+		tapButton(root, 'easy').click();
+		await tick();
+		expect(() => inputFor(root, 'Interval pace')).toThrow();
+
+		tapButton(root, 'long').click();
+		await tick();
+		expect(() => inputFor(root, 'Interval pace')).toThrow();
+
+		tapButton(root, 'intervals').click();
+		await tick();
+		expect(inputsFor(root, 'Interval pace')).toHaveLength(2);
+
+		tapButton(root, 'tempo').click();
+		await tick();
+		expect(inputsFor(root, 'Interval pace')).toHaveLength(2);
+	});
+
+	it('prefills the interval pace field from an edited interval run', async () => {
+		const { root } = await mountEdit(
+			sessionDetail({
+				plannedRun: { id: 4, run_type: 'intervals', target_minutes: 40, target_km: null, structure_json: null },
+				loggedRun: {
+					distance_km: 8,
+					duration_seconds: 2400,
+					avg_hr: null,
+					max_hr: null,
+					avg_cadence_spm: null,
+					elevation_gain_m: null,
+					aerobic_training_effect: null,
+					rpe_1_10: null,
+					interval_pace_seconds_per_km: 272,
+					performed_on: '2026-08-10',
+					note: null,
+				},
+			}),
+		);
+
+		const [min, sec] = inputsFor(root, 'Interval pace');
+		expect(min.value).toBe('4');
+		expect(sec.value).toBe('32');
+	});
+
+	it('includes the typed interval pace in the saved body for an interval run', async () => {
+		const fetchMock = vi.fn(async () => json({ id: 42 }));
+		vi.stubGlobal('fetch', fetchMock);
+
+		const root = mount();
+		await type(inputFor(root, 'Distance'), '8');
+		await typeDuration(root, '40', '0');
+		tapButton(root, 'intervals').click();
+		await tick();
+		await typeIntervalPace(root, '4', '32');
+
+		buttonWith(root, 'Save run').click();
+		await waitFor(() => calls(fetchMock, 'POST').length > 0, 'the run to be posted');
+
+		expect(calls(fetchMock, 'POST')[0].body).toMatchObject({ interval_pace_seconds_per_km: 272 });
+	});
+
+	// A value typed while intervals was selected must not silently survive a
+	// switch to a run type that hides the field — otherwise a stale pace from
+	// an earlier edit could get submitted for an easy run without ever being
+	// visible to correct or remove.
+	it('clears a previously-entered interval pace when the run type changes away from intervals/tempo', async () => {
+		const fetchMock = vi.fn(async () => json({ id: 42 }));
+		vi.stubGlobal('fetch', fetchMock);
+
+		const root = mount();
+		await type(inputFor(root, 'Distance'), '8');
+		await typeDuration(root, '40', '0');
+		tapButton(root, 'intervals').click();
+		await tick();
+		await typeIntervalPace(root, '4', '32');
+
+		tapButton(root, 'easy').click();
+		await tick();
+		expect(() => inputFor(root, 'Interval pace')).toThrow();
+
+		buttonWith(root, 'Save run').click();
+		await waitFor(() => calls(fetchMock, 'POST').length > 0, 'the run to be posted');
+
+		expect(calls(fetchMock, 'POST')[0].body).toMatchObject({ interval_pace_seconds_per_km: null });
 	});
 });
 

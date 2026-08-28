@@ -1,4 +1,4 @@
-import { RUN_METRIC_FIELDS } from '../../types';
+import { INTERVAL_PACE_RUN_TYPES, RUN_METRIC_FIELDS, type RunType } from '../../types';
 import { formatPace } from '../format';
 
 export interface RunMetricsFieldsProps {
@@ -10,14 +10,19 @@ export interface RunMetricsFieldsProps {
 	 * useful. Every input still wires the handler; it is just a no-op when this
 	 * is absent. */
 	onCommit?: () => void;
+	/** Interval pace only makes sense for a run with a work segment to average
+	 * it over — hidden entirely (not just optional) for easy/long runs. Absent
+	 * (e.g. before a run type has been chosen) hides it too. */
+	runType?: RunType | null;
 }
 
 /** The distance/duration/pace + "from your watch" metrics + note block shared
  * by Review's inline run editor and the standalone RunEditor screen. Lifted
  * out of ReviewRun unchanged so the two can't drift apart in markup. */
-export function RunMetricsFields({ fields, onSet, onCommit }: RunMetricsFieldsProps) {
+export function RunMetricsFields({ fields, onSet, onCommit, runType }: RunMetricsFieldsProps) {
 	const commit = () => onCommit?.();
 	const pace = formatPace(Number(fields.distance), (Number(fields.minutes) || 0) * 60 + (Number(fields.seconds) || 0));
+	const showIntervalPace = runType != null && INTERVAL_PACE_RUN_TYPES.includes(runType);
 
 	return (
 		<div>
@@ -57,6 +62,36 @@ export function RunMetricsFields({ fields, onSet, onCommit }: RunMetricsFieldsPr
 							<tr>
 								<td>Pace</td>
 								<td class="exercise-target">{pace}</td>
+							</tr>
+						)}
+						{/* Garmin's second pace figure for an interval/tempo run — the
+						    average during the work segments only, distinct from the
+						    overall pace above. Can't be derived like overall pace can,
+						    since interval-level distance/duration aren't captured — see
+						    the doc comment on LoggedRunEntry. */}
+						{showIntervalPace && (
+							<tr>
+								<td>Interval pace</td>
+								<td>
+									<div class="duration-inputs">
+										<input
+											type="number"
+											inputmode="numeric"
+											placeholder="min"
+											value={fields.intervalPaceMinutes}
+											onInput={onSet('intervalPaceMinutes')}
+											onChange={commit}
+										/>
+										<input
+											type="number"
+											inputmode="numeric"
+											placeholder="sec"
+											value={fields.intervalPaceSeconds}
+											onInput={onSet('intervalPaceSeconds')}
+											onChange={commit}
+										/>
+									</div>
+								</td>
 							</tr>
 						)}
 					</tbody>

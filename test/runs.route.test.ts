@@ -27,6 +27,7 @@ function runBody(overrides: Partial<ManualRunInput> = {}): ManualRunInput {
 		elevation_gain_m: null,
 		aerobic_training_effect: null,
 		rpe_1_10: null,
+		interval_pace_seconds_per_km: null,
 		note: null,
 		...overrides,
 	};
@@ -81,6 +82,7 @@ describe('POST /api/runs', () => {
 			elevation_gain_m: 96.5,
 			aerobic_training_effect: 3.8,
 			rpe_1_10: 7,
+			interval_pace_seconds_per_km: null,
 			performed_on: '2026-08-12',
 			note: 'windy',
 		});
@@ -247,6 +249,9 @@ describe('POST /api/runs validation', () => {
 		['rpe_1_10 below its minimum', { rpe_1_10: 0 }],
 		['rpe_1_10 above its maximum', { rpe_1_10: 11 }],
 		['a non-integer rpe_1_10', { rpe_1_10: 7.5 }],
+		['interval_pace_seconds_per_km below its minimum', { interval_pace_seconds_per_km: 89 }],
+		['interval_pace_seconds_per_km above its maximum', { interval_pace_seconds_per_km: 1201 }],
+		['a non-integer interval_pace_seconds_per_km', { interval_pace_seconds_per_km: 272.5 }],
 	])('rejects %s with 400', async (_name, overrides) => {
 		const res = await postJson('https://training-app.test/api/runs', runBody(overrides as Partial<ManualRunInput>));
 		expect(res.status).toBe(400);
@@ -257,6 +262,17 @@ describe('POST /api/runs validation', () => {
 
 		const detail = await fetchDetail(id);
 		expect(detail.loggedRun).toMatchObject({ elevation_gain_m: 84.5, aerobic_training_effect: 3.4 });
+	});
+
+	// Bounds are enforced regardless of run_type — the field is only ever
+	// *offered* for intervals/tempo on the client, but nothing server-side
+	// restricts which run types may carry a value, matching how none of the
+	// other optional metrics are restricted by run type either.
+	it('records interval_pace_seconds_per_km for an interval run', async () => {
+		const id = await createRun({ run_type: 'intervals', interval_pace_seconds_per_km: 272 });
+
+		const detail = await fetchDetail(id);
+		expect(detail.loggedRun).toMatchObject({ interval_pace_seconds_per_km: 272 });
 	});
 
 	it('writes nothing when the body is rejected', async () => {
@@ -373,6 +389,7 @@ describe('PUT /api/runs/:id', () => {
 		['a zero distance_km', { distance_km: 0 }],
 		['a fractional duration_seconds', { duration_seconds: 1800.5 }],
 		['an out-of-range avg_hr', { avg_hr: 900 }],
+		['an out-of-range interval_pace_seconds_per_km', { interval_pace_seconds_per_km: 1500 }],
 	])('rejects %s with 400', async (_name, overrides) => {
 		const id = await createRun();
 

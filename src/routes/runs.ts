@@ -5,7 +5,7 @@
 // already-existing session).
 
 import { Hono } from 'hono';
-import { validateRunMetrics } from '../runValidation';
+import { validateIntervalPace, validateRunMetrics } from '../runValidation';
 import { deleteSessionStatements } from '../sessionDelete';
 import { RUN_TYPES } from '../types';
 import type { ManualRunInput } from '../types';
@@ -46,7 +46,7 @@ function validateManualRun(body: Record<string, unknown>): string | null {
 	if (typeof body.distance_km !== 'number' || !Number.isFinite(body.distance_km) || body.distance_km <= 0) return 'invalid distance_km';
 	if (typeof body.duration_seconds !== 'number' || !Number.isInteger(body.duration_seconds) || body.duration_seconds <= 0)
 		return 'invalid duration_seconds';
-	return validateRunMetrics(body);
+	return validateRunMetrics(body) ?? validateIntervalPace(body);
 }
 
 runs.post('/', async (c) => {
@@ -74,8 +74,8 @@ runs.post('/', async (c) => {
 		),
 		c.env.DB.prepare(
 			`INSERT INTO logged_runs (session_id, distance_km, duration_seconds, avg_hr, max_hr, avg_cadence_spm, elevation_gain_m,
-			                          aerobic_training_effect, rpe_1_10, performed_on, logged_at, note)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?)`,
+			                          aerobic_training_effect, rpe_1_10, interval_pace_seconds_per_km, performed_on, logged_at, note)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?)`,
 		).bind(
 			sessionId,
 			body.distance_km,
@@ -86,6 +86,7 @@ runs.post('/', async (c) => {
 			body.elevation_gain_m ?? null,
 			body.aerobic_training_effect ?? null,
 			body.rpe_1_10 ?? null,
+			body.interval_pace_seconds_per_km ?? null,
 			body.date,
 			body.note ?? null,
 		),
@@ -115,8 +116,8 @@ runs.put('/:id', async (c) => {
 		).bind(id, body.run_type),
 		c.env.DB.prepare(
 			`INSERT INTO logged_runs (session_id, distance_km, duration_seconds, avg_hr, max_hr, avg_cadence_spm, elevation_gain_m,
-			                          aerobic_training_effect, rpe_1_10, performed_on, logged_at, note)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?)
+			                          aerobic_training_effect, rpe_1_10, interval_pace_seconds_per_km, performed_on, logged_at, note)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?)
 			 ON CONFLICT (session_id) DO UPDATE SET
 			   distance_km = excluded.distance_km,
 			   duration_seconds = excluded.duration_seconds,
@@ -126,6 +127,7 @@ runs.put('/:id', async (c) => {
 			   elevation_gain_m = excluded.elevation_gain_m,
 			   aerobic_training_effect = excluded.aerobic_training_effect,
 			   rpe_1_10 = excluded.rpe_1_10,
+			   interval_pace_seconds_per_km = excluded.interval_pace_seconds_per_km,
 			   performed_on = excluded.performed_on,
 			   logged_at = datetime('now'),
 			   note = excluded.note`,
@@ -139,6 +141,7 @@ runs.put('/:id', async (c) => {
 			body.elevation_gain_m ?? null,
 			body.aerobic_training_effect ?? null,
 			body.rpe_1_10 ?? null,
+			body.interval_pace_seconds_per_km ?? null,
 			body.date,
 			body.note ?? null,
 		),

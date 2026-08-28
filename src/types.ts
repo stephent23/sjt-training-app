@@ -99,6 +99,12 @@ export interface LoggedRunEntry {
 	elevation_gain_m: number | null;
 	aerobic_training_effect: number | null;
 	rpe_1_10: number | null;
+	/** Average pace during the work segments of an interval/tempo run, in
+	 * whole seconds per km. Unlike overall pace, this can't be derived from
+	 * distance_km/duration_seconds — there's no separate interval-level
+	 * distance/duration stored — so it's a real value, copied off the watch by
+	 * hand like every other optional metric below. See INTERVAL_PACE_BOUNDS. */
+	interval_pace_seconds_per_km: number | null;
 	performed_on: string;
 	note: string | null;
 }
@@ -268,6 +274,18 @@ export type RunMetricField = (typeof RUN_METRIC_FIELDS)[number]['key'];
 
 export const RUN_TYPES: readonly RunType[] = ['easy', 'tempo', 'intervals', 'long'];
 
+/** Which run types the interval-pace field is offered for. Easy and long runs
+ * have no "work segment" to average a pace over, so the field stays hidden
+ * for them rather than just optional. */
+export const INTERVAL_PACE_RUN_TYPES: readonly RunType[] = ['intervals', 'tempo'];
+
+/** Bounds for interval_pace_seconds_per_km, generous enough to catch a typo
+ * (a stray digit, minutes and seconds swapped) without policing what a real
+ * interval session can look like — same philosophy as RUN_METRIC_FIELDS.
+ * 90s/km (1:30/km) is faster than any sustained human pace; 1200s/km
+ * (20:00/km) is a slow walk. */
+export const INTERVAL_PACE_BOUNDS = { min: 90, max: 1200 } as const;
+
 /** A run recorded by hand rather than planned — what the run editor sends,
  * for a brand-new run and for a correction to one already recorded alike. The
  * optional watch metrics are the same RUN_METRIC_FIELDS list the logging route
@@ -281,6 +299,7 @@ export interface ManualRunInput extends Record<RunMetricField, number | null> {
 	run_type: RunType;
 	distance_km: number;
 	duration_seconds: number;
+	interval_pace_seconds_per_km: number | null;
 	note: string | null;
 }
 

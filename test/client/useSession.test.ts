@@ -98,6 +98,7 @@ describe('mergeUnsyncedLogs', () => {
 				elevation_gain_m: null,
 				aerobic_training_effect: null,
 				rpe_1_10: 5,
+				interval_pace_seconds_per_km: null,
 				performed_on: '2026-08-10',
 				note: null,
 			},

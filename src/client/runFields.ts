@@ -3,7 +3,7 @@
 // disagree about what a valid run is. See RUN_METRIC_FIELDS in ../types for
 // the bounds enforced below.
 
-import { RUN_METRIC_FIELDS, type LoggedRunEntry, type RunMetricField } from '../types';
+import { INTERVAL_PACE_BOUNDS, RUN_METRIC_FIELDS, type LoggedRunEntry, type RunMetricField } from '../types';
 
 export type RunFields = Record<string, string>;
 
@@ -12,6 +12,8 @@ export function emptyRunFields(): RunFields {
 		distance: '',
 		minutes: '',
 		seconds: '',
+		intervalPaceMinutes: '',
+		intervalPaceSeconds: '',
 		note: '',
 		...Object.fromEntries(RUN_METRIC_FIELDS.map((f) => [f.key, ''])),
 	};
@@ -20,16 +22,21 @@ export function emptyRunFields(): RunFields {
 export function runFieldsFrom(loggedRun: LoggedRunEntry | null): RunFields {
 	if (!loggedRun) return emptyRunFields();
 
+	const pace = loggedRun.interval_pace_seconds_per_km;
+
 	return {
 		distance: String(loggedRun.distance_km),
 		minutes: String(Math.floor(loggedRun.duration_seconds / 60)),
 		seconds: String(loggedRun.duration_seconds % 60),
+		intervalPaceMinutes: pace == null ? '' : String(Math.floor(pace / 60)),
+		intervalPaceSeconds: pace == null ? '' : String(pace % 60),
 		note: loggedRun.note ?? '',
 		...Object.fromEntries(RUN_METRIC_FIELDS.map((f) => [f.key, loggedRun[f.key] == null ? '' : String(loggedRun[f.key])])),
 	};
 }
 
-type ParsedRun = Pick<LoggedRunEntry, 'distance_km' | 'duration_seconds' | 'note'> & Record<RunMetricField, number | null>;
+type ParsedRun = Pick<LoggedRunEntry, 'distance_km' | 'duration_seconds' | 'note' | 'interval_pace_seconds_per_km'> &
+	Record<RunMetricField, number | null>;
 
 export type ParseRunFieldsResult = { ok: true; value: ParsedRun } | { ok: false; errors: string[] };
 
@@ -49,6 +56,21 @@ export function parseRunFields(fields: RunFields): ParseRunFieldsResult {
 	const durationSeconds = (Number(fields.minutes) || 0) * 60 + (Number(fields.seconds) || 0);
 	if (durationSeconds <= 0) {
 		errors.push('Duration must add up to more than zero.');
+	}
+
+	// Unlike duration, interval pace is entirely optional — blank in both boxes
+	// means "not applicable" (easy/long runs have no work segment to average
+	// one over), not zero. A blank sub-field with the other filled still counts
+	// as zero, the same rule duration uses, so a garbage-low partial entry gets
+	// caught by the bounds check below rather than silently accepted.
+	let intervalPaceSecondsPerKm: number | null = null;
+	if (fields.intervalPaceMinutes.trim() !== '' || fields.intervalPaceSeconds.trim() !== '') {
+		const pace = (Number(fields.intervalPaceMinutes) || 0) * 60 + (Number(fields.intervalPaceSeconds) || 0);
+		if (!Number.isInteger(pace) || pace < INTERVAL_PACE_BOUNDS.min || pace > INTERVAL_PACE_BOUNDS.max) {
+			errors.push("Interval pace doesn't look right — check the value you entered.");
+		} else {
+			intervalPaceSecondsPerKm = pace;
+		}
 	}
 
 	const metrics = {} as Record<RunMetricField, number | null>;
@@ -77,6 +99,7 @@ export function parseRunFields(fields: RunFields): ParseRunFieldsResult {
 		value: {
 			distance_km: distanceKm,
 			duration_seconds: durationSeconds,
+			interval_pace_seconds_per_km: intervalPaceSecondsPerKm,
 			note,
 			...metrics,
 		},

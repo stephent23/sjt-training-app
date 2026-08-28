@@ -124,14 +124,15 @@ export async function insertLoggedRun(sessionId: number, overrides: Partial<Logg
 		elevation_gain_m: null,
 		aerobic_training_effect: null,
 		rpe_1_10: 4,
+		interval_pace_seconds_per_km: null,
 		performed_on: '2026-07-27',
 		note: null,
 		...overrides,
 	};
 	await env.DB.prepare(
 		`INSERT INTO logged_runs (session_id, distance_km, duration_seconds, avg_hr, max_hr, avg_cadence_spm, elevation_gain_m,
-		                          aerobic_training_effect, rpe_1_10, performed_on, note)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		                          aerobic_training_effect, rpe_1_10, interval_pace_seconds_per_km, performed_on, note)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 	)
 		.bind(
 			sessionId,
@@ -143,6 +144,7 @@ export async function insertLoggedRun(sessionId: number, overrides: Partial<Logg
 			l.elevation_gain_m,
 			l.aerobic_training_effect,
 			l.rpe_1_10,
+			l.interval_pace_seconds_per_km,
 			l.performed_on,
 			l.note,
 		)

@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { validateRunMetrics } from '../runValidation';
+import { validateIntervalPace, validateRunMetrics } from '../runValidation';
 import { sqlIn } from '../sql';
 import type {
 	LoggedRunEntry,
@@ -92,7 +92,7 @@ async function loadSessionDetail(db: D1Database, session: SessionRow): Promise<S
 	const loggedRun = await db
 		.prepare(
 			`SELECT distance_km, duration_seconds, avg_hr, max_hr, avg_cadence_spm, elevation_gain_m, aerobic_training_effect,
-			        rpe_1_10, performed_on, note
+			        rpe_1_10, interval_pace_seconds_per_km, performed_on, note
 			 FROM logged_runs WHERE session_id = ?`,
 		)
 		.bind(session.id)
@@ -275,10 +275,13 @@ sessions.post('/:id/runs', async (c) => {
 	const metricsError = validateRunMetrics(body as unknown as Record<string, unknown>);
 	if (metricsError) return c.json({ error: metricsError }, 400);
 
+	const paceError = validateIntervalPace(body as unknown as Record<string, unknown>);
+	if (paceError) return c.json({ error: paceError }, 400);
+
 	await c.env.DB.prepare(
 		`INSERT INTO logged_runs (session_id, distance_km, duration_seconds, avg_hr, max_hr, avg_cadence_spm, elevation_gain_m,
-		                          aerobic_training_effect, rpe_1_10, performed_on, logged_at, note)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?)
+		                          aerobic_training_effect, rpe_1_10, interval_pace_seconds_per_km, performed_on, logged_at, note)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?)
 		 ON CONFLICT (session_id) DO UPDATE SET
 		   distance_km = excluded.distance_km,
 		   duration_seconds = excluded.duration_seconds,
@@ -288,6 +291,7 @@ sessions.post('/:id/runs', async (c) => {
 		   elevation_gain_m = excluded.elevation_gain_m,
 		   aerobic_training_effect = excluded.aerobic_training_effect,
 		   rpe_1_10 = excluded.rpe_1_10,
+		   interval_pace_seconds_per_km = excluded.interval_pace_seconds_per_km,
 		   performed_on = excluded.performed_on,
 		   logged_at = datetime('now'),
 		   note = excluded.note`,
@@ -302,6 +306,7 @@ sessions.post('/:id/runs', async (c) => {
 			body.elevation_gain_m ?? null,
 			body.aerobic_training_effect ?? null,
 			body.rpe_1_10 ?? null,
+			body.interval_pace_seconds_per_km ?? null,
 			body.performed_on,
 			body.note,
 		)

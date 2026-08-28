@@ -4,6 +4,7 @@ import {
 	type LoggedSetEntry,
 	type PlannedSetDetail,
 	type RunMetricField,
+	type RunType,
 	type SessionFeedback,
 } from '../../types';
 import { logRun, logSet, saveFeedback, setExerciseStatus, setSessionStatus } from '../api';
@@ -143,12 +144,14 @@ function ReviewExercise({ exercise, onCommitSet, onUnskip }: ReviewExerciseProps
 
 interface ReviewRunProps {
 	loggedRun: LoggedRunEntry | null;
+	runType: RunType | null;
 	onCommit: (input: LoggedRunMetrics) => void;
 }
 
-type LoggedRunMetrics = Pick<LoggedRunEntry, 'distance_km' | 'duration_seconds' | 'note'> & Record<RunMetricField, number | null>;
+type LoggedRunMetrics = Pick<LoggedRunEntry, 'distance_km' | 'duration_seconds' | 'note' | 'interval_pace_seconds_per_km'> &
+	Record<RunMetricField, number | null>;
 
-function ReviewRun({ loggedRun, onCommit }: ReviewRunProps) {
+function ReviewRun({ loggedRun, runType, onCommit }: ReviewRunProps) {
 	const [fields, setFields] = useState<Record<string, string>>(() => runFieldsFrom(loggedRun));
 	const set = (key: string) => (e: Event) => setFields((f) => ({ ...f, [key]: (e.target as HTMLInputElement).value }));
 
@@ -171,7 +174,7 @@ function ReviewRun({ loggedRun, onCommit }: ReviewRunProps) {
 		onCommit(parsed.value);
 	}
 
-	return <RunMetricsFields fields={fields} onSet={set} onCommit={commit} />;
+	return <RunMetricsFields fields={fields} onSet={set} onCommit={commit} runType={runType} />;
 }
 
 export function Review({ sessionId }: ReviewProps) {
@@ -258,7 +261,7 @@ export function Review({ sessionId }: ReviewProps) {
 							{runSummary(detail.plannedRun.run_type, detail.plannedRun.target_minutes, detail.plannedRun.target_km)}
 						</p>
 					)}
-					<ReviewRun loggedRun={loggedRun} onCommit={handleCommitRun} />
+					<ReviewRun loggedRun={loggedRun} runType={detail.plannedRun?.run_type ?? null} onCommit={handleCommitRun} />
 					<button type="button" class="btn-secondary" onClick={() => (location.hash = `#/run/${sessionId}/edit`)}>
 						Edit run details
 					</button>

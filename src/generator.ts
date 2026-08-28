@@ -292,7 +292,7 @@ export async function buildExportContext(db: D1Database, weekCount: number, toda
 			await db
 				.prepare(
 					`SELECT id, session_id, distance_km, duration_seconds, avg_hr, max_hr, avg_cadence_spm, elevation_gain_m,
-					        aerobic_training_effect, rpe_1_10, performed_on, note
+					        aerobic_training_effect, rpe_1_10, interval_pace_seconds_per_km, performed_on, note
 					 FROM logged_runs WHERE session_id IN (${sqlIn(windowSessionIds.length)})`,
 				)
 				.bind(...windowSessionIds)

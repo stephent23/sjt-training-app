@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { RUN_TYPES, type ManualRunInput, type RunType } from '../../types';
+import { INTERVAL_PACE_RUN_TYPES, RUN_TYPES, type ManualRunInput, type RunType } from '../../types';
 import { todayIso } from '../../dates';
 import { capitalize } from '../format';
 import { createManualRun, deleteManualRun, updateManualRun } from '../api';
@@ -76,6 +76,17 @@ function RunEditorBody({ sessionId, initialDate, initialRunType, initialFields }
 
 	const set = (key: string) => (e: Event) => setFields((f) => ({ ...f, [key]: (e.target as HTMLInputElement).value }));
 
+	// A pace typed in while intervals/tempo was selected must not silently
+	// survive a switch to a type that hides the field — otherwise it could
+	// still get submitted for an easy/long run, correctable only by switching
+	// back to see it again.
+	function handleRunTypeChange(next: RunType) {
+		setRunType(next);
+		if (!INTERVAL_PACE_RUN_TYPES.includes(next)) {
+			setFields((f) => ({ ...f, intervalPaceMinutes: '', intervalPaceSeconds: '' }));
+		}
+	}
+
 	async function handleSave() {
 		const parsed = parseRunFields(fields);
 		if (!parsed.ok) {
@@ -137,9 +148,9 @@ function RunEditorBody({ sessionId, initialDate, initialRunType, initialFields }
 				<input type="date" value={date} onInput={(e) => setDate((e.target as HTMLInputElement).value)} />
 			</label>
 
-			<TapGroup options={RUN_TYPES} value={runType} onChange={setRunType} label={capitalize} ariaLabel="Run type" />
+			<TapGroup options={RUN_TYPES} value={runType} onChange={handleRunTypeChange} label={capitalize} ariaLabel="Run type" />
 
-			<RunMetricsFields fields={fields} onSet={set} />
+			<RunMetricsFields fields={fields} onSet={set} runType={runType} />
 
 			<button type="button" class="btn-primary" onClick={handleSave} disabled={saving}>
 				{saving ? 'Saving…' : 'Save run'}

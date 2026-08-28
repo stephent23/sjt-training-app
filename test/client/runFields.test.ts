@@ -39,6 +39,7 @@ function loggedRun(overrides: Partial<LoggedRunEntry> = {}): LoggedRunEntry {
 		elevation_gain_m: 0,
 		aerobic_training_effect: null,
 		rpe_1_10: null,
+		interval_pace_seconds_per_km: null,
 		performed_on: '2026-08-10',
 		note: 'Felt strong',
 		...overrides,
@@ -49,7 +50,9 @@ describe('emptyRunFields', () => {
 	it('has a blank string for every field the form owns', () => {
 		const empty = emptyRunFields();
 
-		expect(Object.keys(empty).sort()).toEqual(['distance', 'minutes', 'seconds', 'note', ...metricKeys].sort());
+		expect(Object.keys(empty).sort()).toEqual(
+			['distance', 'minutes', 'seconds', 'intervalPaceMinutes', 'intervalPaceSeconds', 'note', ...metricKeys].sort(),
+		);
 		expect(Object.values(empty).every((v) => v === '')).toBe(true);
 	});
 });
@@ -94,7 +97,21 @@ describe('runFieldsFrom', () => {
 			elevation_gain_m: 0,
 			aerobic_training_effect: null,
 			rpe_1_10: null,
+			interval_pace_seconds_per_km: null,
 		});
+	});
+
+	it('splits a stored interval pace into minutes and seconds, same as duration', () => {
+		const f = runFieldsFrom(loggedRun({ interval_pace_seconds_per_km: 272 })); // 4:32/km
+
+		expect(f.intervalPaceMinutes).toBe('4');
+		expect(f.intervalPaceSeconds).toBe('32');
+	});
+
+	it('round-trips a logged interval pace back to the same number', () => {
+		const entry = loggedRun({ interval_pace_seconds_per_km: 272 });
+
+		expect(ok(parseRunFields(runFieldsFrom(entry))).interval_pace_seconds_per_km).toBe(272);
 	});
 });
 
@@ -156,6 +173,37 @@ describe('parseRunFields — watch metrics', () => {
 
 	it('rejects a metric that is not a number at all', () => {
 		expect(failed(parseRunFields(fields({ ...valid, max_hr: 'one fifty' }))).join(' ')).toMatch(/max.?hr/i);
+	});
+});
+
+describe('parseRunFields — interval pace', () => {
+	const valid = { distance: '8', minutes: '40', seconds: '0' };
+
+	it('is null when both minutes and seconds are blank, unlike duration it is not required', () => {
+		expect(ok(parseRunFields(fields(valid))).interval_pace_seconds_per_km).toBeNull();
+	});
+
+	it('folds minutes and seconds into whole seconds per km, blank sub-field counts as zero', () => {
+		expect(ok(parseRunFields(fields({ ...valid, intervalPaceMinutes: '4', intervalPaceSeconds: '32' }))).interval_pace_seconds_per_km).toBe(
+			272,
+		);
+		expect(ok(parseRunFields(fields({ ...valid, intervalPaceMinutes: '4', intervalPaceSeconds: '' }))).interval_pace_seconds_per_km).toBe(
+			240,
+		);
+	});
+
+	it('rejects a pace below its floor', () => {
+		// 1:00/km — faster than any sustained human pace, below the 90s floor.
+		expect(
+			failed(parseRunFields(fields({ ...valid, intervalPaceMinutes: '1', intervalPaceSeconds: '0' }))).join(' '),
+		).toMatch(/interval pace/i);
+	});
+
+	it('rejects a pace above its ceiling', () => {
+		// 21:00/km, above the 1200s ceiling.
+		expect(
+			failed(parseRunFields(fields({ ...valid, intervalPaceMinutes: '21', intervalPaceSeconds: '0' }))).join(' '),
+		).toMatch(/interval pace/i);
 	});
 });
 

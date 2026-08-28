@@ -140,6 +140,7 @@ describe('POST /api/sessions/:id/runs', () => {
 			elevation_gain_m: null,
 			aerobic_training_effect: null,
 			rpe_1_10: 4,
+			interval_pace_seconds_per_km: null,
 			performed_on: '2026-08-03',
 			note: null,
 		};
@@ -152,6 +153,7 @@ describe('POST /api/sessions/:id/runs', () => {
 			elevation_gain_m: 84.5,
 			aerobic_training_effect: 3.4,
 			rpe_1_10: 5,
+			interval_pace_seconds_per_km: 272,
 			performed_on: '2026-08-03',
 			note: 'felt tired',
 		};
@@ -175,6 +177,7 @@ describe('POST /api/sessions/:id/runs', () => {
 			elevation_gain_m: null,
 			aerobic_training_effect: null,
 			rpe_1_10: null,
+			interval_pace_seconds_per_km: null,
 			performed_on: '2026-08-03',
 			note: null,
 			...overrides,
@@ -190,10 +193,25 @@ describe('POST /api/sessions/:id/runs', () => {
 		['elevation_gain_m', { elevation_gain_m: -5 }],
 		['aerobic_training_effect', { aerobic_training_effect: 9 }],
 		['a non-integer avg_hr', { avg_hr: 140.5 }],
+		['interval_pace_seconds_per_km below its minimum', { interval_pace_seconds_per_km: 89 }],
+		['interval_pace_seconds_per_km above its maximum', { interval_pace_seconds_per_km: 1201 }],
+		['a non-integer interval_pace_seconds_per_km', { interval_pace_seconds_per_km: 272.5 }],
 	])('rejects an out-of-range %s with 400', async (_name, overrides) => {
 		const sessionId = await insertSession({ kind: 'run', label: 'Easy run' });
 		const res = await postJson(`https://training-app.test/api/sessions/${sessionId}/runs`, runBody(overrides as Partial<LogRunInput>));
 		expect(res.status).toBe(400);
+	});
+
+	it('accepts and stores a valid interval_pace_seconds_per_km', async () => {
+		const sessionId = await insertSession({ kind: 'run', label: 'Intervals' });
+		const res = await postJson(
+			`https://training-app.test/api/sessions/${sessionId}/runs`,
+			runBody({ interval_pace_seconds_per_km: 272 }),
+		);
+		expect(res.status).toBe(200);
+
+		const detail = (await (await SELF.fetch(`https://training-app.test/api/sessions/${sessionId}`)).json()) as SessionDetail;
+		expect(detail.loggedRun).toMatchObject({ interval_pace_seconds_per_km: 272 });
 	});
 
 	it('accepts a run with every watch field omitted', async () => {
@@ -202,7 +220,13 @@ describe('POST /api/sessions/:id/runs', () => {
 		expect(res.status).toBe(200);
 
 		const detail = (await (await SELF.fetch(`https://training-app.test/api/sessions/${sessionId}`)).json()) as SessionDetail;
-		expect(detail.loggedRun).toMatchObject({ max_hr: null, avg_cadence_spm: null, elevation_gain_m: null, aerobic_training_effect: null });
+		expect(detail.loggedRun).toMatchObject({
+			max_hr: null,
+			avg_cadence_spm: null,
+			elevation_gain_m: null,
+			aerobic_training_effect: null,
+			interval_pace_seconds_per_km: null,
+		});
 	});
 });
 
