@@ -6,6 +6,7 @@ import { Plan } from './screens/Plan';
 import { History } from './screens/History';
 import { Preview } from './screens/Preview';
 import { Review } from './screens/Review';
+import { RunEditor } from './screens/RunEditor';
 import { RunSession } from './screens/RunSession';
 import { Today } from './screens/Today';
 
@@ -17,14 +18,20 @@ type View =
 	| { name: 'lift'; sessionId: number }
 	| { name: 'run'; sessionId: number }
 	| { name: 'review'; sessionId: number }
-	| { name: 'preview'; sessionId: number };
+	| { name: 'preview'; sessionId: number }
+	| { name: 'run-new' }
+	| { name: 'run-edit'; sessionId: number };
 
 const SESSION_ROUTE = /^#\/(lift|run|review|preview)\/(\d+)$/;
+const RUN_EDIT_ROUTE = /^#\/run\/(\d+)\/edit$/;
 
 function viewFromHash(): View {
 	if (location.hash === '#/plan') return { name: 'plan' };
 	if (location.hash === '#/history') return { name: 'history' };
 	if (location.hash === '#/generate') return { name: 'generate' };
+	if (location.hash === '#/run/new') return { name: 'run-new' };
+	const editMatch = location.hash.match(RUN_EDIT_ROUTE);
+	if (editMatch) return { name: 'run-edit', sessionId: Number(editMatch[1]) };
 	const match = location.hash.match(SESSION_ROUTE);
 	if (match) return { name: match[1] as 'lift' | 'run' | 'review' | 'preview', sessionId: Number(match[2]) };
 	return { name: 'today' };
@@ -50,6 +57,8 @@ export function App() {
 	if (view.name === 'run') return <RunSession sessionId={view.sessionId} onBack={goBack} />;
 	if (view.name === 'review') return <Review sessionId={view.sessionId} />;
 	if (view.name === 'preview') return <Preview sessionId={view.sessionId} onBack={goBack} />;
+	if (view.name === 'run-new') return <RunEditor />;
+	if (view.name === 'run-edit') return <RunEditor sessionId={view.sessionId} />;
 
 	if (view.name === 'plan')
 		return (

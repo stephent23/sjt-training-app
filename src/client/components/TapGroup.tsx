@@ -5,7 +5,7 @@
 // into those call sites — that's for the next round of screen work.
 
 interface TapGroupProps<T> {
-	options: T[];
+	options: readonly T[];
 	value: T | null;
 	onChange: (value: T) => void;
 	label: (option: T) => string;

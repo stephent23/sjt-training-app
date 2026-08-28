@@ -4,6 +4,7 @@ import type {
 	Modality,
 	LogRunInput,
 	LogSetInput,
+	ManualRunInput,
 	PlannedSetStatus,
 	SessionDetail,
 	SessionFeedback,
@@ -154,6 +155,33 @@ export async function setSessionDate(sessionId: number, date: string): Promise<v
 		body: JSON.stringify({ date }),
 	});
 	if (!res.ok) throw new Error(`request failed: ${res.status}`);
+}
+
+// A run recorded (or corrected) by hand at a keyboard, not mid-workout —
+// direct awaited fetches like setSessionDate above, not the offline sync
+// queue that logSet/logRun use for a live session.
+export async function createManualRun(input: ManualRunInput): Promise<{ id: number }> {
+	const res = await fetch('/api/runs', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(input),
+	});
+	if (!res.ok) throw await errorFrom(res);
+	return res.json();
+}
+
+export async function updateManualRun(sessionId: number, input: ManualRunInput): Promise<void> {
+	const res = await fetch(`/api/runs/${sessionId}`, {
+		method: 'PUT',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(input),
+	});
+	if (!res.ok) throw await errorFrom(res);
+}
+
+export async function deleteManualRun(sessionId: number): Promise<void> {
+	const res = await fetch(`/api/runs/${sessionId}`, { method: 'DELETE' });
+	if (!res.ok) throw await errorFrom(res);
 }
 
 export async function fetchSettings(): Promise<Settings> {

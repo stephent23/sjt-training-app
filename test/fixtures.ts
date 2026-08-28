@@ -1,5 +1,15 @@
 import { env } from 'cloudflare:test';
-import type { Exercise, Loading, LoggedRunEntry, Modality, PlannedSetStatus, RunType, SessionKind, SessionStatus } from '../src/types';
+import type {
+	Exercise,
+	Loading,
+	LoggedRunEntry,
+	Modality,
+	PlannedSetStatus,
+	RunType,
+	SessionKind,
+	SessionOrigin,
+	SessionStatus,
+} from '../src/types';
 
 // Re-exported so callers (e.g. test/sessions.today.test.ts) compare against
 // the exact same Europe/London-based "today" the route itself computes —
@@ -30,11 +40,19 @@ export async function insertExercise(overrides: Partial<Omit<Exercise, 'id'>> = 
 }
 
 export async function insertSession(
-	overrides: Partial<{ date: string; kind: SessionKind; label: string; status: SessionStatus; week_number: number }> = {},
+	overrides: Partial<{ date: string; kind: SessionKind; label: string; status: SessionStatus; week_number: number; origin: SessionOrigin }> = {},
 ): Promise<number> {
-	const s = { date: '2026-08-03', kind: 'lift' as SessionKind, label: 'Lift A', status: 'planned' as SessionStatus, week_number: 1, ...overrides };
-	const row = await env.DB.prepare(`INSERT INTO sessions (date, kind, label, status, week_number) VALUES (?, ?, ?, ?, ?) RETURNING id`)
-		.bind(s.date, s.kind, s.label, s.status, s.week_number)
+	const s = {
+		date: '2026-08-03',
+		kind: 'lift' as SessionKind,
+		label: 'Lift A',
+		status: 'planned' as SessionStatus,
+		week_number: 1,
+		origin: 'planned' as SessionOrigin,
+		...overrides,
+	};
+	const row = await env.DB.prepare(`INSERT INTO sessions (date, kind, label, status, week_number, origin) VALUES (?, ?, ?, ?, ?, ?) RETURNING id`)
+		.bind(s.date, s.kind, s.label, s.status, s.week_number, s.origin)
 		.first<{ id: number }>();
 	return row!.id;
 }

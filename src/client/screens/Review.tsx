@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'preact/hooks';
 import {
-	RUN_METRIC_FIELDS,
 	type LoggedRunEntry,
 	type LoggedSetEntry,
 	type PlannedSetDetail,
@@ -9,8 +8,10 @@ import {
 } from '../../types';
 import { logRun, logSet, saveFeedback, setExerciseStatus, setSessionStatus } from '../api';
 import { FeedbackCard } from '../components/FeedbackCard';
+import { RunMetricsFields } from '../components/RunMetricsFields';
 import { SessionScreenFallback } from '../components/SessionScreenFallback';
-import { formatPace, runSummary } from '../format';
+import { parseRunFields, runFieldsFrom } from '../runFields';
+import { runSummary } from '../format';
 import { sessionSetTotals } from '../../sessionProgress';
 import { useSession } from '../useSession';
 
@@ -148,134 +149,29 @@ interface ReviewRunProps {
 type LoggedRunMetrics = Pick<LoggedRunEntry, 'distance_km' | 'duration_seconds' | 'note'> & Record<RunMetricField, number | null>;
 
 function ReviewRun({ loggedRun, onCommit }: ReviewRunProps) {
-	const initial = () => ({
-		distance: loggedRun ? String(loggedRun.distance_km) : '',
-		minutes: loggedRun ? String(Math.floor(loggedRun.duration_seconds / 60)) : '',
-		seconds: loggedRun ? String(loggedRun.duration_seconds % 60) : '',
-		note: loggedRun?.note ?? '',
-		...Object.fromEntries(RUN_METRIC_FIELDS.map((f) => [f.key, loggedRun?.[f.key] == null ? '' : String(loggedRun[f.key])])),
-	});
-
-	const [fields, setFields] = useState<Record<string, string>>(initial);
+	const [fields, setFields] = useState<Record<string, string>>(() => runFieldsFrom(loggedRun));
 	const set = (key: string) => (e: Event) => setFields((f) => ({ ...f, [key]: (e.target as HTMLInputElement).value }));
 
 	// Resynced against a signature of the saved values rather than a dependency
 	// per field — there are ten of them now, and a list that long is a list
 	// someone forgets to extend.
 	const signature = JSON.stringify(loggedRun);
-	useEffect(() => setFields(initial()), [signature]);
+	useEffect(() => setFields(runFieldsFrom(loggedRun)), [signature]);
 
 	// A run is only worth writing once BOTH distance and duration are real —
 	// otherwise filling in the first field alone would log a run with
 	// duration 0 (or distance 0), which is not just cosmetic: progressRun
 	// only checks whether a long run was logged at all, so a junk row counts
 	// as a real one and earns the 10% weekly growth. Partial input simply
-	// isn't committed, matching ReviewSetRow's refuse-to-commit-garbage rule.
+	// isn't committed, matching ReviewSetRow's refuse-to-commit-garbage rule —
+	// parseRunFields' errors aren't shown here, only whether it parsed at all.
 	function commit() {
-		const distanceKm = Number(fields.distance);
-		const durationSeconds = (Number(fields.minutes) || 0) * 60 + (Number(fields.seconds) || 0);
-		if (!Number.isFinite(distanceKm) || distanceKm <= 0) return;
-		if (durationSeconds <= 0) return;
-
-		const metrics = {} as Record<RunMetricField, number | null>;
-		for (const field of RUN_METRIC_FIELDS) {
-			const raw = fields[field.key];
-			if (raw === '') {
-				metrics[field.key] = null;
-				continue;
-			}
-			const value = Number(raw);
-			if (!Number.isFinite(value) || value < field.min || value > field.max) return;
-			if (field.integer && !Number.isInteger(value)) return;
-			metrics[field.key] = value;
-		}
-
-		onCommit({
-			distance_km: distanceKm,
-			duration_seconds: durationSeconds,
-			note: fields.note.trim() === '' ? null : fields.note,
-			...metrics,
-		});
+		const parsed = parseRunFields(fields);
+		if (!parsed.ok) return;
+		onCommit(parsed.value);
 	}
 
-	const pace = formatPace(Number(fields.distance), (Number(fields.minutes) || 0) * 60 + (Number(fields.seconds) || 0));
-
-	return (
-		<div>
-			<div class="table-scroll">
-				<table class="review-table">
-					<tbody>
-						<tr>
-							<td>Distance (km)</td>
-							<td>
-								<input type="number" inputmode="decimal" value={fields.distance} onInput={set('distance')} onChange={commit} />
-							</td>
-						</tr>
-						<tr>
-							<td>Duration</td>
-							<td>
-								<div class="duration-inputs">
-									<input
-										type="number"
-										inputmode="numeric"
-										placeholder="min"
-										value={fields.minutes}
-										onInput={set('minutes')}
-										onChange={commit}
-									/>
-									<input
-										type="number"
-										inputmode="numeric"
-										placeholder="sec"
-										value={fields.seconds}
-										onInput={set('seconds')}
-										onChange={commit}
-									/>
-								</div>
-							</td>
-						</tr>
-						{pace && (
-							<tr>
-								<td>Pace</td>
-								<td class="exercise-target">{pace}</td>
-							</tr>
-						)}
-					</tbody>
-				</table>
-			</div>
-
-			{/* Behind a disclosure so the everyday case stays two fields. Everything
-			    in here is typed off the watch face, and skipping any of it is fine. */}
-			<details class="disclosure">
-				<summary class="disclosure-summary">From your watch</summary>
-				<div class="disclosure-body table-scroll">
-					<table class="review-table">
-						<tbody>
-							{RUN_METRIC_FIELDS.map((field) => (
-								<tr key={field.key}>
-									<td>{field.label}</td>
-									<td>
-										<input
-											type="number"
-											inputmode={field.integer ? 'numeric' : 'decimal'}
-											value={fields[field.key]}
-											onInput={set(field.key)}
-											onChange={commit}
-										/>
-									</td>
-								</tr>
-							))}
-						</tbody>
-					</table>
-				</div>
-			</details>
-
-			<label class="field">
-				How it went
-				<textarea rows={2} value={fields.note} onInput={set('note')} onBlur={commit} />
-			</label>
-		</div>
-	);
+	return <RunMetricsFields fields={fields} onSet={set} onCommit={commit} />;
 }
 
 export function Review({ sessionId }: ReviewProps) {
@@ -363,6 +259,9 @@ export function Review({ sessionId }: ReviewProps) {
 						</p>
 					)}
 					<ReviewRun loggedRun={loggedRun} onCommit={handleCommitRun} />
+					<button type="button" class="btn-secondary" onClick={() => (location.hash = `#/run/${sessionId}/edit`)}>
+						Edit run details
+					</button>
 				</>
 			)}
 

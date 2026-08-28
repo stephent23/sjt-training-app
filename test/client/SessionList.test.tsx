@@ -28,6 +28,7 @@ function session(id: number, weekNumber: number, overrides: Partial<SessionSumma
 		label: `Session ${id}`,
 		status: 'planned',
 		week_number: weekNumber,
+		origin: 'planned',
 		exercise_count: 5,
 		planned_set_count: 15,
 		logged_set_count: 0,
