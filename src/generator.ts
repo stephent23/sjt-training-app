@@ -296,21 +296,21 @@ export async function buildExportContext(db: D1Database, weekCount: number, toda
 		: { results: [] as PlannedRunRow[] };
 
 	// Bulk query 5/6: logged_runs across the wider RUN_HISTORY_WEEKS window —
-	// joined against sessions rather than gathering ids into an IN (...) list
-	// first, since this window isn't the same one windowSessionIds describes.
-	// Columns listed rather than SELECT * so `logged_at` (an internal audit
-	// timestamp) doesn't leak into the exported history window. Not filtered by
-	// origin — a manual run's data belongs here even though it's excluded from
-	// the copy-forward template above (see the sessionsToProgress comment).
+	// six weeks of actual running history, not based on session week_numbers
+	// (which may not exist). Columns listed rather than SELECT * so `logged_at`
+	// (an internal audit timestamp) doesn't leak into the exported history window.
+	// Not filtered by origin — a manual run's data belongs here even though manual
+	// sessions are excluded from the copy-forward template above.
+	const sixWeeksAgoIso = addDaysIso(today, -7 * RUN_HISTORY_WEEKS);
 	const { results: loggedRunRows } = await db
 		.prepare(
 			`SELECT lr.id, lr.session_id, lr.distance_km, lr.duration_seconds, lr.avg_hr, lr.max_hr, lr.avg_cadence_spm,
 			        lr.elevation_gain_m, lr.aerobic_training_effect, lr.rpe_1_10, lr.interval_pace_seconds_per_km,
 			        lr.performed_on, lr.note
-			 FROM logged_runs lr JOIN sessions s ON s.id = lr.session_id
-			 WHERE s.week_number BETWEEN ? AND ?`,
+			 FROM logged_runs lr
+			 WHERE lr.performed_on >= ? AND lr.performed_on <= ?`,
 		)
-		.bind(anchorWeekNumber - RUN_HISTORY_WEEKS + 1, anchorWeekNumber)
+		.bind(sixWeeksAgoIso, today)
 		.all<LoggedRunRow>();
 
 	// Bulk query 6/6: session feedback across the window — this is what makes

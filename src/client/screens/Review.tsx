@@ -271,10 +271,10 @@ export function Review({ sessionId }: ReviewProps) {
 			<FeedbackCard feedback={detail.feedback} onSave={handleSaveFeedback} />
 
 			<button type="button" class="btn-primary" onClick={() => finish('completed')} disabled={session.status === 'completed'}>
-				Mark session complete
+				{session.status === 'completed' ? 'Completed' : 'Mark session complete'}
 			</button>
 			<button type="button" class="btn-secondary" onClick={() => finish('skipped')} disabled={session.status === 'skipped'}>
-				Mark skipped
+				{session.status === 'skipped' ? 'Skipped' : 'Mark skipped'}
 			</button>
 		</main>
 	);
