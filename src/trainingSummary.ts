@@ -14,9 +14,18 @@
 // date they were actually performed (performed_on).
 
 import { addDaysIso } from './dates';
+import { RUN_TYPES, type RunType } from './types';
 
 /** Sets with this many reps in reserve or fewer count as hard. */
 const HARD_SET_MAX_RIR = 3;
+/** Threshold distances for best efforts, km. */
+const BEST_EFFORT_KM = [5, 10, 15, 21];
+const TEN_K_KM = 10;
+const HALF_MARATHON_KM = 21.1;
+/** Runs longer than this count toward weeks_with_long_run_over_16km. */
+const LONG_RUN_KM = 16;
+/** Races with a result are estimated only while this recent. */
+const RACE_LOOKBACK_DAYS = 365;
 
 export interface WeekAdherence {
 	/** Planned sessions dated in this week (manual runs excluded). */
@@ -94,6 +103,55 @@ export interface WeeklyKmTrend {
 	change_pct: number | null;
 }
 
+export interface RunTypeFitness {
+	runs: number;
+	km: number;
+	/** Total seconds over total km, whole seconds. Null with no runs. */
+	avg_pace_seconds_per_km: number | null;
+	/** Null when no run of this type logged an HR. */
+	avg_hr: number | null;
+}
+
+export interface EasyPaceTrend {
+	/** Easy-run pace in the earlier and later half of the window. Null unless both halves have easy runs. */
+	first_seconds_per_km: number | null;
+	last_seconds_per_km: number | null;
+	/** Easy-run avg HR in each half. Null unless both halves have an easy run with HR. */
+	first_avg_hr: number | null;
+	last_avg_hr: number | null;
+}
+
+export interface BestEffort {
+	/** Threshold distance this run qualifies for, km. */
+	min_km: number;
+	date: string;
+	distance_km: number;
+	duration_seconds: number;
+	pace_seconds_per_km: number;
+	avg_hr: number | null;
+}
+
+export interface RaceEstimate {
+	/** 'training_run' efforts understate race fitness; 'race' rows are real results. */
+	source: 'training_run' | 'race';
+	date: string;
+	distance_km: number;
+	seconds: number;
+	/** Riegel equivalents, whole seconds. */
+	ten_k_seconds: number;
+	half_marathon_seconds: number;
+}
+
+export interface RunFitness {
+	by_type: Record<RunType, RunTypeFitness>;
+	easy_pace_trend: EasyPaceTrend;
+	/** One entry per threshold that has a qualifying run, shortest threshold first. */
+	best_efforts: BestEffort[];
+	race_estimates: RaceEstimate[];
+	longest_run_km: number;
+	weeks_with_long_run_over_16km: number;
+}
+
 export interface TrainingSummary {
 	today: string;
 	/** Monday of the first bucket. */
@@ -109,6 +167,7 @@ export interface TrainingSummary {
 		/** Completed / planned over the whole window, including the current week so far. */
 		adherence_pct: number | null;
 	};
+	run_fitness: RunFitness;
 }
 
 interface SessionRow {
@@ -132,9 +191,18 @@ interface SetRow {
 
 interface RunRow {
 	distance_km: number;
+	duration_seconds: number;
 	avg_hr: number | null;
 	rpe_1_10: number | null;
 	performed_on: string;
+	/** From planned_runs; null for manual runs that were never given a type. */
+	run_type: RunType | null;
+}
+
+interface RaceRow {
+	date: string;
+	distance_km: number;
+	result_seconds: number;
 }
 
 /** Epley estimated one-rep max. */
@@ -160,6 +228,114 @@ function mondayOf(dateIso: string): string {
 	const [year, month, day] = dateIso.split('-').map(Number);
 	const weekday = new Date(Date.UTC(year, month - 1, day)).getUTCDay(); // Sunday = 0
 	return addDaysIso(dateIso, -((weekday + 6) % 7));
+}
+
+interface PaceTotals {
+	runs: number;
+	km: number;
+	seconds: number;
+	hrSum: number;
+	hrCount: number;
+}
+
+function paceTotals(runs: RunRow[]): PaceTotals {
+	const t: PaceTotals = { runs: 0, km: 0, seconds: 0, hrSum: 0, hrCount: 0 };
+	for (const r of runs) {
+		t.runs += 1;
+		t.km += r.distance_km;
+		t.seconds += r.duration_seconds;
+		if (r.avg_hr !== null) {
+			t.hrSum += r.avg_hr;
+			t.hrCount += 1;
+		}
+	}
+	return t;
+}
+
+function paceOf(t: PaceTotals): number | null {
+	return t.km > 0 ? Math.round(t.seconds / t.km) : null;
+}
+
+function hrOf(t: PaceTotals): number | null {
+	return t.hrCount > 0 ? round1(t.hrSum / t.hrCount) : null;
+}
+
+/** Riegel prediction: time over distance D1 converted to distance D2. */
+function riegel(seconds: number, fromKm: number, toKm: number): number {
+	return Math.round(seconds * Math.pow(toKm / fromKm, 1.06));
+}
+
+function raceEstimate(source: RaceEstimate['source'], date: string, distanceKm: number, seconds: number): RaceEstimate {
+	return {
+		source,
+		date,
+		distance_km: round1(distanceKm),
+		seconds,
+		ten_k_seconds: riegel(seconds, distanceKm, TEN_K_KM),
+		half_marathon_seconds: riegel(seconds, distanceKm, HALF_MARATHON_KM),
+	};
+}
+
+/**
+ * Run fitness from the window's logged runs and the recent races. `splitWeek`
+ * is the Monday that divides the window into its earlier and later halves.
+ * Runs with no distance or no duration are ignored throughout.
+ */
+function buildRunFitness(runs: RunRow[], races: RaceRow[], splitWeek: string): RunFitness {
+	const valid = runs.filter((r) => r.distance_km > 0 && r.duration_seconds > 0);
+
+	const byType = {} as Record<RunType, RunTypeFitness>;
+	for (const type of RUN_TYPES) {
+		const t = paceTotals(valid.filter((r) => r.run_type === type));
+		byType[type] = { runs: t.runs, km: round1(t.km), avg_pace_seconds_per_km: paceOf(t), avg_hr: hrOf(t) };
+	}
+
+	const easy = valid.filter((r) => r.run_type === 'easy');
+	const earlier = paceTotals(easy.filter((r) => r.performed_on < splitWeek));
+	const later = paceTotals(easy.filter((r) => r.performed_on >= splitWeek));
+	const paceKnown = earlier.runs > 0 && later.runs > 0;
+	const hrKnown = earlier.hrCount > 0 && later.hrCount > 0;
+	const easyPaceTrend: EasyPaceTrend = {
+		first_seconds_per_km: paceKnown ? paceOf(earlier) : null,
+		last_seconds_per_km: paceKnown ? paceOf(later) : null,
+		first_avg_hr: hrKnown ? hrOf(earlier) : null,
+		last_avg_hr: hrKnown ? hrOf(later) : null,
+	};
+
+	const bestEfforts: BestEffort[] = [];
+	const raceEstimates: RaceEstimate[] = [];
+	for (const minKm of BEST_EFFORT_KM) {
+		let best: RunRow | null = null;
+		for (const r of valid) {
+			if (r.distance_km < minKm) continue;
+			if (best === null || r.duration_seconds / r.distance_km < best.duration_seconds / best.distance_km) best = r;
+		}
+		if (best === null) continue;
+		bestEfforts.push({
+			min_km: minKm,
+			date: best.performed_on,
+			distance_km: round1(best.distance_km),
+			duration_seconds: best.duration_seconds,
+			pace_seconds_per_km: Math.round(best.duration_seconds / best.distance_km),
+			avg_hr: best.avg_hr,
+		});
+		raceEstimates.push(raceEstimate('training_run', best.performed_on, best.distance_km, best.duration_seconds));
+	}
+	for (const race of races) {
+		raceEstimates.push(raceEstimate('race', race.date, race.distance_km, race.result_seconds));
+	}
+
+	const longest = valid.reduce((max, r) => Math.max(max, r.distance_km), 0);
+	const longWeeks = new Set(valid.filter((r) => r.distance_km > LONG_RUN_KM).map((r) => mondayOf(r.performed_on)));
+
+	return {
+		by_type: byType,
+		easy_pace_trend: easyPaceTrend,
+		best_efforts: bestEfforts,
+		race_estimates: raceEstimates,
+		longest_run_km: round1(longest),
+		weeks_with_long_run_over_16km: longWeeks.size,
+	};
 }
 
 interface WeekAccumulator {
@@ -195,8 +371,8 @@ function newAccumulator(): WeekAccumulator {
 }
 
 /**
- * Three bulk reads (sessions with their feedback, logged sets, logged runs)
- * over the window, aggregated in memory. Single-user data, so a few hundred
+ * Four bulk reads (sessions with their feedback, logged sets, logged runs,
+ * recent races) aggregated in memory. Single-user data, so a few hundred
  * rows at most; per-week queries would only add round trips.
  */
 export async function buildTrainingSummary(db: D1Database, today: string, weeks = 12): Promise<TrainingSummary> {
@@ -204,7 +380,7 @@ export async function buildTrainingSummary(db: D1Database, today: string, weeks 
 	const windowStart = addDaysIso(currentWeekStart, -7 * weeks);
 	const weekStarts = Array.from({ length: weeks + 1 }, (_, i) => addDaysIso(windowStart, 7 * i));
 
-	const [sessionRes, setRes, runRes] = await Promise.all([
+	const [sessionRes, setRes, runRes, raceRes] = await Promise.all([
 		db
 			.prepare(
 				`SELECT s.id, s.date, s.status, s.origin, f.shoulder_pain_0_3, f.back_pain_0_3
@@ -223,11 +399,19 @@ export async function buildTrainingSummary(db: D1Database, today: string, weeks 
 			.all<SetRow>(),
 		db
 			.prepare(
-				`SELECT distance_km, avg_hr, rpe_1_10, performed_on FROM logged_runs
-				 WHERE performed_on >= ?1 AND performed_on <= ?2`,
+				`SELECT lr.distance_km, lr.duration_seconds, lr.avg_hr, lr.rpe_1_10, lr.performed_on, pr.run_type
+				 FROM logged_runs lr LEFT JOIN planned_runs pr ON pr.session_id = lr.session_id
+				 WHERE lr.performed_on >= ?1 AND lr.performed_on <= ?2`,
 			)
 			.bind(windowStart, today)
 			.all<RunRow>(),
+		db
+			.prepare(
+				`SELECT date, distance_km, result_seconds FROM races
+				 WHERE result_seconds IS NOT NULL AND date >= ?1 AND date <= ?2 ORDER BY date`,
+			)
+			.bind(addDaysIso(today, -RACE_LOOKBACK_DAYS), today)
+			.all<RaceRow>(),
 	]);
 
 	const accumulators = new Map<string, WeekAccumulator>(weekStarts.map((ws) => [ws, newAccumulator()]));
@@ -357,5 +541,6 @@ export async function buildTrainingSummary(db: D1Database, today: string, weeks 
 			weekly_km: weeklyKm,
 			adherence_pct: totals.planned > 0 ? round1((totals.completed / totals.planned) * 100) : null,
 		},
+		run_fitness: buildRunFitness(runRes.results, raceRes.results, weekStarts[Math.floor(weekStarts.length / 2)]),
 	};
 }

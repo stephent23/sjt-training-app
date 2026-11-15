@@ -321,18 +321,20 @@ describe('validateProposal — session counts and deloads', () => {
 		expect(validateProposal(proposal, context)).toEqual([]);
 	});
 
-	it('still rejects a later week that drops two sessions', async () => {
+	it('now allows a later week that drops two sessions, but still rejects dropping three', async () => {
 		const { exerciseId } = await seedFourDayWeek();
 		const context = await buildExportContext(env.DB, 2, TODAY);
 
 		const proposal: MultiWeekProposalInput = {
 			weeks: [
 				weekOf(exerciseId, 2, ['2026-08-10', '2026-08-11', '2026-08-12', '2026-08-13']),
-				weekOf(exerciseId, 3, ['2026-08-17', '2026-08-18']),
+				weekOf(exerciseId, 3, ['2026-08-17']),
 			],
 		};
 
 		expect(validateProposal(proposal, context).join(' ')).toMatch(/Session count/);
+		proposal.weeks[1] = weekOf(exerciseId, 3, ['2026-08-17', '2026-08-18']);
+		expect(validateProposal(proposal, context)).toEqual([]);
 	});
 
 	it('never allows an empty week, even where days_per_week is 1', async () => {

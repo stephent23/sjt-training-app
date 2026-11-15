@@ -11,6 +11,7 @@ import { sqlIn } from './sql';
 import { progressExercise, type ExercisePrescription, type LoggedSetForProgression } from './progression';
 import { MAX_WEEKLY_RUN_GROWTH, progressRun, type LoggedRunForProgression } from './runProgression';
 import { parseGoalTags, RUN_TYPES } from './types';
+import type { RaceContext } from './raceContext';
 import type { TrainingSummary } from './trainingSummary';
 import type {
 	Exercise,
@@ -89,7 +90,9 @@ export interface ExportContext {
  * so a plan dated last year imports cleanly and then never matches a
  * Today/Plan query again.
  */
-export interface ExportPayload extends ExportContext {
+export interface ExportPayload extends ExportContext, RaceContext {
+	/** Heart-rate anchors from settings; null until the person enters them. */
+	athlete: { max_hr: number | null; resting_hr: number | null };
 	today: string;
 	weekStartDate: string;
 	/** Twelve weeks of per-week aggregates (see src/trainingSummary.ts) — the
@@ -464,12 +467,14 @@ export async function generateNextWeeks(db: D1Database, weekCount: number, today
 	return buildExportContext(db, weekCount, today, startDate);
 }
 
+const MAX_SUMMARY_CHARS = 1500;
+
 /** True only for a real calendar date in YYYY-MM-DD form. The regex alone
  * would accept 2026-02-31 / 2026-13-01, which insert happily (sessions.date
  * has no CHECK constraint) and then never match a Today/History query again —
  * silent data corruption rather than a loud failure. Round-tripping through
  * Date.UTC catches the overflow. */
-function isRealIsoDate(value: unknown): value is string {
+export function isRealIsoDate(value: unknown): value is string {
 	if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
 	const [year, month, day] = value.split('-').map(Number);
 	const parsed = new Date(Date.UTC(year, month - 1, day));
@@ -676,10 +681,11 @@ function validateWeekStructure(week: WeekProposalInput, weekIndex: number): stri
  */
 function validateWeekAgainstBaseline(
 	week: WeekProposalInput,
-	baselineWeek: WeekProposalInput,
+	baselineWeeks: WeekProposalInput[],
 	context: ExportContext,
 	baselineDescription: string,
 	dateKeyed: boolean,
+	raceDates: ReadonlySet<string>,
 ): string[] {
 	const errors: string[] = [];
 	const exerciseById = new Map(context.exerciseCatalogue.map((e) => [e.id, e]));
@@ -692,14 +698,21 @@ function validateWeekAgainstBaseline(
 	const weightBaselineByExercise = new Map<number, number | null>();
 	const longRunBaselineByDate = new Map<string, number | null>();
 	let longRunBaseline: number | null | undefined;
-	for (const session of baselineWeek.sessions) {
-		for (const set of session.plannedSets) {
-			weightBaselineByKey.set(`${session.date}:${set.exercise_id}`, set.target_weight_kg);
-			weightBaselineByExercise.set(set.exercise_id, set.target_weight_kg);
-		}
-		if (session.plannedRun?.run_type === 'long') {
-			longRunBaselineByDate.set(session.date, session.plannedRun.target_km);
-			longRunBaseline = session.plannedRun.target_km;
+	for (const baselineWeek of baselineWeeks) {
+		for (const session of baselineWeek.sessions) {
+			for (const set of session.plannedSets) {
+				weightBaselineByKey.set(`${session.date}:${set.exercise_id}`, set.target_weight_kg);
+				const w = set.target_weight_kg;
+				const seen = weightBaselineByExercise.get(set.exercise_id);
+				if (seen === undefined || seen === null || (w !== null && w > seen)) weightBaselineByExercise.set(set.exercise_id, w);
+			}
+			// Race-day runs are never a baseline. In a chain the baseline is the highest
+			// earlier long run, so a deload, taper or race week does not lower it.
+			if (session.plannedRun?.run_type === 'long' && !raceDates.has(session.date)) {
+				const km = session.plannedRun.target_km;
+				longRunBaselineByDate.set(session.date, km);
+				if (km !== null && (longRunBaseline === undefined || longRunBaseline === null || km > longRunBaseline)) longRunBaseline = km;
+			}
 		}
 	}
 
@@ -738,7 +751,8 @@ function validateWeekAgainstBaseline(
 			}
 		}
 
-		if (session.plannedRun?.run_type === 'long') {
+		// Race day is exempt from the cap: the race sets the distance.
+		if (session.plannedRun?.run_type === 'long' && !raceDates.has(session.date)) {
 			const baselineKm = (dateKeyed ? longRunBaselineByDate.get(session.date) : longRunBaseline) ?? null;
 			if (baselineKm !== null && baselineKm > 0 && session.plannedRun.target_km !== null && session.plannedRun.target_km > baselineKm) {
 				const growth = (session.plannedRun.target_km - baselineKm) / baselineKm;
@@ -759,14 +773,13 @@ function validateWeekAgainstBaseline(
  *
  * Week 1 must match `days_per_week` exactly — it mirrors a week that really
  * happened, and dropping a session there is just an omission. Later weeks may
- * drop one, because a deload week that trains a day less is legitimate
- * periodisation and the old exact-equality rule made it un-importable. Never
+ * drop one or two (a deload, a taper or race week trains fewer days). Never
  * more than `days_per_week`, and never zero — with days_per_week of 1 the
  * floor and the target are the same number.
  */
 function validateSessionCount(week: WeekProposalInput, context: ExportContext, isFirstWeek: boolean): string[] {
 	const target = context.daysPerWeek;
-	const floor = isFirstWeek ? target : Math.max(1, target - 1);
+	const floor = isFirstWeek ? target : Math.max(1, target - 2);
 	if (week.sessions.length >= floor && week.sessions.length <= target) return [];
 
 	const allowed = floor === target ? `${target}` : `${floor}-${target}`;
@@ -793,9 +806,13 @@ function weekDateRange(week: WeekProposalInput): { first: string; last: string }
  * actually proposed for the previous week, not against week 1 forever.
  * Empty array = valid.
  */
-export function validateProposal(proposal: MultiWeekProposalInput, context: ExportContext): string[] {
+export function validateProposal(proposal: MultiWeekProposalInput, context: ExportContext, raceDates: ReadonlySet<string> = new Set()): string[] {
 	if (!Array.isArray(proposal?.weeks)) {
 		return ['proposal has no weeks array'];
+	}
+	const summary = proposal.summary;
+	if (summary !== undefined && summary !== null && (typeof summary !== 'string' || summary.length > MAX_SUMMARY_CHARS)) {
+		return [`summary must be a string of at most ${MAX_SUMMARY_CHARS} characters, or null`];
 	}
 
 	// Structure first, and bail before the baseline pass if anything is
@@ -813,11 +830,11 @@ export function validateProposal(proposal: MultiWeekProposalInput, context: Expo
 
 		if (index === 0) {
 			errors.push(
-				...validateWeekAgainstBaseline(week, context.deterministicProposal.weeks[0], context, 'the deterministic proposal', true),
+				...validateWeekAgainstBaseline(week, [context.deterministicProposal.weeks[0]], context, 'the deterministic proposal', true, raceDates),
 			);
 		} else {
 			const previousWeek = proposal.weeks[index - 1];
-			errors.push(...validateWeekAgainstBaseline(week, previousWeek, context, `week ${previousWeek.week_number}`, false));
+			errors.push(...validateWeekAgainstBaseline(week, [context.deterministicProposal.weeks[0], ...proposal.weeks.slice(0, index)], context, 'earlier weeks (the highest value for it)', false, raceDates));
 
 			// Weeks must not overlap or run backwards. Each week is already
 			// internally ordered by validateWeekStructure, so comparing the
@@ -946,7 +963,8 @@ export async function importProposal(
 	const firstDates = (input.weeks[0]?.sessions ?? []).map((s) => s?.date).filter((d): d is string => isRealIsoDate(d));
 	const startDate = firstDates.length > 0 ? weekStartOnOrBefore(firstDates.reduce((a, b) => (a < b ? a : b))) : undefined;
 	const context = await buildExportContext(db, input.weeks.length, today, startDate);
-	const errors = validateProposal(input, context);
+	const { results: raceRows } = await db.prepare(`SELECT date FROM races`).all<{ date: string }>();
+	const errors = validateProposal(input, context, new Set(raceRows.map((r) => r.date)));
 	if (errors.length > 0) {
 		return { ok: false, errors };
 	}
@@ -968,6 +986,7 @@ export async function importProposal(
 	}
 
 	const hydrated: MultiWeekProposal = { weeks: input.weeks.map((week) => hydrateProposal(week, context.exerciseCatalogue)) };
+	if (typeof input.summary === 'string') hydrated.summary = input.summary;
 
 	// Supersede and insert in one batch, so a failure can't leave the old plan
 	// rejected with no replacement stored.
