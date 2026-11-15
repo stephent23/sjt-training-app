@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'preact/hooks';
-import { GOAL_TAG_GROUPS } from '../../types';
-import { fetchSettings, updateSettings } from '../api';
+import { useState } from 'preact/hooks';
+import { GOAL_TAG_GROUPS, type Settings } from '../../types';
 
-type SaveState = 'idle' | 'saving' | 'saved' | 'error';
+export type SaveState = 'idle' | 'saving' | 'saved' | 'error';
+export type GoalsPatch = { goals?: string; days_per_week?: number; goal_tags?: string[] };
 
 const DAYS_PER_WEEK_OPTIONS = [2, 3, 4, 5, 6, 7];
 
@@ -13,48 +13,28 @@ function label(tag: string): string {
 	return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
-// Always visible on the New plan screen, not tucked into a disclosure: this is the input
-// with the most leverage over what the assistant plans, and it has to be right
-// *before* the export is downloaded. Local input state is tracked separately
-// from the last-saved values so typing doesn't fight a controlled value; the
-// free-text PATCH fires on blur, the tap controls save on change since they
-// have no blur to hang a save off.
-export function GoalsEditor() {
-	const [loaded, setLoaded] = useState(false);
-	const [goals, setGoals] = useState('');
-	const [daysPerWeek, setDaysPerWeek] = useState(5);
-	const [tags, setTags] = useState<string[]>([]);
-	const [saveState, setSaveState] = useState<SaveState>('idle');
+export function SaveStatus({ state }: { state: SaveState }) {
+	return (
+		<p class="eyebrow goals-status" role="status" aria-live="polite">
+			{state === 'saving' && 'Saving…'}
+			{state === 'saved' && 'Saved'}
+			{state === 'error' && 'Could not save — try again.'}
+			{state === 'idle' && ' '}
+		</p>
+	);
+}
 
-	useEffect(() => {
-		let cancelled = false;
-		fetchSettings()
-			.then((s) => {
-				if (cancelled) return;
-				setGoals(s.goals);
-				setDaysPerWeek(s.days_per_week);
-				setTags(s.goal_tags);
-				setLoaded(true);
-			})
-			.catch(() => {
-				if (cancelled) return;
-				setLoaded(true);
-				setSaveState('error');
-			});
-		return () => {
-			cancelled = true;
-		};
-	}, []);
-
-	async function save(patch: { goals?: string; days_per_week?: number; goal_tags?: string[] }) {
-		setSaveState('saving');
-		try {
-			await updateSettings(patch);
-			setSaveState('saved');
-		} catch {
-			setSaveState('error');
-		}
-	}
+/** Focus tags, free text and sessions per week. The first tag group shows;
+ * the other two sit behind "More". Local state is kept apart from the saved
+ * values so typing doesn't fight a controlled value: free text saves on blur,
+ * the tap controls on change. */
+export function FocusFields({ settings, save }: { settings: Settings; save: (patch: GoalsPatch) => void }) {
+	const [goals, setGoals] = useState(settings.goals);
+	const [daysPerWeek, setDaysPerWeek] = useState(settings.days_per_week);
+	const [tags, setTags] = useState<string[]>(settings.goal_tags);
+	const groups = Object.entries(GOAL_TAG_GROUPS);
+	// Open by default when a tag already lives in a hidden group, so nothing selected is out of sight.
+	const hiddenHasTag = groups.slice(1).some(([, g]) => g.some((t) => settings.goal_tags.includes(t)));
 
 	function toggleTag(tag: string) {
 		const next = tags.includes(tag) ? tags.filter((t) => t !== tag) : [...tags, tag];
@@ -62,44 +42,40 @@ export function GoalsEditor() {
 		save({ goal_tags: next });
 	}
 
-	// Same footprint as the card that replaces it, so the steps below do not jump.
-	if (!loaded)
+	function group([heading, groupTags]: [string, readonly string[]]) {
 		return (
-			<div class="card" aria-hidden="true">
-				<span class="skeleton skeleton--title" style={{ width: '50%' }} />
-				<span class="skeleton skeleton--block" />
+			<div key={heading} class="field">
+				<span class="eyebrow">{heading}</span>
+				<div class="tap-row" role="group" aria-label={heading}>
+					{groupTags.map((tag) => (
+						<button
+							type="button"
+							key={tag}
+							class={`tap-btn ${tags.includes(tag) ? 'tap-btn--selected' : ''}`}
+							aria-pressed={tags.includes(tag)}
+							onClick={() => toggleTag(tag)}
+						>
+							{label(tag)}
+						</button>
+					))}
+				</div>
 			</div>
 		);
+	}
 
 	return (
-		<section class="card goals-card">
-			<h2 class="section-heading">What are you training for?</h2>
-			<p class="hint">Saved as you go. Each plan keeps a copy of these goals.</p>
-
-			{Object.entries(GOAL_TAG_GROUPS).map(([heading, groupTags]) => (
-				<div key={heading} class="field">
-					<span class="eyebrow">{heading}</span>
-					<div class="tap-row" role="group" aria-label={heading}>
-						{groupTags.map((tag) => (
-							<button
-								type="button"
-								key={tag}
-								class={`tap-btn ${tags.includes(tag) ? 'tap-btn--selected' : ''}`}
-								aria-pressed={tags.includes(tag)}
-								onClick={() => toggleTag(tag)}
-							>
-								{label(tag)}
-							</button>
-						))}
-					</div>
-				</div>
-			))}
+		<>
+			{group(groups[0])}
+			<details class="goals-more" open={hiddenHasTag}>
+				<summary>More</summary>
+				{groups.slice(1).map(group)}
+			</details>
 
 			<label class="field">
 				Anything else
 				<textarea
-					rows={3}
-					placeholder="Half marathon in October, keep upper-body strength"
+					rows={2}
+					placeholder="Keep upper-body strength"
 					value={goals}
 					onInput={(e) => setGoals((e.target as HTMLTextAreaElement).value)}
 					onBlur={() => save({ goals })}
@@ -124,15 +100,8 @@ export function GoalsEditor() {
 						</button>
 					))}
 				</div>
-				<p class="hint">Every generated week has to match this — a deload week may drop one.</p>
 			</div>
-
-			<p class="eyebrow goals-status" role="status" aria-live="polite">
-				{saveState === 'saving' && 'Saving…'}
-				{saveState === 'saved' && 'Saved'}
-				{saveState === 'error' && 'Could not save — try again.'}
-				{saveState === 'idle' && ' '}
-			</p>
-		</section>
+		</>
 	);
 }
+

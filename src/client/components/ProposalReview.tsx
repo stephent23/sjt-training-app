@@ -144,12 +144,12 @@ export function ProposalReview({ proposal, deterministic, replaces, startDate, b
 
 	return (
 		<div class="review">
-			<p class="hint">
-				{proposal.weeks.length} {proposal.weeks.length === 1 ? 'week' : 'weeks'}, {sessionCount} sessions. Tap a session for its exercises.
-			</p>
+			{typeof proposal.summary === 'string' && proposal.summary.trim() !== '' && <p class="card review-note">{proposal.summary.trim()}</p>}
 
 			{proposal.weeks.map((week, weekIndex) => {
-				const baseline = hasBaseline ? deterministic?.weeks[weekIndex] : undefined;
+				// Only week 1 is the mechanical pass's real arithmetic; later weeks are
+				// flat copies, so comparing against them would flag everything.
+				const baseline = hasBaseline && weekIndex === 0 ? deterministic?.weeks[0] : undefined;
 				const changes = baseline ? week.sessions.filter((s) => diffSession(s, baseline).changed).length : 0;
 				const isOpen = open.has(weekIndex);
 				const first = week.sessions[0]?.date;
@@ -159,22 +159,18 @@ export function ProposalReview({ proposal, deterministic, replaces, startDate, b
 							<span class="rv-week-main">
 								<span class="section-heading proposal-week-title">
 									Week {weekIndex + 1} of {proposal.weeks.length}
-									{week.focus ? ` · ${week.focus}` : ''}
+									{week.focus && <span class="badge badge--accent">{week.focus}</span>}
 								</span>
 								<span class="rv-session-meta">
 									{first ? `${shortDate(first)} · ` : ''}
 									{week.sessions.length} sessions
 									{changes > 0 ? ` · ${changes} changed` : ''}
-									{weekIndex > 0 ? ' · speculative' : ''}
 								</span>
 							</span>
 							<Icon name="chevron-right" class={isOpen ? 'icon--down' : undefined} />
 						</button>
 						{isOpen && (
 							<div class="rv-week-body">
-								{weekIndex > 0 && (
-									<p class="hint">Later weeks are a guess until you have logged the ones before.</p>
-								)}
 								{week.sessions.map((s, i) => (
 									<SessionRow key={i} session={s} baseline={baseline} />
 								))}

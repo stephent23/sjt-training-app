@@ -26,6 +26,7 @@ const pendingPlan = {
 	start_date: '2026-11-23',
 	deterministic: { weeks: [] },
 	plan: {
+		summary: 'Cutting volume for the deload.',
 		weeks: [0, 1].map((w) => ({
 			week_number: w + 1,
 			focus: w === 1 ? 'deload' : null,
@@ -46,7 +47,8 @@ function stubApi(pending: unknown = null) {
 	const fetchMock = vi.fn(async (url: string) => {
 		if (url === '/api/generator/pending') return json({ pending });
 		if (url.startsWith('/api/generator/export')) return json({ goals: '', goalTags: [], deterministicProposal: { weeks: [] } });
-		if (url === '/api/settings') return json({ goals: '', days_per_week: 5, goal_tags: [] });
+		if (url === '/api/races') return json({ races: [] });
+			if (url === '/api/settings') return json({ goals: '', days_per_week: 5, goal_tags: [] });
 		if (url.endsWith('/accept')) return json({ ok: true });
 		throw new Error(`unexpected fetch ${url}`);
 	});
@@ -58,7 +60,7 @@ async function mount() {
 	container = document.createElement('div');
 	document.body.appendChild(container);
 	render(<Generate />, container);
-	await waitFor(() => container!.querySelector('.wizard-steps') !== null);
+	await waitFor(() => container!.querySelector('.goals-link, .review') !== null);
 	return container;
 }
 
@@ -68,8 +70,6 @@ const button = (root: HTMLElement, text: string) => {
 	if (!el) throw new Error(`no button ${text}`);
 	return el as HTMLButtonElement;
 };
-
-const title = (root: HTMLElement) => root.querySelector('.wizard-title')!.textContent;
 
 beforeEach(() => {
 	vi.restoreAllMocks();
@@ -85,29 +85,25 @@ afterEach(() => {
 	vi.unstubAllGlobals();
 });
 
-describe('New plan flow', () => {
-	it('walks Goals, Start and length, Ask Claude, Paste the answer', async () => {
+describe('New plan screen', () => {
+	it('is one screen: goals link, start and length, two numbered actions', async () => {
 		stubApi();
 		const root = await mount();
-		expect(title(root)).toBe('Goals');
-
-		button(root, 'Next: start').click();
-		await waitFor(() => title(root) === 'Start & length');
-		button(root, 'Next: ask Claude').click();
-		await waitFor(() => title(root) === 'Ask Claude');
-		button(root, 'asked Claude').click();
-		await waitFor(() => title(root) === 'Paste the answer');
+		await waitFor(() => (root.querySelector('.goals-link')!.textContent ?? '').includes('No race set'));
+		expect(root.querySelector('.goals-link')!.getAttribute('href')).toBe('#/goals');
+		expect(button(root, 'Copy for Claude')).toBeTruthy();
+		expect(button(root, 'Paste Claude')).toBeTruthy();
+		expect(root.querySelector('.wizard-steps')).toBeNull();
 	});
 
-	it('keeps the weeks and start date it was given, and resumes on the step it left', async () => {
+	it('keeps the weeks, start date and "asked" mark it was given', async () => {
 		stubApi();
 		let root = await mount();
-		button(root, 'Next: start').click();
-		await waitFor(() => title(root) === 'Start & length');
-		button(root, 'The week after').click();
+		button(root, 'Week after').click();
 		button(root, 'One week fewer').click();
-		button(root, 'Next: ask Claude').click();
-		await waitFor(() => title(root) === 'Ask Claude');
+		vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText: async () => {} } });
+		button(root, 'Copy for Claude').click();
+		await waitFor(() => JSON.parse(localStorage.getItem('generate-plan-v2') ?? '{}').asked === true);
 
 		render(null, container!);
 		container!.remove();
@@ -115,16 +111,17 @@ describe('New plan flow', () => {
 
 		stubApi();
 		root = await mount();
-		expect(title(root)).toBe('Ask Claude');
-		expect(root.querySelector('.chip-summary')!.textContent).toContain('7 weeks');
+		expect(root.querySelector('.weeks-control-value')!.textContent).toContain('7');
 		const secondMonday = addDaysIso(weekStartOnOrAfter(todayIso()), 7);
-		expect(root.querySelector('.chip-summary')!.textContent).toContain(String(Number(secondMonday.slice(8))));
+		expect(root.querySelector('.start-chip[aria-pressed="true"]')!.textContent).toContain(String(Number(secondMonday.slice(8))));
+		expect(button(root, 'Paste Claude').className).toContain('btn-primary');
 	});
 
-	it('lands straight on Review when a plan is already pending, and states the outcome', async () => {
+	it('shows only the review when a plan is already pending, with the coach note and outcome', async () => {
 		stubApi(pendingPlan);
 		const root = await mount();
-		expect(title(root)).toBe('Review');
+		expect(root.querySelector('.goals-link')).toBeNull();
+		expect(root.querySelector('.review-note')!.textContent).toContain('Cutting volume');
 		expect(root.querySelector('.rv-outcome')!.textContent).toContain('Replaces 4 planned sessions from');
 		// Week 1 open, week 2 folded.
 		expect(root.querySelectorAll('.rv-week-head[aria-expanded="true"]')).toHaveLength(1);
@@ -137,7 +134,25 @@ describe('New plan flow', () => {
 		fetchMock.mockImplementation(async (url: string) => (url.endsWith('/accept') ? json({ ok: true }) : json({ pending: null })));
 
 		button(root, 'Accept').click();
-		await waitFor(() => root.querySelector('.wizard-done') !== null);
-		expect(root.querySelector('.wizard-done a')!.getAttribute('href')).toBe('#/plan');
+		await waitFor(() => root.querySelector('.done-card') !== null);
+		expect(root.querySelector('.done-card a')!.getAttribute('href')).toBe('#/plan');
+	});
+});
+
+describe('Review marks', () => {
+	it('compares only week 1 against the mechanical baseline', async () => {
+		const deterministic = {
+			weeks: pendingPlan.plan.weeks.map((w) => ({
+				week_number: w.week_number,
+				sessions: w.sessions.map((s) => ({ ...s, label: 'Different' })),
+			})),
+		};
+		stubApi({ ...pendingPlan, deterministic });
+		const root = await mount();
+		const heads = root.querySelectorAll('.rv-week-head');
+		(heads[1] as HTMLElement).click();
+		await waitFor(() => root.querySelectorAll('.rv-session').length === 2);
+		expect(root.querySelectorAll('.rv-session .badge--accent')).toHaveLength(1);
+		expect(root.textContent).not.toContain('speculative');
 	});
 });

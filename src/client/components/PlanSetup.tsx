@@ -1,5 +1,6 @@
 import { useState } from 'preact/hooks';
-import { addDaysIso, isMondayIso, todayIso, weekStartOnOrAfter } from '../../dates';
+import type { Race } from '../../types';
+import { addDaysIso, daysBetweenIso, isMondayIso, todayIso, weekStartOnOrAfter } from '../../dates';
 import { Icon } from './Icon';
 
 export const MIN_WEEKS = 1;
@@ -50,11 +51,11 @@ export function StartPicker({ value, onChange }: StartPickerProps) {
 					setPicking(false);
 					onChange(first);
 				})}
-				{chip('The week after', shortDate(second), !picking && value === second, () => {
+				{chip('Week after', shortDate(second), !picking && value === second, () => {
 					setPicking(false);
 					onChange(second);
 				})}
-				{chip('Pick a Monday', picking && !error ? shortDate(value) : 'Other date', picking, () => setPicking(true))}
+				{chip('Pick', picking && !error ? shortDate(value) : 'Other date', picking, () => setPicking(true))}
 			</div>
 			{picking && (
 				<label class="field">
@@ -62,7 +63,7 @@ export function StartPicker({ value, onChange }: StartPickerProps) {
 					<input type="date" value={value} min={todayIso()} step={7} onInput={(e) => onChange((e.target as HTMLInputElement).value)} />
 				</label>
 			)}
-			{error && <p class="eyebrow eyebrow--accent">{error}</p>}
+			{error && <p class="eyebrow--accent run-field-error" role="alert">{error}</p>}
 		</div>
 	);
 }
@@ -101,4 +102,16 @@ export function WeeksControl({ value, onChange }: WeeksControlProps) {
 			</button>
 		</div>
 	);
+}
+
+/** "Ends Sun 7 Feb · Brighton Half is 5 weeks later" — how the block sits
+ * against the soonest upcoming race that has no result yet. */
+export function blockEndLine(startDate: string, weeks: number, races: Pick<Race, 'name' | 'date' | 'result_seconds'>[], today: string): string {
+	const end = addDaysIso(startDate, weeks * 7 - 1);
+	const line = `Ends ${shortDate(end)}`;
+	const race = races.filter((r) => r.date >= today && r.result_seconds == null).sort((a, b) => a.date.localeCompare(b.date))[0];
+	if (!race || race.date < startDate) return line;
+	if (race.date <= end) return `${line} · ${race.name} falls in week ${Math.floor(daysBetweenIso(startDate, race.date) / 7) + 1}`;
+	const later = Math.max(1, Math.round(daysBetweenIso(end, race.date) / 7));
+	return `${line} · ${race.name} is ${later} ${later === 1 ? 'week' : 'weeks'} later`;
 }

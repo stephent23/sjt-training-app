@@ -2,6 +2,7 @@ import { useEffect, useState } from 'preact/hooks';
 import { Shell } from './components/Shell';
 import { LiftSession } from './screens/LiftSession';
 import { Generate } from './screens/Generate';
+import { Goals } from './screens/Goals';
 import { Plan } from './screens/Plan';
 import { History } from './screens/History';
 import { Preview } from './screens/Preview';
@@ -15,6 +16,7 @@ type View =
 	| { name: 'plan' }
 	| { name: 'history' }
 	| { name: 'generate' }
+	| { name: 'goals' }
 	| { name: 'lift'; sessionId: number }
 	| { name: 'run'; sessionId: number }
 	| { name: 'review'; sessionId: number }
@@ -29,6 +31,7 @@ function viewFromHash(): View {
 	if (location.hash === '#/plan') return { name: 'plan' };
 	if (location.hash === '#/history') return { name: 'history' };
 	if (location.hash === '#/generate') return { name: 'generate' };
+	if (location.hash === '#/goals') return { name: 'goals' };
 	if (location.hash === '#/run/new') return { name: 'run-new' };
 	const editMatch = location.hash.match(RUN_EDIT_ROUTE);
 	if (editMatch) return { name: 'run-edit', sessionId: Number(editMatch[1]) };
@@ -57,6 +60,7 @@ export function App() {
 	if (view.name === 'run') return <RunSession sessionId={view.sessionId} onBack={goBack} />;
 	if (view.name === 'review') return <Review sessionId={view.sessionId} />;
 	if (view.name === 'preview') return <Preview sessionId={view.sessionId} onBack={goBack} />;
+	if (view.name === 'goals') return <Goals />;
 	if (view.name === 'run-new') return <RunEditor />;
 	if (view.name === 'run-edit') return <RunEditor sessionId={view.sessionId} />;
 

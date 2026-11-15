@@ -1,6 +1,7 @@
 import { render } from 'preact';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { AskStep, describeExport, PasteStep } from '../../src/client/components/GenerateFlow';
+import { PlanRequest } from '../../src/client/components/GenerateFlow';
+import { blockEndLine } from '../../src/client/components/PlanSetup';
 
 // Step 1's download used to be a bare <a href="/api/..." download>, which in the
 // installed standalone PWA saved a 0-byte file and reported nothing. These
@@ -47,13 +48,7 @@ function captureDownload() {
 function mount(onImported: () => void = () => {}, weeks = 1, startDate = '2026-08-10') {
 	container = document.createElement('div');
 	document.body.appendChild(container);
-	render(
-		<>
-			<AskStep weeks={weeks} startDate={startDate} onNext={() => {}} />
-			<PasteStep onImported={onImported} />
-		</>,
-		container,
-	);
+	render(<PlanRequest weeks={weeks} startDate={startDate} asked={false} onAsked={() => {}} onImported={onImported} />, container);
 	return container;
 }
 
@@ -67,7 +62,6 @@ function buttonWith(root: HTMLElement, text: string): HTMLButtonElement {
  * driven from jsdom (a FileList is not constructible), and both paths run the
  * same submit(), so this exercises the shared code. */
 async function pasteAndImport(root: HTMLElement, text: string) {
-	root.querySelector('details.disclosure:last-of-type')?.setAttribute('open', '');
 	const textarea = root.querySelector('textarea') as HTMLTextAreaElement;
 	textarea.value = text;
 	textarea.dispatchEvent(new Event('input', { bubbles: true }));
@@ -98,7 +92,7 @@ afterEach(() => {
 	vi.unstubAllGlobals();
 });
 
-describe('Ask step — download', () => {
+describe('Download', () => {
 	it('saves the export payload rather than an empty file', async () => {
 		const payload = {
 			deterministicProposal: { weeks: [{ week_number: 2, sessions: [] }] },
@@ -184,7 +178,7 @@ describe('Ask step — download', () => {
 // The import path had no coverage at all: the component did a bare JSON.parse
 // of the paste, so the prompt's own "explain, then give the JSON" instruction
 // produced an answer that could never be imported.
-describe('Paste step — import', () => {
+describe('Import', () => {
 	const plan = { weeks: [{ week_number: 2, sessions: [] }] };
 
 	it('finds the plan inside a reply that explains itself first', async () => {
@@ -196,7 +190,7 @@ describe('Paste step — import', () => {
 		await pasteAndImport(root, `Here's what I changed.\n\n\`\`\`json\n${JSON.stringify(plan)}\n\`\`\``);
 		await waitFor(() => onImported.mock.calls.length > 0);
 
-		// The Ask step mounted alongside prefetches the export, so the import is
+		// The mounted component prefetches the export, so the import is
 		// not necessarily the first call — find it rather than assume its index.
 		const calls = fetchMock.mock.calls as unknown as [string, RequestInit][];
 		const importCall = calls.find(([url]) => url.startsWith('/api/generator/import'));
@@ -240,7 +234,7 @@ describe('Paste step — import', () => {
 		await pasteAndImport(root, "Sure! I'd be happy to help with your training.");
 		await waitFor(() => root.querySelector('.error-list') !== null);
 
-		// The Ask step mounted alongside prefetches the export; what must never
+		// The mounted component prefetches the export; what must never
 		// happen is an import attempt.
 		const urls = (fetchMock.mock.calls as unknown as [string][]).map(([url]) => url);
 		expect(urls.some((url) => url.startsWith('/api/generator/import'))).toBe(false);
@@ -248,29 +242,17 @@ describe('Paste step — import', () => {
 	});
 });
 
-describe('describeExport', () => {
-	it('says a plan is being written from scratch when there is no history', () => {
-		const text = describeExport({ deterministicProposal: { weeks: [{ week_number: 1, sessions: [] }] }, weekStartDate: '2026-08-10' });
-		expect(text).toContain('from scratch');
-		expect(text).toContain('2026-08-10');
+describe('blockEndLine', () => {
+	const brighton = { name: 'Brighton Half', date: '2027-02-14', result_seconds: null };
+	it('says when the block ends, alone when there is no race', () => {
+		expect(blockEndLine('2026-12-14', 8, [], '2026-11-15')).toBe('Ends Sun 7 Feb');
 	});
-
-	it('calls out a week that exists but has nothing logged against it', () => {
-		const text = describeExport({
-			deterministicProposal: { weeks: [{ week_number: 2, sessions: [{ date: '2026-08-10', kind: 'lift', label: 'A', plannedSets: [], plannedRun: null }] }] },
-			historyWindow: { loggedSets: [], loggedRuns: [] },
-		});
-		expect(text).toContain('Nothing logged yet');
+	it('counts the weeks between the end and the race', () => {
+		expect(blockEndLine('2026-12-14', 8, [brighton], '2026-11-15')).toBe('Ends Sun 7 Feb · Brighton Half is 1 week later');
+		expect(blockEndLine('2026-12-14', 4, [brighton], '2026-11-15')).toContain('is 5 weeks later');
 	});
-
-	it('counts what has actually been logged', () => {
-		const text = describeExport({
-			deterministicProposal: { weeks: [{ week_number: 2, sessions: [{ date: '2026-08-10', kind: 'lift', label: 'A', plannedSets: [], plannedRun: null }] }] },
-			historyWindow: {
-				loggedSets: [{ session_id: 1, exercise_id: 1, set_index: 1, weight_kg: 20, reps: 8, rir: 2, rest_taken_seconds: null, performed_on: '2026-08-03' }],
-				loggedRuns: [],
-			},
-		});
-		expect(text).toBe('1 sets and 0 runs logged in the last two weeks.');
+	it('names the week when the race is inside the block, and ignores finished races', () => {
+		expect(blockEndLine('2026-12-14', 10, [brighton], '2026-11-15')).toContain('falls in week 9');
+		expect(blockEndLine('2026-12-14', 8, [{ ...brighton, result_seconds: 5000 }], '2026-11-15')).toBe('Ends Sun 7 Feb');
 	});
 });
