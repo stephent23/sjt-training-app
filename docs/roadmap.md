@@ -190,6 +190,37 @@ branches simply carry the earlier commits with them.
       even with nothing else running. Not a code problem — run the suite from a copy on WSL's
       native filesystem (`rsync` the tree, excluding `node_modules`/`.git`/`.wrangler`, to `/tmp`,
       then `npm ci` there), or exclude the project folder from Windows Defender.
+- [x] **15 · Races, a one-screen New plan, and an export a model can coach from** (migration 0011).
+      *Done (2026-11-15). The owner is training for spring half marathons (PB attempt) with
+      strength kept as a real element; this stage gives the assistant the data to judge targets.*
+      - **Races** (`races` table, `/api/races`, `#/goals`). One table for goals and results: a
+        future row has a target, a past one a result; the PB per distance is derived. "Main race"
+        / "Tune-up" in the UI, `A`/`B` stored. A past race with no result opens with an EMPTY
+        time — it used to pre-fill the target, one tap from saving a fake result into PBs.
+      - **Export** gained `races` (with `block_week`: which week of this block, or null),
+        `raceResults`, `personalBests`, `athlete` (max/resting HR), and
+        `trainingSummary.run_fitness` (pace/HR by run type, easy-pace trend, best whole-run
+        efforts ≥5/10/15/21 km, Riegel 10K/half estimates from them and from race results in the
+        last year). The app does the arithmetic; the model does the judgement.
+      - **Validator.** Weight and long-run caps now compare against the HIGHEST value in any
+        earlier week, not the previous week — the old rule rejected the return from a deload.
+        Race-day long runs are exempt and never a baseline. Weeks after the first may drop two
+        sessions (taper, race week). Optional top-level `summary` (≤1500 chars) is stored and
+        shown on Review as the coach's note.
+      - **Prompt** rewritten around all of that: periodise to the next main race, taper, races
+        after the block, honest target assessment, where pace/HR targets go, hold leg loads as
+        km rises.
+      - **New plan** is one screen: goals card → start → length (with "Ends … · race is N weeks
+        later") → ① Copy/Share for Claude → ② Paste Claude's answer; everything else under "More
+        options". The wizard is gone. Review compares week 1 only against the mechanical pass.
+      - **Everyday screens**: sticky Mark complete bar, confirmed skip, race countdown on Today,
+        drafts survive collapsing an exercise card, tab renamed "New plan". RIR now carries over
+        from the set just logged (sets 2+ are one tap) — a deliberate trade recorded in
+        `src/setDefaults.ts`; remove `defaultRir` if progression looks too generous.
+
+      Built by five parallel agents behind a coordinator-written migration/types/client-API
+      contract, then an Opus review whose findings (the deload rejection and the fake-result bug
+      among them) were all applied. 596 tests, typecheck and build clean.
 
 ## Merge checklist
 
@@ -202,13 +233,14 @@ npm run db:migrate:remote
 ```
 
 Migrations added so far: `0006_structured_goals.sql`, `0007_run_metrics.sql`, `0008_manual_runs.sql`,
-`0010_plan_blocks.sql`.
+`0010_plan_blocks.sql`, `0011_races_and_profile.sql`.
 
 ## Notes for whoever picks this up
 
 - `test/client/GenerateFlow.test.tsx` pins the label `Download your training data` and expects
-  download errors in `.eyebrow--accent`. It mounts `AskStep` + `PasteStep`; the Ask step
-  prefetches the export, so assert on the import call by URL, never by call index.
+  download errors in `.eyebrow--accent`. It mounts `PlanRequest`, which prefetches the export,
+  so assert on the import call by URL, never by call index.
+- Run tests with a copy on WSL's native filesystem (see stage 14) — never from `/mnt/c`.
 - The weeks control (`PlanSetup`) is −/+ buttons named by `aria-label`, not `Stepper` — Stepper
   commits on blur.
 - `test/generator*.test.ts` and `test/progression.test.ts` match on exact validation messages and
