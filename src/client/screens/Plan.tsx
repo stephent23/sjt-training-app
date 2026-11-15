@@ -1,7 +1,9 @@
 import type { SessionSummary } from '../../types';
 import { todayIso } from '../../dates';
 import { setSessionDate } from '../api';
+import { ListSkeleton } from '../components/Skeletons';
 import { SessionList } from '../components/SessionRow';
+import { Icon } from '../components/Icon';
 import { useSessionList } from '../useSessionList';
 
 // Plan is a preview of what's coming, not a place to log from — a planned
@@ -40,15 +42,22 @@ export function Plan() {
 					</button>
 				</>
 			) : sessions === undefined ? (
-				<p>Loading…</p>
+				<ListSkeleton rows={5} title />
 			) : (
 				// A completed session isn't "coming" anymore, so it drops off Plan
 				// entirely — it's still fully visible on History. A skipped one
 				// stays, since it may still need rescheduling.
 				<SessionList
-					sessions={sessions.filter((s) => s.status !== 'completed')}
+					sessions={sessions}
+					hideCompleted
 					linkFor={linkFor}
 					emptyMessage="Nothing planned."
+					emptyAction={
+						<a class="btn-primary" href="#/generate" role="button">
+							<Icon name="plus" />
+							Generate a plan
+						</a>
+					}
 					onReschedule={handleReschedule}
 					collapsible
 				/>

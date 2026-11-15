@@ -1,6 +1,6 @@
 import { render } from 'preact';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { describeExport, GenerateFlow } from '../../src/client/components/GenerateFlow';
+import { AskStep, describeExport, PasteStep } from '../../src/client/components/GenerateFlow';
 
 // Step 1's download used to be a bare <a href="/api/..." download>, which in the
 // installed standalone PWA saved a 0-byte file and reported nothing. These
@@ -44,10 +44,16 @@ function captureDownload() {
 	return { saved, restore: () => (HTMLAnchorElement.prototype.click = originalClick) };
 }
 
-function mount(onImported: () => void = () => {}) {
+function mount(onImported: () => void = () => {}, weeks = 1, startDate = '2026-08-10') {
 	container = document.createElement('div');
 	document.body.appendChild(container);
-	render(<GenerateFlow onImported={onImported} />, container);
+	render(
+		<>
+			<AskStep weeks={weeks} startDate={startDate} onNext={() => {}} />
+			<PasteStep onImported={onImported} />
+		</>,
+		container,
+	);
 	return container;
 }
 
@@ -92,7 +98,7 @@ afterEach(() => {
 	vi.unstubAllGlobals();
 });
 
-describe('Generate — step 1 download', () => {
+describe('Ask step — download', () => {
 	it('saves the export payload rather than an empty file', async () => {
 		const payload = {
 			deterministicProposal: { weeks: [{ week_number: 2, sessions: [] }] },
@@ -125,22 +131,18 @@ describe('Generate — step 1 download', () => {
 		}
 	});
 
-	it('requests the number of weeks shown in the field', async () => {
+	it('requests the weeks and start date chosen on the New plan form', async () => {
 		const fetchMock = vi.fn(async () => new Response('{"weeks":[]}', { status: 200 }));
 		vi.stubGlobal('fetch', fetchMock);
 		const { saved, restore } = captureDownload();
 
 		try {
-			const root = mount();
-			const input = root.querySelector('input[type="number"]') as HTMLInputElement;
-			input.value = '4';
-			input.dispatchEvent(new Event('input', { bubbles: true }));
-			await tick();
+			const root = mount(() => {}, 4, '2026-08-17');
 
 			downloadControl(root).click();
 			await waitFor(() => saved.blob !== null);
 
-			expect(fetchMock).toHaveBeenCalledWith('/api/generator/export?weeks=4');
+			expect(fetchMock).toHaveBeenCalledWith('/api/generator/export?weeks=4&startDate=2026-08-17');
 		} finally {
 			restore();
 		}
@@ -182,7 +184,7 @@ describe('Generate — step 1 download', () => {
 // The import path had no coverage at all: the component did a bare JSON.parse
 // of the paste, so the prompt's own "explain, then give the JSON" instruction
 // produced an answer that could never be imported.
-describe('Generate — step 3 import', () => {
+describe('Paste step — import', () => {
 	const plan = { weeks: [{ week_number: 2, sessions: [] }] };
 
 	it('finds the plan inside a reply that explains itself first', async () => {
@@ -194,7 +196,12 @@ describe('Generate — step 3 import', () => {
 		await pasteAndImport(root, `Here's what I changed.\n\n\`\`\`json\n${JSON.stringify(plan)}\n\`\`\``);
 		await waitFor(() => onImported.mock.calls.length > 0);
 
-		const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+		// The Ask step mounted alongside prefetches the export, so the import is
+		// not necessarily the first call — find it rather than assume its index.
+		const calls = fetchMock.mock.calls as unknown as [string, RequestInit][];
+		const importCall = calls.find(([url]) => url.startsWith('/api/generator/import'));
+		expect(importCall).toBeDefined();
+		const [url, init] = importCall!;
 		expect(url).toBe('/api/generator/import');
 		expect(JSON.parse(init.body as string)).toEqual(plan);
 	});
@@ -233,7 +240,10 @@ describe('Generate — step 3 import', () => {
 		await pasteAndImport(root, "Sure! I'd be happy to help with your training.");
 		await waitFor(() => root.querySelector('.error-list') !== null);
 
-		expect(fetchMock).not.toHaveBeenCalled();
+		// The Ask step mounted alongside prefetches the export; what must never
+		// happen is an import attempt.
+		const urls = (fetchMock.mock.calls as unknown as [string][]).map(([url]) => url);
+		expect(urls.some((url) => url.startsWith('/api/generator/import'))).toBe(false);
 		expect(root.querySelector('.error-list')!.textContent).toContain('find any JSON');
 	});
 });

@@ -31,6 +31,13 @@ WHAT'S IN THE FILE
   distance_km, duration_seconds, avg_hr, max_hr, avg_cadence_spm, elevation_gain_m,
   aerobic_training_effect, rpe_1_10 and interval_pace_seconds_per_km (the average pace during the
   work segments of an interval/tempo run) — any of them may be null.
+- trainingSummary — the long view: the last 12 weeks plus this week so far, one entry per week
+  (keyed by Monday, oldest first) with adherence (planned/completed/skipped), per-exercise best
+  estimated 1RM and top weight, hard sets per movement pattern, running km / run count / long
+  run / average RPE and HR, and worst shoulder and back pain. trends sums it up: e1RM change per
+  exercise, weekly km change, overall adherence %. Use it to judge direction — what is improving,
+  stalling or being skipped — and set the block's periodisation from it. It informs judgement
+  only: the hard rules below are checked against deterministicProposal, never against this.
 - skippedSessions — sessions I didn't do.
 - painFlags — { shoulder, back }. True means I reported real pain (2 or 3 out of 3).
 - goals, goalTags — what I'm training for, as free text and as tick-box tags. These outrank
@@ -38,12 +45,12 @@ WHAT'S IN THE FILE
 - daysPerWeek — how many sessions I train per week.
 - exerciseCatalogue — every exercise I can be prescribed: id, name, pattern, increment_kg,
   loading, shoulder_safe, back_safe.
-- today, weekStartDate — today's date, and the Monday to build from if I have no schedule yet.
+- today, weekStartDate — today's date, and the Monday the new plan starts on (week 1 lands on it; I chose it).
 
 HARD RULES — BREAK ONE AND THE IMPORT FAILS
 
 1. Return every week in deterministicProposal.weeks, in the same order, with the same
-   week_number values. Don't add weeks, don't drop weeks.
+   week_number values (1..N — each plan is a fresh block, so numbering restarts at 1). Don't add weeks, don't drop weeks.
 2. Week 1 must contain EXACTLY daysPerWeek sessions. Later weeks may have daysPerWeek or one
    fewer — that one session is the room you have for a deload. Never more, never zero. Count
    them before you answer; this is the most common failure.
@@ -154,7 +161,7 @@ Explain what you changed and why in a few sentences, then give the complete plan
 json block, with nothing after it. Shape (these are all the fields — none extra, none omitted):
 
 \`\`\`json
-{"weeks":[{"week_number":2,"focus":null,"sessions":[
+{"weeks":[{"week_number":1,"focus":null,"sessions":[
   {"date":"2026-08-10","kind":"lift","label":"Lift A","plannedRun":null,"plannedSets":[
     {"exercise_id":17,"order_index":1,"target_sets":3,"rep_low":8,"rep_high":10,
      "target_weight_kg":22,"rest_seconds":150,"notes":null,"superset_group":null}]},

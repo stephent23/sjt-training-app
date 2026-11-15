@@ -13,7 +13,7 @@ function label(tag: string): string {
 	return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
-// Always visible on Generate, not tucked into a disclosure: this is the input
+// Always visible on the New plan screen, not tucked into a disclosure: this is the input
 // with the most leverage over what the assistant plans, and it has to be right
 // *before* the export is downloaded. Local input state is tracked separately
 // from the last-saved values so typing doesn't fight a controlled value; the
@@ -62,11 +62,19 @@ export function GoalsEditor() {
 		save({ goal_tags: next });
 	}
 
-	if (!loaded) return null;
+	// Same footprint as the card that replaces it, so the steps below do not jump.
+	if (!loaded)
+		return (
+			<div class="card" aria-hidden="true">
+				<span class="skeleton skeleton--title" style={{ width: '50%' }} />
+				<span class="skeleton skeleton--block" />
+			</div>
+		);
 
 	return (
-		<section>
+		<section class="card goals-card">
 			<h2 class="section-heading">What are you training for?</h2>
+			<p class="hint">Saved as you go. Each plan keeps a copy of these goals.</p>
 
 			{Object.entries(GOAL_TAG_GROUPS).map(([heading, groupTags]) => (
 				<div key={heading} class="field">
@@ -119,7 +127,7 @@ export function GoalsEditor() {
 				<p class="hint">Every generated week has to match this — a deload week may drop one.</p>
 			</div>
 
-			<p class="eyebrow" role="status" aria-live="polite">
+			<p class="eyebrow goals-status" role="status" aria-live="polite">
 				{saveState === 'saving' && 'Saving…'}
 				{saveState === 'saved' && 'Saved'}
 				{saveState === 'error' && 'Could not save — try again.'}

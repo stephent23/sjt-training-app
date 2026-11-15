@@ -1,8 +1,10 @@
-import { useState } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'preact/hooks';
 import type { ExportPayload } from '../../generator';
-import { downloadExport, fetchExportText, ImportRejected, importProposal } from '../api';
+import { fetchExportText, ImportRejected, importProposal, saveText } from '../api';
 import { extractProposal } from '../parseProposal';
 import { PROMPT } from '../prompt';
+import { Icon } from './Icon';
+import { shortDate } from './PlanSetup';
 
 /** One line saying what the assistant is actually going to be working from.
  * The three cases are the three states the export can be in, and they call for
@@ -26,74 +28,213 @@ export function describeExport(payload: Partial<ExportPayload>): string {
  * the better route. */
 const LARGE_PASTE_KB = 60;
 
-interface GenerateFlowProps {
-	onImported: () => void;
+const EXPORT_FILENAME = 'training-export.json';
+
+/** Can this browser hand a file to another app's share sheet? Phones: yes,
+ * which is what lets the data go straight into the Claude app. Desktop
+ * browsers mostly can't, and get the copy-and-paste route instead. */
+function canShareFiles(): boolean {
+	try {
+		if (typeof navigator.share !== 'function' || typeof navigator.canShare !== 'function') return false;
+		return navigator.canShare({ files: [new File(['{}'], EXPORT_FILENAME, { type: 'application/json' })] });
+	} catch {
+		return false;
+	}
 }
 
-// The "no proposal pending yet" state on Generate: get your data out, hand it
-// to an assistant with the prompt, bring the answer back. No live API call
-// anywhere in this component — see docs/generator-design.md for why.
-export function GenerateFlow({ onImported }: GenerateFlowProps) {
-	const [weeks, setWeeks] = useState(1);
-	const [status, setStatus] = useState('');
-	const [dataNote, setDataNote] = useState<string | null>(null);
-	const [downloading, setDownloading] = useState(false);
-	const [downloadError, setDownloadError] = useState<string | null>(null);
-	const [pasted, setPasted] = useState('');
-	const [importErrors, setImportErrors] = useState<string[]>([]);
-	const [canReplace, setCanReplace] = useState(false);
-	const [busy, setBusy] = useState(false);
+interface AskStepProps {
+	weeks: number;
+	startDate: string;
+	onNext: () => void;
+}
 
-	/** Both step-1 actions need the export; only what they do with it differs.
-	 * The action returns the line to show when it's done, so one with something
-	 * specific to say isn't overwritten by a generic one. */
+/** "Ask Claude": get the training data and the prompt in front of an assistant
+ * with as few taps as the device allows. The export is fetched as soon as the
+ * step opens, so by the time you tap the big button the data is already in hand
+ * — which is also what keeps navigator.share inside the browser's brief window
+ * after a tap, rather than after a network wait. No live API call anywhere —
+ * see docs/generator-design.md. */
+export function AskStep({ weeks, startDate, onNext }: AskStepProps) {
+	const [payload, setPayload] = useState<Partial<ExportPayload> | null>(null);
+	const [status, setStatus] = useState('');
+	const [error, setError] = useState<string | null>(null);
+	const [busy, setBusy] = useState(false);
+	const exportRequest = useRef<{ key: string; text: Promise<string> } | null>(null);
+
+	/** The one in-flight (or settled) export for these inputs. Started on demand
+	 * as well as by the prefetch below: effects run after paint, so a tap can
+	 * land before the prefetch has begun — and awaiting nothing there would save
+	 * a file containing `null`. A failed request is dropped so the next tap
+	 * retries instead of replaying the same error forever. */
+	function exportFor(): Promise<string> {
+		const key = `${weeks}|${startDate}`;
+		if (exportRequest.current?.key !== key) {
+			const text = fetchExportText(weeks, startDate);
+			exportRequest.current = { key, text };
+			text.catch(() => {
+				if (exportRequest.current?.text === text) exportRequest.current = null;
+			});
+		}
+		return exportRequest.current.text;
+	}
+
+	useEffect(() => {
+		setPayload(null);
+		setError(null);
+		const request = exportFor();
+		const stillCurrent = () => exportRequest.current?.text === request;
+		request
+			.then((text) => {
+				if (!stillCurrent()) return;
+				try {
+					setPayload(JSON.parse(text) as Partial<ExportPayload>);
+				} catch {
+					setPayload({});
+				}
+			})
+			.catch((e) => {
+				// stillCurrent() is already false here (a failure drops the cache),
+				// so compare against the inputs instead.
+				if (exportRequest.current !== null && !stillCurrent()) return;
+				setError(e instanceof Error ? e.message : 'Something went wrong.');
+			});
+	}, [weeks, startDate]);
+
+	/** Every action needs the export; only what it does with it differs. The
+	 * action returns the line to show when it's done. */
 	async function withExport(action: (text: string) => Promise<string>) {
-		setDownloadError(null);
-		setDownloading(true);
-		setStatus('Preparing your data…');
+		setBusy(true);
+		setError(null);
 		try {
-			const text = await fetchExportText(weeks);
-			setDataNote(describeExport(JSON.parse(text) as Partial<ExportPayload>));
+			const text = await exportFor();
 			setStatus(await action(text));
 		} catch (e) {
-			setDownloadError(e instanceof Error ? e.message : 'Something went wrong.');
-			setStatus('');
+			// Closing the share sheet is a decision, not a failure.
+			if (e instanceof DOMException && e.name === 'AbortError') setStatus('');
+			else {
+				setError(e instanceof Error ? e.message : 'Something went wrong.');
+				setStatus('');
+			}
 		} finally {
-			setDownloading(false);
+			setBusy(false);
 		}
 	}
 
-	function handleDownload() {
-		// Goes through downloadExport rather than the text we just fetched: it
-		// saves from a blob, which is what makes the download work in the
-		// installed PWA where a plain anchor writes a 0-byte file.
-		return withExport(async () => {
-			await downloadExport(weeks);
-			return 'Downloaded.';
+	const share = () =>
+		withExport(async (text) => {
+			const file = new File([text], EXPORT_FILENAME, { type: 'application/json' });
+			await navigator.share({ files: [file], text: PROMPT, title: 'Training plan request' });
+			return 'Shared — come back here when Claude has answered.';
 		});
-	}
 
-	function copyPromptAndData() {
-		return withExport(async (text) => {
+	const copyAll = () =>
+		withExport(async (text) => {
 			const kb = Math.round(text.length / 1024);
 			await navigator.clipboard.writeText(`${PROMPT}\n\n----- MY TRAINING DATA (JSON) -----\n${text}`);
 			return kb > LARGE_PASTE_KB
 				? `Copied, but it's ≈${kb} KB — if the chat truncates it, download the file and attach it instead.`
-				: `Copied ≈${kb} KB — paste it into your assistant.`;
+				: `Copied ≈${kb} KB — paste it into Claude.`;
 		});
-	}
 
-	async function copyPrompt() {
-		try {
-			await navigator.clipboard.writeText(PROMPT);
-			setStatus('Prompt copied.');
-		} catch {
-			setStatus('Could not copy automatically — select the prompt below and copy it by hand.');
-		}
-	}
+	// Goes through saveText rather than a plain anchor to the API: it saves from
+	// a blob, which is what works in the installed PWA where an anchor writes a
+	// 0-byte file.
+	const download = () =>
+		withExport(async (text) => {
+			saveText(text, EXPORT_FILENAME);
+			return 'Downloaded.';
+		});
+
+	const sharing = canShareFiles();
+	const goalCount = (payload?.goalTags?.length ?? 0) + ((payload?.goals ?? '').trim() ? 1 : 0);
+
+	return (
+		<div class="step-panel">
+			<p class="badge badge--status" role="status" aria-live="polite" hidden={!status}>
+				{status}
+			</p>
+
+			<ul class="chip-summary" aria-label="What is being sent">
+				<li class="chip">
+					{weeks} {weeks === 1 ? 'week' : 'weeks'}
+				</li>
+				<li class="chip">Starts {shortDate(startDate)}</li>
+				<li class="chip">
+					{payload ? `${goalCount} ${goalCount === 1 ? 'goal' : 'goals'}` : 'Loading your data…'}
+				</li>
+			</ul>
+			{payload && <p class="hint">{describeExport(payload)}</p>}
+
+			{sharing ? (
+				<button type="button" class="btn-primary" onClick={share} disabled={busy}>
+					{busy ? 'Preparing…' : 'Share with Claude'}
+				</button>
+			) : (
+				<button type="button" class="btn-primary" onClick={copyAll} disabled={busy}>
+					{busy ? 'Preparing…' : 'Copy prompt + data'}
+				</button>
+			)}
+			<p class="hint">
+				{sharing
+					? 'Opens your share sheet — pick Claude and send. The file and the instructions go together.'
+					: 'One paste: the instructions and your data together. Then open Claude and paste it in.'}
+			</p>
+
+			<a class="btn-secondary" href="https://claude.ai/new" target="_blank" rel="noopener noreferrer">
+				Open Claude
+			</a>
+			{sharing && (
+				<button type="button" class="btn-secondary" onClick={copyAll} disabled={busy}>
+					Copy prompt + data as one paste
+				</button>
+			)}
+			<button type="button" class="btn-secondary" onClick={download} disabled={busy}>
+				Download your training data
+			</button>
+			{error && <p class="eyebrow eyebrow--accent">{error}</p>}
+
+			<details class="disclosure">
+				<summary class="disclosure-summary">Read the prompt</summary>
+				<div class="disclosure-body">
+					<pre class="prompt-preview">{PROMPT}</pre>
+				</div>
+			</details>
+
+			<button type="button" class="btn-quiet" onClick={onNext}>
+				I've asked Claude — paste the answer
+				<Icon name="chevron-right" />
+			</button>
+		</div>
+	);
+}
+
+/** The message that goes back to the assistant when a plan is rejected. */
+export function fixItMessage(errors: string[]): string {
+	return `The app rejected the plan you gave me. Please fix these problems and send back the complete corrected JSON (same format, every week):\n\n${errors
+		.map((e) => `- ${e}`)
+		.join('\n')}`;
+}
+
+interface PasteStepProps {
+	onImported: () => void;
+	onBack?: () => void;
+}
+
+/** "Paste the answer": one big paste-from-clipboard button, a file upload, and
+ * a textarea for when the clipboard can't be read. Whatever arrives is
+ * validated at once; a rejection is a list you can hand straight back. */
+export function PasteStep({ onImported, onBack }: PasteStepProps) {
+	const [status, setStatus] = useState('');
+	const [pasted, setPasted] = useState('');
+	const [manualOpen, setManualOpen] = useState(false);
+	const [importErrors, setImportErrors] = useState<string[]>([]);
+	const [canReplace, setCanReplace] = useState(false);
+	const [copied, setCopied] = useState(false);
+	const [busy, setBusy] = useState(false);
 
 	async function submit(text: string, replace: boolean) {
 		setImportErrors([]);
+		setCopied(false);
 		const parsed = extractProposal(text);
 		if (!parsed.ok) {
 			setImportErrors([parsed.error]);
@@ -106,7 +247,7 @@ export function GenerateFlow({ onImported }: GenerateFlowProps) {
 			await importProposal(parsed.value, replace);
 			setPasted('');
 			setCanReplace(false);
-			setStatus('Plan imported — review it below.');
+			setStatus('Plan imported — review it next.');
 			onImported();
 		} catch (e) {
 			const errors = e instanceof ImportRejected ? e.errors : [e instanceof Error ? e.message : 'Import failed.'];
@@ -119,142 +260,101 @@ export function GenerateFlow({ onImported }: GenerateFlowProps) {
 		}
 	}
 
+	async function pasteFromClipboard() {
+		setStatus('');
+		try {
+			const text = await navigator.clipboard.readText();
+			if (text.trim() === '') {
+				setStatus('The clipboard is empty — copy Claude’s reply first.');
+				return;
+			}
+			setPasted(text);
+			await submit(text, false);
+		} catch {
+			// Blocked, or not supported (some browsers only allow it from a
+			// secure, focused page): the textarea does the same job.
+			setManualOpen(true);
+			setStatus('Could not read the clipboard — paste the reply into the box below.');
+		}
+	}
+
 	async function handleFile(e: Event) {
 		const file = (e.target as HTMLInputElement).files?.[0];
 		if (!file) return;
 		await submit(await file.text(), false);
 	}
 
-	// The three steps, with the prompt beside them on a laptop and inside a
-	// disclosure on a phone. `.step--active` marks where you are: step 1 until
-	// the export has been fetched, then step 3 — step 2 is a trip out to another
-	// app, and there is nothing to do here while it happens.
+	async function copyErrors() {
+		try {
+			await navigator.clipboard.writeText(fixItMessage(importErrors));
+			setCopied(true);
+		} catch {
+			setCopied(false);
+		}
+	}
+
 	return (
-		<div class="screen-split">
-			<div>
-				<p class="hint" role="status" aria-live="polite">
-					{status || ' '}
-				</p>
+		<div class="step-panel">
+			<p class={status ? 'badge badge--status' : 'visually-hidden'} role="status" aria-live="polite">
+				{status}
+			</p>
+			<p class="hint">Copy Claude's whole reply, then tap the button. The explanation can stay in — we'll find the plan.</p>
 
-				<div class={`step ${dataNote === null ? 'step--active' : ''}`}>
-					<div class="step-head">
-						<span class="step-n">01</span>
-						<h2>Your data</h2>
-					</div>
-					<div class="step-body">
-						<p class="hint">Download the file to attach it, or copy the prompt and your data together as one paste — easier on a phone.</p>
-						<label class="field">
-							How many weeks
-							<input
-								type="number"
-								inputmode="numeric"
-								min={1}
-								max={12}
-								value={weeks}
-								onInput={(e) => setWeeks(Number((e.target as HTMLInputElement).value))}
-							/>
-						</label>
-						<button type="button" class="btn-primary" onClick={handleDownload} disabled={downloading}>
-							{downloading ? 'Preparing…' : 'Download your training data'}
+			<button type="button" class="btn-primary" onClick={pasteFromClipboard} disabled={busy}>
+				{busy ? 'Checking…' : 'Paste from clipboard'}
+			</button>
+
+			<label class="field">
+				Or upload the JSON file
+				<input type="file" accept="application/json,.json,text/plain" onChange={handleFile} disabled={busy} />
+			</label>
+
+			<details class="disclosure" open={manualOpen} onToggle={(e) => setManualOpen((e.target as HTMLDetailsElement).open)}>
+				<summary class="disclosure-summary">Or paste it here instead</summary>
+				<div class="disclosure-body">
+					<label class="field">
+						Assistant's reply
+						<textarea rows={6} value={pasted} onInput={(e) => setPasted((e.target as HTMLTextAreaElement).value)} />
+					</label>
+					<button type="button" class="btn-primary" onClick={() => submit(pasted, false)} disabled={busy || pasted.trim() === ''}>
+						{busy ? 'Importing…' : 'Import'}
+					</button>
+				</div>
+			</details>
+
+			{importErrors.length > 0 && (
+				<div class="card error-card" role="alert">
+					{/* The count is the heading: how bad is it, before the detail. */}
+					<h3 class="error-card-title">
+						<Icon name="alert" />
+						{importErrors.length === 1 ? 'That plan was rejected' : `${importErrors.length} problems — plan rejected`}
+					</h3>
+					<ul class="error-list">
+						{importErrors.map((message, i) => (
+							<li key={i}>{message}</li>
+						))}
+					</ul>
+					{canReplace ? (
+						<button type="button" class="btn-secondary" onClick={() => submit(pasted, true)} disabled={busy || pasted.trim() === ''}>
+							Replace the pending plan
 						</button>
-						<button type="button" class="btn-secondary" onClick={copyPromptAndData} disabled={downloading}>
-							Copy prompt + data as one paste
-						</button>
-						{downloadError && <p class="eyebrow eyebrow--accent">{downloadError}</p>}
-						{dataNote && <p class="hint">{dataNote}</p>}
-					</div>
+					) : (
+						<>
+							<button type="button" class="btn-primary" onClick={copyErrors}>
+								{copied ? 'Copied — paste it to Claude' : 'Copy errors for Claude'}
+							</button>
+							<p class="hint">Paste them into the same chat; Claude will send a corrected plan. Then tap Paste from clipboard again.</p>
+						</>
+					)}
 				</div>
+			)}
 
-				<div class="step">
-					<div class="step-head">
-						<span class="step-n">02</span>
-						<h2>The prompt</h2>
-					</div>
-					<div class="step-body">
-						<p class="hint">
-							Paste it into ChatGPT, Claude or Gemini with the file attached. Add anything else it should know — an injury, a busy week
-							coming up.
-						</p>
-						<button type="button" class="btn-secondary" onClick={copyPrompt}>
-							Copy the prompt
-						</button>
-						<details class="disclosure disclosure--prompt">
-							<summary class="disclosure-summary">Read the prompt</summary>
-							<div class="disclosure-body">
-								<pre class="prompt-preview">{PROMPT}</pre>
-							</div>
-						</details>
-					</div>
-				</div>
-
-				<div class={`step ${dataNote !== null ? 'step--active' : ''}`}>
-					<div class="step-head">
-						<span class="step-n">03</span>
-						<h2>The answer</h2>
-					</div>
-					<div class="step-body">
-						<p class="hint">
-							Upload the JSON file your assistant produced, or paste its reply. The explanation can stay in — we'll find the plan.
-						</p>
-						<label class="field">
-							Upload the answer
-							<input type="file" accept="application/json,.json,text/plain" onChange={handleFile} disabled={busy} />
-						</label>
-
-						<details class="disclosure">
-							<summary class="disclosure-summary">Or paste it instead</summary>
-							<div class="disclosure-body">
-								<label class="field">
-									Assistant's reply
-									<textarea rows={6} value={pasted} onInput={(e) => setPasted((e.target as HTMLTextAreaElement).value)} />
-								</label>
-								<button type="button" class="btn-primary" onClick={() => submit(pasted, false)} disabled={busy || pasted.trim() === ''}>
-									{busy ? 'Importing…' : 'Import'}
-								</button>
-							</div>
-						</details>
-
-						{importErrors.length > 0 && (
-							<>
-								<p class="eyebrow eyebrow--accent">
-									{importErrors.length === 1 ? 'That plan was rejected' : `${importErrors.length} problems — the plan was rejected`}
-								</p>
-								<ul class="error-list">
-									{importErrors.map((message, i) => (
-										<li key={i}>{message}</li>
-									))}
-								</ul>
-								{canReplace ? (
-									<button type="button" class="btn-secondary" onClick={() => submit(pasted, true)} disabled={busy || pasted.trim() === ''}>
-										Replace the pending plan
-									</button>
-								) : (
-									<>
-										<button
-											type="button"
-											class="btn-secondary btn-small"
-											onClick={() => navigator.clipboard.writeText(importErrors.join('\n'))}
-										>
-											Copy these problems
-										</button>
-										<p class="hint">Paste them back into the same chat and ask for a corrected plan.</p>
-									</>
-								)}
-							</>
-						)}
-					</div>
-				</div>
-			</div>
-
-			<aside class="screen-aside">
-				<div class="panel">
-					<div class="panel-head">
-						<h2>The prompt</h2>
-						<span class="eyebrow">{PROMPT.split('\n').length} lines</span>
-					</div>
-					<pre class="prompt-preview">{PROMPT}</pre>
-				</div>
-			</aside>
+			{onBack && (
+				<button type="button" class="btn-quiet" onClick={onBack}>
+					<Icon name="chevron-left" />
+					Back
+				</button>
+			)}
 		</div>
 	);
 }

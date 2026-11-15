@@ -209,8 +209,8 @@ export async function updateSettings(patch: Partial<Settings>): Promise<void> {
 /** The export as raw text. Shared by the download and the copy-it-all-as-one-
  * paste button, so the two can't diverge — and the text is passed through
  * unmodified, never re-serialised. */
-export async function fetchExportText(weeks: number): Promise<string> {
-	const res = await fetch(`/api/generator/export?weeks=${weeks}`);
+export async function fetchExportText(weeks: number, startDate?: string): Promise<string> {
+	const res = await fetch(`/api/generator/export?weeks=${weeks}${startDate ? `&startDate=${startDate}` : ''}`);
 	if (!res.ok) throw await errorFrom(res);
 
 	const text = await res.text();
@@ -218,9 +218,12 @@ export async function fetchExportText(weeks: number): Promise<string> {
 	return text;
 }
 
-export async function downloadExport(weeks: number, filename = 'training-export.json'): Promise<void> {
-	const text = await fetchExportText(weeks);
+export async function downloadExport(weeks: number, startDate?: string, filename = 'training-export.json'): Promise<void> {
+	saveText(await fetchExportText(weeks, startDate), filename);
+}
 
+/** Saves text as a file from a blob, which is what works in the installed PWA. */
+export function saveText(text: string, filename: string): void {
 	const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
 	try {
 		const anchor = document.createElement('a');
@@ -240,6 +243,11 @@ export interface PendingProposal {
 	week_count: number;
 	created_at: string;
 	plan: MultiWeekProposal;
+	/** What the mechanical pass proposed — for highlighting what the assistant changed. */
+	deterministic?: MultiWeekProposalInput;
+	/** Untouched planned sessions accepting this would replace, and the Monday it starts. */
+	replaces?: number;
+	start_date?: string | null;
 }
 
 export async function fetchPendingProposal(): Promise<PendingProposal | null> {

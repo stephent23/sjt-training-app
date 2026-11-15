@@ -88,3 +88,16 @@ describe('Today — single session status', () => {
 		expect(root.querySelector('.eyebrow')!.textContent).toMatch(/skipped/i);
 	});
 });
+
+describe('Today — plan block label', () => {
+	it('reads "Block 2 · Week 1 of 8" when the session belongs to a block', async () => {
+		const root = await mount([session({ week_number: 1, block_id: 2, block_name: 'Block 2', block_week_count: 8 })]);
+		expect(root.textContent).toContain('Block 2 · Week 1 of 8');
+	});
+
+	it('falls back to a plain week number with no block', async () => {
+		const root = await mount([session({ week_number: 6 })]);
+		expect(root.textContent).toContain('Week 6');
+		expect(root.textContent).not.toContain('Block');
+	});
+});
