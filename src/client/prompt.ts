@@ -49,9 +49,12 @@ WHAT'S IN THE FILE
   as training), target_seconds, target_pace_seconds_per_km (null without a target), days_until, weeks_until,
   block_week (1..N: the week of this block it falls in; null if before or after the block).
 - raceResults — past races with a result; personalBests — my fastest result per distance.
-- athlete — { max_hr, resting_hr }, null if unknown. Use max_hr to judge effort (logged avg_hr as a share
-  of it) and to set easy-day guidance; with resting_hr too, use heart-rate-reserve zones. Never guess
-  either when null.
+- athlete — { max_hr, resting_hr, vo2max, threshold_pace_seconds_per_km, threshold_hr }, each null if
+  unknown; never guess one. Use max_hr to judge effort (logged avg_hr as a share of it) and to set
+  easy-day guidance; with resting_hr too, use heart-rate-reserve zones. vo2max is my Garmin estimate —
+  weigh it with race_estimates when judging a target. threshold_pace_seconds_per_km and threshold_hr
+  are my Garmin lactate threshold: set tempo work at or just slower than that pace, and treat the
+  threshold HR as the top of tempo effort.
 - skippedSessions — sessions I skipped in the last trained week only.
 - painFlags — { shoulder, back }. True means I reported real pain (2 or 3 on a 0-3 scale).
 - goals, goalTags — what I'm training for, as free text and as tick-box tags. These outrank

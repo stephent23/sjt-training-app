@@ -89,6 +89,6 @@ describe('GET /api/generator/export — race context', () => {
 		expect(body.races[0]).toMatchObject({ name: 'Spring Half', days_until: 70, weeks_until: 10, target_pace_seconds_per_km: 300 });
 		expect(body.raceResults).toMatchObject([{ name: 'Past 10k', pace_seconds_per_km: 300 }]);
 		expect(body.personalBests).toMatchObject([{ distance_km: 10, result_seconds: 3000 }]);
-		expect(body.athlete).toEqual({ max_hr: 190, resting_hr: null });
+		expect(body.athlete).toEqual({ max_hr: 190, resting_hr: null, vo2max: null, threshold_pace_seconds_per_km: null, threshold_hr: null });
 	});
 });

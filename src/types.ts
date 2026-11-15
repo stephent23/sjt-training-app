@@ -320,7 +320,24 @@ export interface Settings {
 	/** Heart-rate anchors (migration 0011). Null until entered — never guessed. */
 	max_hr: number | null;
 	resting_hr: number | null;
+	/** Read off a Garmin watch (migration 0012). Null until entered. */
+	vo2max: number | null;
+	threshold_pace_seconds_per_km: number | null;
+	threshold_hr: number | null;
 }
+
+/** The athlete numbers on settings, with the bounds the route enforces — wide
+ * enough for any real runner, tight enough to catch a typo. */
+export const ATHLETE_FIELDS = [
+	{ key: 'max_hr', min: 20, max: 250, integer: true },
+	{ key: 'resting_hr', min: 20, max: 250, integer: true },
+	{ key: 'vo2max', min: 15, max: 95, integer: false },
+	{ key: 'threshold_pace_seconds_per_km', min: 120, max: 720, integer: true },
+	{ key: 'threshold_hr', min: 20, max: 250, integer: true },
+] as const;
+
+export type AthleteField = (typeof ATHLETE_FIELDS)[number]['key'];
+export type Athlete = Record<AthleteField, number | null>;
 
 /** A race or time trial (migration 0011). In the future it is a goal; once it
  * has a result it is history, and the fastest result per distance is the PB. */

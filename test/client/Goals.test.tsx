@@ -26,7 +26,7 @@ const race = (over: Partial<Race>): Race => ({ id: 1, name: 'Brighton Half', dat
 
 beforeEach(() => {
 	races = [];
-	settings = { goals: '', days_per_week: 5, goal_tags: [], max_hr: null, resting_hr: null };
+	settings = { goals: '', days_per_week: 5, goal_tags: [], max_hr: null, resting_hr: null, vo2max: null, threshold_pace_seconds_per_km: null, threshold_hr: null };
 	calls = [];
 	vi.stubGlobal(
 		'fetch',
@@ -60,7 +60,7 @@ function type(el: HTMLInputElement, value: string) {
 const input = (sel: string) => container.querySelector(sel) as HTMLInputElement;
 const mount = async () => {
 	render(<Goals />, container);
-	await waitFor(() => container.textContent!.includes('Heart rate'));
+	await waitFor(() => container.textContent!.includes('From your watch'));
 };
 const raceCalls = (method: string) => calls.filter((c) => c.url.startsWith('/api/races') && c.method === method);
 
@@ -151,6 +151,18 @@ describe('Goals screen', () => {
 		await waitFor(() => container.textContent!.includes('Saved'));
 	});
 
+	it('saves a Garmin threshold pace typed as digits, in seconds per km', async () => {
+		await mount();
+		const inputs = [...container.querySelectorAll('.goals-hr input')] as HTMLInputElement[];
+		expect(inputs).toHaveLength(5);
+		const pace = inputs[4];
+		type(pace, '445');
+		await tick();
+		expect(pace.value).toBe('4:45');
+		pace.dispatchEvent(new Event('blur'));
+		await waitFor(() => calls.some((c) => c.method === 'PATCH' && c.body.threshold_pace_seconds_per_km === 285));
+	});
+
 	const openRace = async (r: Race) => {
 		races = [r];
 		await mount();
@@ -211,6 +223,6 @@ describe('Goals screen', () => {
 		render(<Goals />, container);
 		await waitFor(() => !!maybe('Retry'));
 		button('Retry').click();
-		await waitFor(() => container.textContent!.includes('Heart rate'));
+		await waitFor(() => container.textContent!.includes('From your watch'));
 	});
 });

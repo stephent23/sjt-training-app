@@ -92,7 +92,7 @@ export interface ExportContext {
  */
 export interface ExportPayload extends ExportContext, RaceContext {
 	/** Heart-rate anchors from settings; null until the person enters them. */
-	athlete: { max_hr: number | null; resting_hr: number | null };
+	athlete: import('./types').Athlete;
 	today: string;
 	weekStartDate: string;
 	/** Twelve weeks of per-week aggregates (see src/trainingSummary.ts) — the

@@ -233,7 +233,7 @@ npm run db:migrate:remote
 ```
 
 Migrations added so far: `0006_structured_goals.sql`, `0007_run_metrics.sql`, `0008_manual_runs.sql`,
-`0010_plan_blocks.sql`, `0011_races_and_profile.sql`.
+`0010_plan_blocks.sql`, `0011_races_and_profile.sql`, `0012_garmin_fitness.sql`.
 
 ## Notes for whoever picks this up
 

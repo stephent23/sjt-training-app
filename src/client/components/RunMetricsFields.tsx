@@ -31,7 +31,11 @@ export interface RunMetricsFieldsProps {
 
 // Units live inside the field, so labels stay short and the box says what to type.
 const SUFFIX: Record<string, string> = { avg_hr: 'bpm', max_hr: 'bpm', avg_cadence_spm: 'spm', elevation_gain_m: 'm' };
-const WATCH_FIELDS = RUN_METRIC_FIELDS.filter((f) => f.key !== 'rpe_1_10');
+// Average heart rate sits with distance and time: with a max HR on Goals it is
+// the most useful number off the watch. Max HR and elevation are the occasional
+// extras. Cadence and training effect are no longer asked for — nothing in the
+// plan uses them — though a value already recorded is kept when a run is edited.
+const WATCH_FIELDS = RUN_METRIC_FIELDS.filter((f) => f.key === 'max_hr' || f.key === 'elevation_gain_m');
 
 /** The distance/time/pace + effort + "from your watch" + note block shared by
  * Review's inline run editor and the standalone RunEditor screen. */
@@ -122,6 +126,16 @@ export function RunMetricsFields({ fields, onChange, onCommit, runType, planned,
 						error={errors.intervalPace}
 					/>
 				)}
+				<RunField
+					id="run-avg_hr"
+					label="Avg HR"
+					suffix="bpm"
+					inputMode="numeric"
+					value={fields.avg_hr}
+					onInput={set('avg_hr')}
+					onCommit={commit}
+					error={errors.avg_hr}
+				/>
 			</div>
 
 			<RpeScale
@@ -138,7 +152,7 @@ export function RunMetricsFields({ fields, onChange, onCommit, runType, planned,
 			    Everything in here is typed off the watch face, and skipping any of
 			    it is fine. */}
 			<details class="disclosure" open={WATCH_FIELDS.some((f) => errors[f.key]) || undefined}>
-				<summary class="disclosure-summary">From your watch</summary>
+				<summary class="disclosure-summary">Max HR and elevation</summary>
 				<div class="disclosure-body run-grid">
 					{WATCH_FIELDS.map((field) => (
 						<RunField

@@ -3,7 +3,9 @@ import { isMondayIso, todayIso, weekStartOnOrAfter } from '../dates';
 import { describeAcceptOutcome, generateNextWeeks, importProposal, insertWeeksFromProposal, type ExportPayload } from '../generator';
 import { buildRaceContext } from '../raceContext';
 import { buildTrainingSummary } from '../trainingSummary';
-import type { MultiWeekProposal, MultiWeekProposalInput, Race } from '../types';
+import { ATHLETE_FIELDS, type Athlete, type MultiWeekProposal, type MultiWeekProposalInput, type Race } from '../types';
+
+const ATHLETE_KEYS = ATHLETE_FIELDS.map((f) => f.key);
 
 export const generator = new Hono<{ Bindings: Env }>();
 
@@ -50,12 +52,12 @@ generator.get('/export', async (c) => {
 		generateNextWeeks(c.env.DB, weeks, today, startDate),
 		buildTrainingSummary(c.env.DB, today),
 		c.env.DB.prepare(`SELECT id, name, date, distance_km, target_seconds, result_seconds, priority FROM races`).all<Race>(),
-		c.env.DB.prepare(`SELECT max_hr, resting_hr FROM settings WHERE id = 1`).first<{ max_hr: number | null; resting_hr: number | null }>(),
+		c.env.DB.prepare(`SELECT ${ATHLETE_KEYS.join(', ')} FROM settings WHERE id = 1`).first<Athlete>(),
 	]);
 	const payload: ExportPayload = {
 		...context,
 		...buildRaceContext(raceRows.results, today, { startDate, weeks }),
-		athlete: { max_hr: hr?.max_hr ?? null, resting_hr: hr?.resting_hr ?? null },
+		athlete: Object.fromEntries(ATHLETE_KEYS.map((key) => [key, hr?.[key] ?? null])) as Athlete,
 		today,
 		weekStartDate: startDate,
 		trainingSummary,

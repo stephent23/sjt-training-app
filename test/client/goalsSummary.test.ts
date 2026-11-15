@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { goalsSummary } from '../../src/client/goalsSummary';
 import type { Race, Settings } from '../../src/types';
 
-const settings: Settings = { goals: '', days_per_week: 5, goal_tags: ['build_strength', 'run_endurance'], max_hr: null, resting_hr: null };
+const settings: Settings = { goals: '', days_per_week: 5, goal_tags: ['build_strength', 'run_endurance'], max_hr: null, resting_hr: null, vo2max: null, threshold_pace_seconds_per_km: null, threshold_hr: null };
 const race = (over: Partial<Race>): Race => ({
 	id: 1,
 	name: 'Brighton Half',
