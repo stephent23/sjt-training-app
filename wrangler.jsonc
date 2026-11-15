@@ -35,11 +35,7 @@
 	// the whole zone is a separate decision. Running on the default *.workers.dev
 	// URL in the meantime.
 	//
-	// !! UNAUTHENTICATED !! Cloudflare Access is NOT currently enabled on this
-	// Worker — verified by an unauthenticated GET /api/settings returning 200
-	// with real data rather than a 302 to the Access login page. Every endpoint
-	// (including the writes and the generator accept/reject) is open to anyone
-	// with the URL. Access must be turned on in the Zero Trust dashboard; it
-	// cannot be configured from this file or from wrangler. Until it is, treat
-	// the deployed app as public. See README "Enabling Cloudflare Access".
+	// Auth: the whole app is behind Cloudflare Access (Zero Trust dashboard, not
+	// this file) — verified 2026-11-15 by an unauthenticated GET /api/settings
+	// returning 302 to the Access login. See README "Authentication".
 }

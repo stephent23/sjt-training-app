@@ -155,6 +155,41 @@ branches simply carry the earlier commits with them.
       `src/generator.ts`/`src/routes/generator.ts` (kept to a single owner throughout, since all
       three fixes touch that file). 434 tests, `npm run typecheck` and `npm run build:client` all
       clean.
+- [x] **14 · Plan blocks, a 12-week summary, the New plan flow and run entry** (migration 0010).
+      *Done (2026-11-15, uncommitted at time of writing):*
+      - **Plan blocks.** `plan_blocks` + `sessions.block_id`; existing sessions backfilled into
+        "Block 1". Each accepted plan is a block, weeks numbered 1..N, shown as "Block 2 · Week 1 of
+        8". `/export?startDate=` (a Monday, today or later; 400 otherwise) is where week 1 lands.
+        The export anchor is now **date-based** (newest logged non-manual week) — `week_number`
+        restarts per block, so `MAX(week_number)` no longer means anything across blocks.
+      - **`src/trainingSummary.ts`.** Twelve weeks plus the current one, per-week adherence, best
+        e1RM (Epley) and top weight per exercise, hard sets (RIR ≤ 3) per pattern, run km / long
+        run / avg RPE and HR, worst pain; plus trends. Rides on `ExportPayload.trainingSummary`,
+        built in the route; the prompt says it informs judgement only — hard rules are still
+        checked against `deterministicProposal`.
+      - **Generate tab** is a five-step flow (Goals → Start & length → Ask Claude → Paste → Review),
+        resumable via localStorage so a trip to the Claude app doesn't lose your place; Web Share
+        of file + prompt where supported, copy-as-one-paste otherwise; paste-from-clipboard;
+        "Copy errors for Claude"; week cards with "Changed" highlights and a sticky Accept/Reject
+        bar stating what gets replaced. `/pending` gained `deterministic`, `replaces`, `start_date`.
+      - **Run entry**: run-type and Today/Yesterday/Pick chips, one `mm:ss`/`h:mm:ss` field with
+        auto-colons (iOS numeric keypad has no colon), duration-or-pace with the other derived,
+        1–10 RPE scale, "Ran as planned", per-field errors, sticky Save bar.
+      - **Live generation was built and then deliberately removed** at the owner's request: plan
+        generation must run on the Claude Pro subscription, never API credits, and the GitHub
+        Actions + `claude setup-token` route that achieves that is shelved for now. If it returns,
+        remember the repo is public, so Actions logs are too.
+
+      Fixed during integration: the Ask step awaited a prefetch that a fast tap could beat,
+      saving a file containing `null` — the export is now started on demand and a failed request
+      is dropped so the next tap retries.
+      529 tests, `npm run typecheck`, `npm run build:client` clean.
+
+      **Running tests:** jsdom loads ~2,000 modules, and from WSL over `/mnt/c` that has been slow
+      enough to blow vitest's 60s worker-start timeout ("Timeout waiting for worker to respond"),
+      even with nothing else running. Not a code problem — run the suite from a copy on WSL's
+      native filesystem (`rsync` the tree, excluding `node_modules`/`.git`/`.wrangler`, to `/tmp`,
+      then `npm ci` there), or exclude the project folder from Windows Defender.
 
 ## Merge checklist
 
@@ -166,14 +201,15 @@ has been deployed. Before deploying any of these branches:
 npm run db:migrate:remote
 ```
 
-Migrations added so far: `0006_structured_goals.sql`, `0007_run_metrics.sql`, `0008_manual_runs.sql`.
+Migrations added so far: `0006_structured_goals.sql`, `0007_run_metrics.sql`, `0008_manual_runs.sql`,
+`0010_plan_blocks.sql`.
 
 ## Notes for whoever picks this up
 
-- `test/client/GenerateFlow.test.tsx` pins the label `Download your training data`, finds the weeks
-  field via `input[type="number"]` with a synthetic bubbling `input` event, and expects download
-  errors in `.eyebrow--accent`. Keep all four, or change them deliberately.
-- Do not swap the weeks field for `Stepper` — it commits on blur, so that synthetic event would
-  never reach the handler.
+- `test/client/GenerateFlow.test.tsx` pins the label `Download your training data` and expects
+  download errors in `.eyebrow--accent`. It mounts `AskStep` + `PasteStep`; the Ask step
+  prefetches the export, so assert on the import call by URL, never by call index.
+- The weeks control (`PlanSetup`) is −/+ buttons named by `aria-label`, not `Stepper` — Stepper
+  commits on blur.
 - `test/generator*.test.ts` and `test/progression.test.ts` match on exact validation messages and
   `reason` strings. Add new strings rather than reword existing ones.

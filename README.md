@@ -4,16 +4,15 @@ Personal lifting and running log. Preact SPA + Hono on Cloudflare Workers, with 
 
 Live at https://sjt-training-app.accounts-db2.workers.dev/
 
-## ⚠️ The app is currently unauthenticated
+## Authentication
 
-Every endpoint — including all writes — is open to anyone who knows the URL. Verified by an
-unauthenticated `GET /api/settings` returning 200 with real data rather than redirecting to a login
-page.
+The whole app, API included, sits behind **Cloudflare Access** (enabled 2026-11-15, verified by an
+unauthenticated `GET /api/settings` returning 302 to the Access login). Access is configured in the
+Zero Trust dashboard, not in `wrangler.jsonc` or via `wrangler`. Allowing more emails lets more people
+in, but the app has no per-user data — everyone allowed shares one log (see
+[docs/multi-user-plan.md](docs/multi-user-plan.md)).
 
-This is the one outstanding piece of work that can't be done from the repo: Cloudflare Access is
-configured in the Zero Trust dashboard, not in `wrangler.jsonc` or via `wrangler`.
-
-### Enabling Cloudflare Access
+### How it was set up (for re-creating it)
 
 1. Cloudflare dashboard → **Zero Trust** → **Access** → **Applications** → **Add an application**.
 2. Type **Self-hosted**.
@@ -28,9 +27,6 @@ configured in the Zero Trust dashboard, not in `wrangler.jsonc` or via `wrangler
    curl -s -o /dev/null -w '%{http_code}\n' https://sjt-training-app.accounts-db2.workers.dev/api/settings
    # 302 (redirect to the Access login) = protected. 200 = still open.
    ```
-
-Once that returns 302, update the warning comment in `wrangler.jsonc` and delete this section's
-warning above.
 
 ## Development
 
