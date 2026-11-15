@@ -6,6 +6,8 @@ import type {
 	LogSetInput,
 	ManualRunInput,
 	PlannedSetStatus,
+	Race,
+	RaceInput,
 	SessionDetail,
 	SessionFeedback,
 	SessionStatus,
@@ -183,6 +185,28 @@ export async function deleteManualRun(sessionId: number): Promise<void> {
 	const res = await fetch(`/api/runs/${sessionId}`, { method: 'DELETE' });
 	if (!res.ok) throw await errorFrom(res);
 }
+
+async function raceRequest<T>(path: string, method: string, body?: RaceInput): Promise<T> {
+	const res = await fetch(`/api/races${path}`, {
+		method,
+		headers: body ? { 'Content-Type': 'application/json' } : undefined,
+		body: body ? JSON.stringify(body) : undefined,
+	});
+	if (!res.ok) {
+		const data = (await res.json().catch(() => null)) as { error?: string } | null;
+		throw new Error(data?.error ?? `request failed: ${res.status}`);
+	}
+	return res.json();
+}
+
+/** Every race, oldest first — goals and results alike. */
+export const fetchRaces = async (): Promise<Race[]> => (await raceRequest<{ races: Race[] }>('', 'GET')).races;
+export const createRace = async (input: RaceInput): Promise<Race> => (await raceRequest<{ race: Race }>('', 'POST', input)).race;
+export const updateRace = async (id: number, input: RaceInput): Promise<Race> =>
+	(await raceRequest<{ race: Race }>(`/${id}`, 'PUT', input)).race;
+export const deleteRace = async (id: number): Promise<void> => {
+	await raceRequest<{ ok: true }>(`/${id}`, 'DELETE');
+};
 
 export async function fetchSettings(): Promise<Settings> {
 	const res = await fetch('/api/settings');

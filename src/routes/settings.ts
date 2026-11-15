@@ -7,16 +7,18 @@ interface SettingsRow {
 	goals: string;
 	days_per_week: number;
 	goal_tags: string;
+	max_hr: number | null;
+	resting_hr: number | null;
 }
 
-const DEFAULTS: SettingsRow = { goals: '', days_per_week: 5, goal_tags: '[]' };
+const DEFAULTS: SettingsRow = { goals: '', days_per_week: 5, goal_tags: '[]', max_hr: null, resting_hr: null };
 
 function toSettings(row: SettingsRow): Settings {
-	return { goals: row.goals, days_per_week: row.days_per_week, goal_tags: parseGoalTags(row.goal_tags) };
+	return { goals: row.goals, days_per_week: row.days_per_week, goal_tags: parseGoalTags(row.goal_tags), max_hr: row.max_hr, resting_hr: row.resting_hr };
 }
 
 async function readRow(db: D1Database): Promise<SettingsRow> {
-	const row = await db.prepare(`SELECT goals, days_per_week, goal_tags FROM settings WHERE id = 1`).first<SettingsRow>();
+	const row = await db.prepare(`SELECT goals, days_per_week, goal_tags, max_hr, resting_hr FROM settings WHERE id = 1`).first<SettingsRow>();
 	return row ?? DEFAULTS;
 }
 
@@ -38,15 +40,23 @@ settings.patch('/', async (c) => {
 		if (unknown.length > 0) return c.json({ error: `unknown goal_tags: ${unknown.join(', ')}` }, 400);
 	}
 
+	// null clears a heart-rate anchor; undefined leaves it alone.
+	for (const key of ['max_hr', 'resting_hr'] as const) {
+		const v = body[key];
+		if (v !== undefined && v !== null && (!Number.isInteger(v) || v < 20 || v > 250)) return c.json({ error: `invalid ${key}` }, 400);
+	}
+
 	const current = await readRow(c.env.DB);
 	const updated: SettingsRow = {
 		goals: body.goals ?? current.goals,
 		days_per_week: body.days_per_week ?? current.days_per_week,
 		goal_tags: body.goal_tags !== undefined ? JSON.stringify(body.goal_tags) : current.goal_tags,
+		max_hr: body.max_hr !== undefined ? body.max_hr : current.max_hr,
+		resting_hr: body.resting_hr !== undefined ? body.resting_hr : current.resting_hr,
 	};
 
-	await c.env.DB.prepare(`UPDATE settings SET goals = ?, days_per_week = ?, goal_tags = ? WHERE id = 1`)
-		.bind(updated.goals, updated.days_per_week, updated.goal_tags)
+	await c.env.DB.prepare(`UPDATE settings SET goals = ?, days_per_week = ?, goal_tags = ?, max_hr = ?, resting_hr = ? WHERE id = 1`)
+		.bind(updated.goals, updated.days_per_week, updated.goal_tags, updated.max_hr, updated.resting_hr)
 		.run();
 
 	return c.json(toSettings(updated));

@@ -10,7 +10,7 @@ describe('GET /api/settings', () => {
 		const res = await SELF.fetch('https://training-app.test/api/settings');
 		expect(res.status).toBe(200);
 		const body = await res.json();
-		expect(body).toEqual({ goals: '', days_per_week: 5, goal_tags: [] });
+		expect(body).toEqual({ goals: '', days_per_week: 5, goal_tags: [], max_hr: null, resting_hr: null });
 	});
 });
 
@@ -44,7 +44,7 @@ describe('PATCH /api/settings — goal tags', () => {
 		await patchJson({ days_per_week: 3 });
 
 		const getRes = await SELF.fetch('https://training-app.test/api/settings');
-		expect(await getRes.json()).toEqual({ goals: '', days_per_week: 3, goal_tags: ['lose_fat'] });
+		expect(await getRes.json()).toEqual({ goals: '', days_per_week: 3, goal_tags: ['lose_fat'], max_hr: null, resting_hr: null });
 	});
 
 	it('clears tags when given an empty array', async () => {
@@ -60,17 +60,17 @@ describe('PATCH /api/settings', () => {
 	it('updates goals independently of days_per_week', async () => {
 		const res = await patchJson({ goals: 'Build a bigger squat' });
 		expect(res.status).toBe(200);
-		expect(await res.json()).toEqual({ goals: 'Build a bigger squat', days_per_week: 5, goal_tags: [] });
+		expect(await res.json()).toEqual({ goals: 'Build a bigger squat', days_per_week: 5, goal_tags: [], max_hr: null, resting_hr: null });
 
 		const getRes = await SELF.fetch('https://training-app.test/api/settings');
-		expect(await getRes.json()).toEqual({ goals: 'Build a bigger squat', days_per_week: 5, goal_tags: [] });
+		expect(await getRes.json()).toEqual({ goals: 'Build a bigger squat', days_per_week: 5, goal_tags: [], max_hr: null, resting_hr: null });
 	});
 
 	it('updates days_per_week independently of goals', async () => {
 		await patchJson({ goals: 'Marathon training' });
 		const res = await patchJson({ days_per_week: 4 });
 		expect(res.status).toBe(200);
-		expect(await res.json()).toEqual({ goals: 'Marathon training', days_per_week: 4, goal_tags: [] });
+		expect(await res.json()).toEqual({ goals: 'Marathon training', days_per_week: 4, goal_tags: [], max_hr: null, resting_hr: null });
 	});
 
 	it('rejects a days_per_week above 7', async () => {
@@ -78,7 +78,7 @@ describe('PATCH /api/settings', () => {
 		expect(res.status).toBe(400);
 
 		const getRes = await SELF.fetch('https://training-app.test/api/settings');
-		expect(await getRes.json()).toEqual({ goals: '', days_per_week: 5, goal_tags: [] });
+		expect(await getRes.json()).toEqual({ goals: '', days_per_week: 5, goal_tags: [], max_hr: null, resting_hr: null });
 	});
 
 	it('rejects a days_per_week below 1', async () => {
@@ -89,5 +89,24 @@ describe('PATCH /api/settings', () => {
 	it('rejects a non-integer days_per_week', async () => {
 		const res = await patchJson({ days_per_week: 3.5 });
 		expect(res.status).toBe(400);
+	});
+});
+
+describe('PATCH /api/settings — heart-rate anchors', () => {
+	it('stores max_hr and resting_hr, and null clears one', async () => {
+		const res = await patchJson({ max_hr: 188, resting_hr: 52 });
+		expect(await res.json()).toMatchObject({ max_hr: 188, resting_hr: 52 });
+
+		await patchJson({ goals: 'x' });
+		const kept = await SELF.fetch('https://training-app.test/api/settings');
+		expect(await kept.json()).toMatchObject({ max_hr: 188, resting_hr: 52 });
+
+		const cleared = await patchJson({ max_hr: null });
+		expect(await cleared.json()).toMatchObject({ max_hr: null, resting_hr: 52 });
+	});
+
+	it.each([[19], [251], [150.5], ['180']])('rejects %s', async (bad) => {
+		expect((await patchJson({ max_hr: bad })).status).toBe(400);
+		expect((await patchJson({ resting_hr: bad })).status).toBe(400);
 	});
 });

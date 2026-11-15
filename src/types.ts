@@ -230,9 +230,13 @@ export interface WeekProposal extends Omit<WeekProposalInput, 'sessions'> {
 // duplicate. See migrations/0005_generator_multiweek.sql.
 export interface MultiWeekProposalInput {
 	weeks: WeekProposalInput[];
+	/** The assistant's short coaching note for the block: what it is built
+	 * around and how realistic the race targets look. Optional; shown on Review. */
+	summary?: string | null;
 }
 export interface MultiWeekProposal {
 	weeks: WeekProposal[];
+	summary?: string | null;
 }
 
 /** The tick-box vocabulary behind free-text goals, grouped only for how the
@@ -313,4 +317,30 @@ export interface Settings {
 	goals: string;
 	days_per_week: number;
 	goal_tags: string[];
+	/** Heart-rate anchors (migration 0011). Null until entered — never guessed. */
+	max_hr: number | null;
+	resting_hr: number | null;
 }
+
+/** A race or time trial (migration 0011). In the future it is a goal; once it
+ * has a result it is history, and the fastest result per distance is the PB. */
+export interface Race {
+	id: number;
+	name: string;
+	date: string;
+	distance_km: number;
+	target_seconds: number | null;
+	result_seconds: number | null;
+	/** 'A' = peak and taper for it; 'B' = run it as part of training. */
+	priority: 'A' | 'B';
+}
+
+export type RaceInput = Omit<Race, 'id'>;
+
+/** The distances offered as one-tap chips; anything else is typed in km. */
+export const RACE_DISTANCES = [
+	{ label: '5K', km: 5 },
+	{ label: '10K', km: 10 },
+	{ label: 'Half', km: 21.1 },
+	{ label: 'Marathon', km: 42.2 },
+] as const;
