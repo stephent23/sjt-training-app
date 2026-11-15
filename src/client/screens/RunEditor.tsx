@@ -3,7 +3,9 @@ import { INTERVAL_PACE_RUN_TYPES, RUN_TYPES, type ManualRunInput, type RunType }
 import { todayIso } from '../../dates';
 import { capitalize } from '../format';
 import { createManualRun, deleteManualRun, updateManualRun } from '../api';
-import { RunMetricsFields } from '../components/RunMetricsFields';
+import { DateChips } from '../components/DateChips';
+import { Icon } from '../components/Icon';
+import { RunMetricsFields, type PlannedTarget } from '../components/RunMetricsFields';
 import { TapGroup } from '../components/TapGroup';
 import { emptyRunFields, parseRunFields, runFieldsFrom, type RunFields } from '../runFields';
 import { useSession } from '../useSession';
@@ -20,7 +22,7 @@ interface RunEditorProps {
  * and must paint before any network round trip. */
 export function RunEditor({ sessionId }: RunEditorProps) {
 	if (sessionId === undefined) {
-		return <RunEditorBody initialDate={todayIso()} initialRunType={null} initialFields={emptyRunFields()} />;
+		return <RunEditorBody initialDate={todayIso()} initialRunType={null} initialFields={emptyRunFields()} planned={null} />;
 	}
 	return <EditingRunEditor sessionId={sessionId} />;
 }
@@ -34,6 +36,7 @@ function EditingRunEditor({ sessionId }: { sessionId: number }) {
 			initialDate={detail?.session.date ?? todayIso()}
 			initialRunType={detail?.plannedRun?.run_type ?? null}
 			initialFields={runFieldsFrom(detail?.loggedRun ?? null)}
+			planned={detail?.plannedRun ?? null}
 		/>
 	);
 }
@@ -43,13 +46,18 @@ interface RunEditorBodyProps {
 	initialDate: string;
 	initialRunType: RunType | null;
 	initialFields: RunFields;
+	/** The plan being logged against, if any — only used to offer "Ran as planned". */
+	planned: PlannedTarget | null;
 }
 
-function RunEditorBody({ sessionId, initialDate, initialRunType, initialFields }: RunEditorBodyProps) {
+function RunEditorBody({ sessionId, initialDate, initialRunType, initialFields, planned }: RunEditorBodyProps) {
 	const [date, setDate] = useState(initialDate);
 	const [runType, setRunType] = useState<RunType | null>(initialRunType);
 	const [fields, setFields] = useState<RunFields>(initialFields);
+	// `errors` are whole-screen problems (a server refusal); `fieldErrors` sit
+	// under the field they are about.
 	const [errors, setErrors] = useState<string[]>([]);
+	const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 	const [saving, setSaving] = useState(false);
 	const [confirmingDelete, setConfirmingDelete] = useState(false);
 	const [deleting, setDeleting] = useState(false);
@@ -74,31 +82,37 @@ function RunEditorBody({ sessionId, initialDate, initialRunType, initialFields }
 		setFields(initialFields);
 	}, [signature]);
 
-	const set = (key: string) => (e: Event) => setFields((f) => ({ ...f, [key]: (e.target as HTMLInputElement).value }));
-
 	// A pace typed in while intervals/tempo was selected must not silently
 	// survive a switch to a type that hides the field — otherwise it could
 	// still get submitted for an easy/long run, correctable only by switching
 	// back to see it again.
 	function handleRunTypeChange(next: RunType) {
 		setRunType(next);
+		setFieldErrors(({ runType: _cleared, ...rest }) => rest);
 		if (!INTERVAL_PACE_RUN_TYPES.includes(next)) {
-			setFields((f) => ({ ...f, intervalPaceMinutes: '', intervalPaceSeconds: '' }));
+			setFields((f) => ({ ...f, intervalPace: '' }));
 		}
 	}
 
 	async function handleSave() {
 		const parsed = parseRunFields(fields);
-		if (!parsed.ok) {
-			setErrors(parsed.errors);
-			return;
-		}
-		if (!runType) {
-			setErrors(['Choose a run type before saving.']);
+		const problems = parsed.ok ? {} : { ...parsed.fieldErrors };
+		if (!runType) problems.runType = 'Choose a run type before saving.';
+
+		if (!parsed.ok || !runType) {
+			setErrors([]);
+			setFieldErrors(problems);
+			// Land on the first thing to fix — the form is taller than a phone.
+			setTimeout(() => {
+				const bad = document.querySelector<HTMLElement>('[aria-invalid="true"], .run-type-error');
+				bad?.focus?.();
+				bad?.scrollIntoView?.({ block: 'center' });
+			}, 0);
 			return;
 		}
 
 		setErrors([]);
+		setFieldErrors({});
 		setSaving(true);
 		const body: ManualRunInput = { date, run_type: runType, ...parsed.value };
 
@@ -129,43 +143,57 @@ function RunEditorBody({ sessionId, initialDate, initialRunType, initialFields }
 	}
 
 	return (
-		<main class="screen">
+		<main class="screen run-screen">
 			<button type="button" class="back-btn" onClick={() => history.back()}>
-				← Back
+				<Icon name="chevron-left" />
+				Back
 			</button>
 			<h1>{sessionId === undefined ? 'Add a run' : 'Edit run'}</h1>
 
 			{errors.length > 0 && (
-				<ul class="error-list">
+				<ul class="error-list" role="alert">
 					{errors.map((error) => (
 						<li key={error}>{error}</li>
 					))}
 				</ul>
 			)}
 
-			<label class="field">
-				Date
-				<input type="date" value={date} onInput={(e) => setDate((e.target as HTMLInputElement).value)} />
-			</label>
+			<div class="run-type">
+				<span class="run-field-label">Run type</span>
+				<TapGroup options={RUN_TYPES} value={runType} onChange={handleRunTypeChange} label={capitalize} ariaLabel="Run type" />
+				{fieldErrors.runType && (
+					<span class="run-field-error run-type-error" role="alert" tabIndex={-1}>
+						{fieldErrors.runType}
+					</span>
+				)}
+			</div>
 
-			<TapGroup options={RUN_TYPES} value={runType} onChange={handleRunTypeChange} label={capitalize} ariaLabel="Run type" />
+			<DateChips value={date} onChange={setDate} />
 
-			<RunMetricsFields fields={fields} onSet={set} runType={runType} />
-
-			<button type="button" class="btn-primary" onClick={handleSave} disabled={saving}>
-				{saving ? 'Saving…' : 'Save run'}
-			</button>
+			<RunMetricsFields fields={fields} onChange={setFields} runType={runType} planned={planned} errors={fieldErrors} />
 
 			{sessionId !== undefined &&
 				(confirmingDelete ? (
-					<button type="button" class="btn-danger" onClick={handleDelete} disabled={deleting}>
-						{deleting ? 'Deleting…' : 'Yes, delete this run'}
-					</button>
+					<div class="run-delete">
+						<button type="button" class="btn-danger" onClick={handleDelete} disabled={deleting}>
+							{deleting ? 'Deleting…' : 'Yes, delete this run'}
+						</button>
+						<button type="button" class="btn-quiet" onClick={() => setConfirmingDelete(false)} disabled={deleting}>
+							Keep it
+						</button>
+					</div>
 				) : (
-					<button type="button" class="btn-secondary" onClick={() => setConfirmingDelete(true)}>
+					<button type="button" class="btn-quiet run-delete" onClick={() => setConfirmingDelete(true)}>
 						Delete this run
 					</button>
 				))}
+
+			{/* Sticky so Save is under the thumb however far down the form you are. */}
+			<div class="run-actionbar">
+				<button type="button" class="btn-primary" onClick={handleSave} disabled={saving}>
+					{saving ? 'Saving…' : 'Save run'}
+				</button>
+			</div>
 		</main>
 	);
 }

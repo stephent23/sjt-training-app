@@ -92,10 +92,24 @@ function inputFor(root: HTMLElement, labelText: string): HTMLInputElement {
 	return inputsFor(root, labelText)[0];
 }
 
+/** The native date input only appears after "Pick…" (or for an older date). */
+async function openDatePicker(root: HTMLElement) {
+	chip(root, 'Pick…').click();
+	await tick();
+}
+
 function dateInput(root: HTMLElement): HTMLInputElement {
 	const input = root.querySelector<HTMLInputElement>('input[type="date"]');
 	if (!input) throw new Error('no date input');
 	return input;
+}
+
+/** An edited run's older date opens the picker two effects deep (the editor
+ * re-seeds, then DateChips reacts), and Preact runs effects after paint — later
+ * than a single zero-delay tick in jsdom. */
+async function dateInputOnceOpen(root: HTMLElement): Promise<HTMLInputElement> {
+	await waitFor(() => root.querySelector('input[type="date"]') !== null, 'the older date to open the picker');
+	return dateInput(root);
 }
 
 /** `input`, not `change`: Preact wires onInput, and a change event alone leaves
@@ -106,18 +120,25 @@ async function type(input: HTMLInputElement, value: string) {
 	await tick();
 }
 
-/** Fills the two-box duration row. Minutes first, seconds second. */
-async function typeDuration(root: HTMLElement, minutes: string, seconds: string) {
-	const [min, sec] = inputsFor(root, 'Duration');
-	await type(min, minutes);
-	await type(sec, seconds);
+/** Duration is one text field: "42:30", "1:02:15", or plain minutes. */
+async function typeDuration(root: HTMLElement, text: string) {
+	await type(inputFor(root, 'Duration'), text);
 }
 
-/** Fills the two-box interval-pace row, when it's shown. */
-async function typeIntervalPace(root: HTMLElement, minutes: string, seconds: string) {
-	const [min, sec] = inputsFor(root, 'Interval pace');
-	await type(min, minutes);
-	await type(sec, seconds);
+/** Average pace, the other way in to the same number. */
+async function typePace(root: HTMLElement, text: string) {
+	await type(inputFor(root, 'Avg pace'), text);
+}
+
+/** Interval pace is one field too, when it's shown. */
+async function typeIntervalPace(root: HTMLElement, text: string) {
+	await type(inputFor(root, 'Interval pace'), text);
+}
+
+function chip(root: HTMLElement, text: string): HTMLButtonElement {
+	const button = [...root.querySelectorAll<HTMLButtonElement>('.tap-btn')].find((el) => (el.textContent ?? '').trim() === text);
+	if (!button) throw new Error(`no chip ${text}`);
+	return button;
 }
 
 interface Call {
@@ -172,7 +193,8 @@ describe('RunEditor — adding a run by hand', () => {
 
 		const root = mount();
 
-		expect(dateInput(root).value).toBe(todayIso());
+		expect(chip(root, 'Today').getAttribute('aria-pressed')).toBe('true');
+		expect(root.querySelector('input[type="date"]')).toBeNull();
 		expect(maybeButtonWith(root, 'Delete this run')).toBeUndefined();
 		expect(root.querySelector('.btn-primary')?.textContent).toContain('Save run');
 	});
@@ -184,9 +206,10 @@ describe('RunEditor — adding a run by hand', () => {
 		vi.stubGlobal('fetch', fetchMock);
 
 		const root = mount();
+		await openDatePicker(root);
 		await type(dateInput(root), '2026-08-21');
 		await type(inputFor(root, 'Distance'), '8.2');
-		await typeDuration(root, '42', '30');
+		await typeDuration(root, '42:30');
 		tapButton(root, 'tempo').click();
 		await tick();
 
@@ -220,7 +243,7 @@ describe('RunEditor — adding a run by hand', () => {
 
 		const root = mount();
 		await type(inputFor(root, 'Distance'), '10');
-		await typeDuration(root, '50', '');
+		await typeDuration(root, '50');
 		tapButton(root, 'easy').click();
 		await tick();
 		await type(inputFor(root, 'Avg HR'), '142');
@@ -251,11 +274,11 @@ describe('RunEditor — adding a run by hand', () => {
 		await tick();
 
 		buttonWith(root, 'Save run').click();
-		await waitFor(() => root.querySelector('.error-list') !== null, 'the problems to be listed');
+		await waitFor(() => root.querySelector('.run-field-error') !== null, 'the problems to be listed');
 
 		expect(calls(fetchMock).filter((call) => call.url.includes('/api/runs'))).toHaveLength(0);
-		expect(root.querySelectorAll('.error-list li').length).toBeGreaterThan(0);
-		expect(root.querySelector('.error-list')!.textContent).toMatch(/duration/i);
+		expect(root.querySelectorAll('.run-field-error').length).toBeGreaterThan(0);
+		expect(root.querySelector('.run-field-error')!.textContent).toMatch(/duration/i);
 		expect(location.hash).toBe('');
 	});
 
@@ -265,7 +288,7 @@ describe('RunEditor — adding a run by hand', () => {
 
 		const root = mount();
 		await type(inputFor(root, 'Distance'), '8.2');
-		await typeDuration(root, '42', '30');
+		await typeDuration(root, '42:30');
 		tapButton(root, 'easy').click();
 		await tick();
 
@@ -284,7 +307,7 @@ describe('RunEditor — adding a run by hand', () => {
 
 		const root = mount();
 		await type(inputFor(root, 'Distance'), '8.2');
-		await typeDuration(root, '42', '30');
+		await typeDuration(root, '42:30');
 		tapButton(root, 'easy').click();
 		await tick();
 
@@ -322,11 +345,11 @@ describe('RunEditor — interval pace', () => {
 
 		tapButton(root, 'intervals').click();
 		await tick();
-		expect(inputsFor(root, 'Interval pace')).toHaveLength(2);
+		expect(inputsFor(root, 'Interval pace')).toHaveLength(1);
 
 		tapButton(root, 'tempo').click();
 		await tick();
-		expect(inputsFor(root, 'Interval pace')).toHaveLength(2);
+		expect(inputsFor(root, 'Interval pace')).toHaveLength(1);
 	});
 
 	it('prefills the interval pace field from an edited interval run', async () => {
@@ -349,9 +372,7 @@ describe('RunEditor — interval pace', () => {
 			}),
 		);
 
-		const [min, sec] = inputsFor(root, 'Interval pace');
-		expect(min.value).toBe('4');
-		expect(sec.value).toBe('32');
+		expect(inputFor(root, 'Interval pace').value).toBe('4:32');
 	});
 
 	it('includes the typed interval pace in the saved body for an interval run', async () => {
@@ -360,10 +381,10 @@ describe('RunEditor — interval pace', () => {
 
 		const root = mount();
 		await type(inputFor(root, 'Distance'), '8');
-		await typeDuration(root, '40', '0');
+		await typeDuration(root, '40:00');
 		tapButton(root, 'intervals').click();
 		await tick();
-		await typeIntervalPace(root, '4', '32');
+		await typeIntervalPace(root, '4:32');
 
 		buttonWith(root, 'Save run').click();
 		await waitFor(() => calls(fetchMock, 'POST').length > 0, 'the run to be posted');
@@ -381,10 +402,10 @@ describe('RunEditor — interval pace', () => {
 
 		const root = mount();
 		await type(inputFor(root, 'Distance'), '8');
-		await typeDuration(root, '40', '0');
+		await typeDuration(root, '40:00');
 		tapButton(root, 'intervals').click();
 		await tick();
-		await typeIntervalPace(root, '4', '32');
+		await typeIntervalPace(root, '4:32');
 
 		tapButton(root, 'easy').click();
 		await tick();
@@ -401,16 +422,14 @@ describe('RunEditor — correcting a recorded run', () => {
 	it('prefills every field from the session it was given', async () => {
 		const { root } = await mountEdit();
 
-		expect(dateInput(root).value).toBe('2026-08-10');
+		expect((await dateInputOnceOpen(root)).value).toBe('2026-08-10');
 		expect(inputFor(root, 'Distance').value).toBe('12.5');
-		const [minutes, seconds] = inputsFor(root, 'Duration');
-		expect(minutes.value).toBe('65');
-		expect(seconds.value).toBe('30');
+		expect(inputFor(root, 'Duration').value).toBe('1:05:30');
 		expect(inputFor(root, 'Avg HR').value).toBe('148');
 		expect(inputFor(root, 'Max HR').value).toBe('');
 		expect((root.querySelector('textarea') as HTMLTextAreaElement).value).toBe('Felt strong');
 
-		const pressed = [...root.querySelectorAll('.tap-btn[aria-pressed="true"]')];
+		const pressed = [...root.querySelectorAll('[aria-label="Run type"] .tap-btn[aria-pressed="true"]')];
 		expect(pressed).toHaveLength(1);
 		expect((pressed[0].textContent ?? '').toLowerCase()).toContain('long');
 	});
@@ -449,10 +468,10 @@ describe('RunEditor — correcting a recorded run', () => {
 
 		await type(inputFor(root, 'Distance'), '');
 		buttonWith(root, 'Save run').click();
-		await waitFor(() => root.querySelector('.error-list') !== null, 'the problems to be listed');
+		await waitFor(() => root.querySelector('.run-field-error') !== null, 'the problems to be listed');
 
 		expect(calls(fetchMock, 'PUT')).toHaveLength(0);
-		expect(root.querySelector('.error-list')!.textContent).toMatch(/distance/i);
+		expect(root.querySelector('.run-field-error')!.textContent).toMatch(/distance/i);
 	});
 });
 
@@ -487,5 +506,126 @@ describe('RunEditor — deleting a run', () => {
 		expect(deletes[0].url).toBe('/api/runs/7');
 
 		await waitFor(() => location.hash === '#/history', 'the redirect to history');
+	});
+});
+
+describe('RunEditor — quick entry', () => {
+	it('offers Today / Yesterday / Pick… and posts the yesterday it was given', async () => {
+		const fetchMock = vi.fn(async () => json({ id: 42 }));
+		vi.stubGlobal('fetch', fetchMock);
+
+		const root = mount();
+		chip(root, 'Yesterday').click();
+		await tick();
+		await type(inputFor(root, 'Distance'), '5');
+		await typeDuration(root, '30');
+		tapButton(root, 'easy').click();
+		await tick();
+
+		buttonWith(root, 'Save run').click();
+		await waitFor(() => calls(fetchMock, 'POST').length > 0, 'the run to be posted');
+
+		const yesterday = new Date(`${todayIso()}T00:00:00Z`);
+		yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+		expect((calls(fetchMock, 'POST')[0].body as { date: string }).date).toBe(yesterday.toISOString().slice(0, 10));
+	});
+
+	it('shows a live summary and fills in the derived pace', async () => {
+		vi.stubGlobal('fetch', vi.fn(async () => json({})));
+		const root = mount();
+
+		await type(inputFor(root, 'Distance'), '5.2');
+		await typeDuration(root, '2840'); // digits only: colon is inserted
+		expect(inputFor(root, 'Duration').value).toBe('28:40');
+		expect(root.querySelector('.run-summary')!.textContent).toBe('5.2 km · 28:40 · 5:31 /km');
+		expect(inputFor(root, 'Avg pace').value).toBe('5:31');
+		expect(root.querySelector('.run-field--derived')!.textContent).toContain('Avg pace');
+	});
+
+	it('lets average pace stand in for duration, and posts the derived duration', async () => {
+		const fetchMock = vi.fn(async () => json({ id: 42 }));
+		vi.stubGlobal('fetch', fetchMock);
+
+		const root = mount();
+		await type(inputFor(root, 'Distance'), '10');
+		await typePace(root, '5:30');
+		expect(inputFor(root, 'Duration').value).toBe('55:00');
+		expect(root.querySelector('.run-field--derived')!.textContent).toContain('Duration');
+		tapButton(root, 'easy').click();
+		await tick();
+
+		buttonWith(root, 'Save run').click();
+		await waitFor(() => calls(fetchMock, 'POST').length > 0, 'the run to be posted');
+		expect(calls(fetchMock, 'POST')[0].body).toMatchObject({ distance_km: 10, duration_seconds: 3300 });
+	});
+
+	it('takes RPE from a 1-10 tap scale, and a second tap clears it', async () => {
+		const fetchMock = vi.fn(async () => json({ id: 42 }));
+		vi.stubGlobal('fetch', fetchMock);
+
+		const root = mount();
+		await type(inputFor(root, 'Distance'), '5');
+		await typeDuration(root, '30');
+		tapButton(root, 'easy').click();
+		await tick();
+
+		expect(root.querySelectorAll('.rpe-scale .tap-btn')).toHaveLength(10);
+		chip(root, '7').click();
+		await tick();
+		chip(root, '8').click();
+		await tick();
+		buttonWith(root, 'Save run').click();
+		await waitFor(() => calls(fetchMock, 'POST').length > 0, 'the run to be posted');
+		expect(calls(fetchMock, 'POST')[0].body).toMatchObject({ rpe_1_10: 8 });
+	});
+
+	it('shows each problem under its own field, and does not save', async () => {
+		const fetchMock = vi.fn(async () => json({ id: 42 }));
+		vi.stubGlobal('fetch', fetchMock);
+
+		const root = mount();
+		await typeDuration(root, '28:75');
+		buttonWith(root, 'Save run').click();
+		await waitFor(() => root.querySelector('.run-field-error') !== null, 'the field errors');
+
+		const distanceHolder = inputsFor(root, 'Distance')[0].closest('label')!;
+		expect(distanceHolder.querySelector('.run-field-error')).not.toBeNull();
+		const durationHolder = inputFor(root, 'Duration').closest('label')!;
+		expect(durationHolder.querySelector('.run-field-error')!.textContent).toMatch(/duration/i);
+		expect(root.querySelector('.run-type-error')).not.toBeNull();
+		expect(calls(fetchMock, 'POST')).toHaveLength(0);
+	});
+
+	it('keeps Save in a sticky bar', () => {
+		vi.stubGlobal('fetch', vi.fn(async () => json({})));
+		const root = mount();
+		expect(root.querySelector('.run-actionbar .btn-primary')).not.toBeNull();
+	});
+});
+
+describe('RunEditor — ran as planned', () => {
+	const planned = sessionDetail({
+		session: { id: 9, date: '2026-08-12', kind: 'run', label: 'Tempo', status: 'planned', week_number: 3, origin: 'generated' },
+		plannedRun: { id: 5, run_type: 'tempo', target_minutes: 45, target_km: 8, structure_json: null },
+		loggedRun: null,
+	});
+
+	it('prefills the run type and date from the plan, and offers a one-tap fill of the distance', async () => {
+		const fetchMock = vi.fn(async () => json(planned));
+		vi.stubGlobal('fetch', fetchMock);
+		const root = mount(9);
+		await waitFor(() => maybeButtonWith(root, 'Ran as planned') !== undefined, 'the plan to load');
+
+		expect((await dateInputOnceOpen(root)).value).toBe('2026-08-12');
+		expect((root.querySelector('.tap-btn[aria-pressed="true"]')!.textContent ?? '').toLowerCase()).toContain('tempo');
+
+		buttonWith(root, 'Ran as planned').click();
+		await tick();
+		await tick();
+
+		expect(inputFor(root, 'Distance').value).toBe('8');
+		expect(inputFor(root, 'Duration').value).toBe('');
+		expect(document.activeElement).toBe(inputFor(root, 'Duration'));
+		expect(maybeButtonWith(root, 'Ran as planned')).toBeUndefined();
 	});
 });

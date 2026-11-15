@@ -1,3 +1,4 @@
+import { Icon } from '../components/Icon';
 import { useEffect, useState } from 'preact/hooks';
 import {
 	type LoggedRunEntry,
@@ -9,10 +10,10 @@ import {
 } from '../../types';
 import { logRun, logSet, saveFeedback, setExerciseStatus, setSessionStatus } from '../api';
 import { FeedbackCard } from '../components/FeedbackCard';
-import { RunMetricsFields } from '../components/RunMetricsFields';
+import { RunMetricsFields, type PlannedTarget } from '../components/RunMetricsFields';
 import { SessionScreenFallback } from '../components/SessionScreenFallback';
-import { parseRunFields, runFieldsFrom } from '../runFields';
-import { runSummary } from '../format';
+import { parseRunFields, runFieldsFrom, type RunFields } from '../runFields';
+import { formatDuration, formatPace, runSummary } from '../format';
 import { sessionSetTotals } from '../../sessionProgress';
 import { useSession } from '../useSession';
 
@@ -99,10 +100,20 @@ function ReviewExercise({ exercise, onCommitSet, onUnskip }: ReviewExerciseProps
 	// actually logged before the skip, so a mis-skip stays inspectable and
 	// repairable without hiding real data.
 	const showTable = !skipped || exercise.logged.length > 0;
+	// Ticked once every prescribed set has a logged entry — the word is in the
+	// aria-label, so the tick is never the only carrier.
+	const complete = !skipped && exercise.logged.length >= exercise.target_sets;
 
 	return (
-		<section class={skipped ? 'review-exercise--skipped' : undefined}>
-			<h2 class="section-heading">{exercise.exercise_name}</h2>
+		<section class={`card review-exercise${skipped ? ' review-exercise--skipped' : ''}`}>
+			<h2 class="section-heading">
+				{exercise.exercise_name}
+				{complete && (
+					<span class="review-tick" role="img" aria-label="All sets logged">
+						<Icon name="check" />
+					</span>
+				)}
+			</h2>
 			<p class="exercise-target">{skipped ? 'Skipped' : `${exercise.target_sets} × ${exercise.rep_low}-${exercise.rep_high}`}</p>
 
 			{skipped && (
@@ -145,15 +156,16 @@ function ReviewExercise({ exercise, onCommitSet, onUnskip }: ReviewExerciseProps
 interface ReviewRunProps {
 	loggedRun: LoggedRunEntry | null;
 	runType: RunType | null;
+	planned: PlannedTarget | null;
 	onCommit: (input: LoggedRunMetrics) => void;
 }
 
 type LoggedRunMetrics = Pick<LoggedRunEntry, 'distance_km' | 'duration_seconds' | 'note' | 'interval_pace_seconds_per_km'> &
 	Record<RunMetricField, number | null>;
 
-function ReviewRun({ loggedRun, runType, onCommit }: ReviewRunProps) {
-	const [fields, setFields] = useState<Record<string, string>>(() => runFieldsFrom(loggedRun));
-	const set = (key: string) => (e: Event) => setFields((f) => ({ ...f, [key]: (e.target as HTMLInputElement).value }));
+function ReviewRun({ loggedRun, runType, planned, onCommit }: ReviewRunProps) {
+	const [fields, setFields] = useState<RunFields>(() => runFieldsFrom(loggedRun));
+	const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
 	// Resynced against a signature of the saved values rather than a dependency
 	// per field — there are ten of them now, and a list that long is a list
@@ -166,15 +178,20 @@ function ReviewRun({ loggedRun, runType, onCommit }: ReviewRunProps) {
 	// duration 0 (or distance 0), which is not just cosmetic: progressRun
 	// only checks whether a long run was logged at all, so a junk row counts
 	// as a real one and earns the 10% weekly growth. Partial input simply
-	// isn't committed, matching ReviewSetRow's refuse-to-commit-garbage rule —
-	// parseRunFields' errors aren't shown here, only whether it parsed at all.
-	function commit() {
-		const parsed = parseRunFields(fields);
-		if (!parsed.ok) return;
+	// isn't committed, matching ReviewSetRow's refuse-to-commit-garbage rule.
+	// Only a value that was typed and is wrong gets a message — a field that is
+	// merely still empty is mid-entry, not an error.
+	function commit(next: RunFields = fields) {
+		const parsed = parseRunFields(next);
+		if (!parsed.ok) {
+			setFieldErrors(Object.fromEntries(Object.entries(parsed.fieldErrors).filter(([key]) => (next[key] ?? '').trim() !== '')));
+			return;
+		}
+		setFieldErrors({});
 		onCommit(parsed.value);
 	}
 
-	return <RunMetricsFields fields={fields} onSet={set} onCommit={commit} runType={runType} />;
+	return <RunMetricsFields fields={fields} onChange={setFields} onCommit={commit} runType={runType} planned={planned} errors={fieldErrors} />;
 }
 
 export function Review({ sessionId }: ReviewProps) {
@@ -238,10 +255,25 @@ export function Review({ sessionId }: ReviewProps) {
 	const progressLine =
 		session.kind === 'lift' ? `${totals.logged} of ${totals.target} sets logged` : loggedRun ? 'Run logged' : 'Not yet logged';
 
+	const stats: { value: string; label: string }[] = [];
+	if (session.kind === 'lift') {
+		if (totals.logged > 0) {
+			const tonnage = plannedSets.reduce((sum, ps) => sum + ps.logged.reduce((s, l) => s + l.weight_kg * l.reps, 0), 0);
+			stats.push({ value: `${totals.logged}/${totals.target}`, label: 'Sets' });
+			stats.push({ value: String(Math.round(tonnage)), label: 'Kg lifted' });
+		}
+	} else if (loggedRun) {
+		stats.push({ value: String(loggedRun.distance_km), label: 'Km' });
+		stats.push({ value: formatDuration(loggedRun.duration_seconds), label: 'Time' });
+		const pace = formatPace(loggedRun.distance_km, loggedRun.duration_seconds);
+		if (pace) stats.push({ value: pace.replace(' /km', ''), label: 'Pace /km' });
+	}
+
 	return (
 		<main class="screen">
 			<button type="button" class="back-btn" onClick={() => history.back()}>
-				← Back
+				<Icon name="chevron-left" />
+				Back
 			</button>
 
 			{error && <p class="eyebrow">{error}</p>}
@@ -252,6 +284,20 @@ export function Review({ sessionId }: ReviewProps) {
 			<h1>{session.label}</h1>
 			<p class="exercise-target">{progressLine}</p>
 
+			{/* What actually happened, before the tables that let you fix it. */}
+			{stats.length > 0 ? (
+				<dl class="summary-strip">
+					{stats.map((stat) => (
+						<div key={stat.label} class="stat">
+							<dt class="stat-label">{stat.label}</dt>
+							<dd class="stat-value">{stat.value}</dd>
+						</div>
+					))}
+				</dl>
+			) : (
+				<p class="hint">Nothing logged for this one — fill it in below.</p>
+			)}
+
 			{session.kind === 'lift' ? (
 				plannedSets.map((ps) => <ReviewExercise key={ps.id} exercise={ps} onCommitSet={handleCommitSet} onUnskip={handleUnskip} />)
 			) : (
@@ -261,7 +307,7 @@ export function Review({ sessionId }: ReviewProps) {
 							{runSummary(detail.plannedRun.run_type, detail.plannedRun.target_minutes, detail.plannedRun.target_km)}
 						</p>
 					)}
-					<ReviewRun loggedRun={loggedRun} runType={detail.plannedRun?.run_type ?? null} onCommit={handleCommitRun} />
+					<ReviewRun loggedRun={loggedRun} runType={detail.plannedRun?.run_type ?? null} planned={detail.plannedRun ?? null} onCommit={handleCommitRun} />
 					<button type="button" class="btn-secondary" onClick={() => (location.hash = `#/run/${sessionId}/edit`)}>
 						Edit run details
 					</button>
