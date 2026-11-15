@@ -1,5 +1,6 @@
 import { useState } from 'preact/hooks';
 import type { LoggedSetEntry } from '../../types';
+import { Icon } from './Icon';
 import { Stepper } from './Stepper';
 import { TapGroup } from './TapGroup';
 
@@ -91,6 +92,7 @@ export function SetRow({
 			<button type="button" class="set-row set-row--collapsed" aria-expanded={false} aria-label={`Edit ${label}`} onClick={onToggleExpand}>
 				<span class="set-row-index">{label}</span>
 				<span class="set-row-summary">
+					<Icon name="check" class="set-row-tick" />
 					{isBodyweight ? '' : `${logged.weight_kg}kg × `}
 					{logged.reps} @ RIR {logged.rir}
 				</span>

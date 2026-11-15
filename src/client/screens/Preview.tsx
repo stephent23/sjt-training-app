@@ -1,3 +1,4 @@
+import { Icon } from '../components/Icon';
 import { RunStructure } from '../components/RunStructure';
 import { SessionScreenFallback } from '../components/SessionScreenFallback';
 import { runSummary } from '../format';
@@ -22,7 +23,8 @@ export function Preview({ sessionId, onBack }: PreviewProps) {
 	return (
 		<main class="screen">
 			<button type="button" class="back-btn" onClick={onBack}>
-				← Back
+				<Icon name="chevron-left" />
+				Back
 			</button>
 			{error && <p class="eyebrow">{error}</p>}
 

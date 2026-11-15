@@ -1,3 +1,4 @@
+import { Icon } from '../components/Icon';
 import { useMemo, useState } from 'preact/hooks';
 import type { PlannedSetDetail, SessionDetail } from '../../types';
 import { logSet, setExerciseStatus, setSessionStatus } from '../api';
@@ -104,17 +105,37 @@ function LoadedLiftSession({ sessionId, detail, error, setDetail, reload, onBack
 
 	return (
 		<main class="screen">
-			<button type="button" class="back-btn" onClick={onBack}>
-				← Back
-			</button>
+			{/* Sticky, so the count and bar stay on screen however far down the
+			    exercise list you are. The sentence stays in the DOM (hidden
+			    visually) for screen readers and the pinned test; the figure is
+			    the same fact at a glance. Near the top on purpose: without it the
+			    finish button's promotion to primary happens far below the fold and
+			    is never seen. */}
+			<header class="session-head">
+				<div class="session-head-row">
+					<button type="button" class="back-btn" onClick={onBack}>
+						<Icon name="chevron-left" />
+						Back
+					</button>
+					<span class="session-head-figure" aria-hidden="true">
+						{totals.logged}/{totals.target}
+					</span>
+					<p class="exercise-target visually-hidden">
+						{totals.logged} of {totals.target} sets logged
+					</p>
+				</div>
+				<div
+					class={`progress-bar session-head-bar${ready ? ' progress-bar--done' : ''}`}
+					role="progressbar"
+					aria-label="Sets logged"
+					aria-valuemin={0}
+					aria-valuemax={totals.target}
+					aria-valuenow={totals.logged}
+					style={{ '--value': String(totals.logged / Math.max(1, totals.target)) }}
+				/>
+			</header>
 
 			{error && <p class="eyebrow">{error}</p>}
-
-			{/* Near the top on purpose: without it the finish button's promotion
-			    to primary happens far below the fold and is never seen. */}
-			<p class="exercise-target">
-				{totals.logged} of {totals.target} sets logged
-			</p>
 
 			{groups.map((group) => (
 				<ExerciseCard
@@ -142,7 +163,7 @@ function LoadedLiftSession({ sessionId, detail, error, setDetail, reload, onBack
 			>
 				{detail.session.status === 'completed' ? 'Completed' : 'Mark complete'}
 			</button>
-			<button type="button" class="btn-secondary" disabled={detail.session.status === 'skipped'} onClick={() => finish('skipped')}>
+			<button type="button" class="btn-quiet" disabled={detail.session.status === 'skipped'} onClick={() => finish('skipped')}>
 				{detail.session.status === 'skipped' ? 'Skipped' : 'Mark skipped'}
 			</button>
 

@@ -4,6 +4,7 @@ import type { PlannedSetDetail } from '../../types';
 import { resolveSetDefaults } from '../../setDefaults';
 import { isExerciseLogged, loggedSetCount } from '../../sessionProgress';
 import { buildRounds, isRoundComplete, type ExerciseGroup } from '../../supersets';
+import { Icon } from './Icon';
 import { SetRow } from './SetRow';
 
 interface ExerciseCardProps {
@@ -98,7 +99,9 @@ export function ExerciseCard({ group, expanded, onToggle, onLog, onSwap, onSkipT
 					))}
 					<span class="plan-row-meta">{progressLabel(group)}</span>
 				</div>
-				<span class="plan-row-chevron">{expanded ? '⌄' : '›'}</span>
+				<span class="plan-row-chevron">
+					<Icon name="chevron-right" class={expanded ? 'icon--down' : undefined} />
+				</span>
 			</button>
 
 			{/* Collapsing this card unmounts SetRow, discarding any typed-but-not-

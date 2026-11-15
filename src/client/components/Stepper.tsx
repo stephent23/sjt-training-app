@@ -1,4 +1,5 @@
 import { useState } from 'preact/hooks';
+import { Icon } from './Icon';
 
 interface StepperProps {
 	value: number;
@@ -40,7 +41,7 @@ export function Stepper({ value, step, suffix, onChange }: StepperProps) {
 	return (
 		<div class="stepper">
 			<button type="button" class="stepper-btn" onClick={() => onChange(round2(Math.max(0, value - step)))} aria-label="Decrease">
-				−
+				<Icon name="minus" size="md" />
 			</button>
 			<input
 				class="stepper-input"
@@ -69,7 +70,7 @@ export function Stepper({ value, step, suffix, onChange }: StepperProps) {
 			/>
 			{suffix && <span class="stepper-suffix">{suffix}</span>}
 			<button type="button" class="stepper-btn" onClick={() => onChange(round2(value + step))} aria-label="Increase">
-				+
+				<Icon name="plus" size="md" />
 			</button>
 		</div>
 	);

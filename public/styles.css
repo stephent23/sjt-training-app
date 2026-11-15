@@ -1,25 +1,47 @@
 /* ==========================================================================
    Training log — design system
 
-   Restrained, high-contrast, and built to be read at arm's length on a phone
-   held in one hand. Claret is the only chroma in the whole system: it marks
-   the primary action, "today", focus, and destructive confirm, and nothing
-   else ever introduces a second hue. Hierarchy is carried by size and colour,
-   not by weight — there are three weights (400/500/600) and that is the whole
-   set. Elevation is a hairline; there are no shadows. Every figure is mono and
-   tabular, which is what makes a screen of numbers read as an instrument.
+   One stylesheet, no build step, no framework. Built to be read at arm's
+   length on a phone held in one hand, mid-workout, in bad gym light — and to
+   hold up on a laptop for planning and the Generate flow.
 
-   Tap targets stay >=44px everywhere, because this is used one-handed,
-   mid-workout, on a sweaty screen. That constraint outranks every aesthetic
-   decision below it.
+   The rules, in order of how often they decide something:
 
-   Changed deliberately from the previous version of this file, which said the
-   palette was fixed and claret was "never a fill for a whole control". Both
-   are now false on purpose — see docs/design-rethink.md for what that bought
-   and what it cost.
+   · One chroma. Claret (--accent) is the only hue. It is spent on the primary
+     action (as a fill), on "today" and the current tab, on focus rings, and on
+     selected chips (as a soft tint, so the chip never outshouts the button
+     that commits it). Completion is a desaturated moss (--done) chosen to read
+     as a state, not a second brand — and every state also carries a word or a
+     shape, so colour is never the only signal.
+   · Nothing is rounded. One radius, --r: 3px, on every box. No pills. The
+     only circles are things that are circles by definition: a progress ring
+     and a dot.
+   · No shadows. Elevation is a hairline (--line) on a raised surface
+     (--surface over --bg). box-shadow appears only as an inset rule — a
+     chip's underline and ring, the current tab's edge, a done day's ring —
+     never as a drop shadow.
+   · Three sans weights — 400 body, 500 emphasis and controls, 600 headings —
+     and that is the whole set. Hierarchy comes from size and colour, not from
+     making things bold.
+   · Every figure is IBM Plex Mono, tabular: weights, reps, RIR, distances,
+     paces, dates, counts. Mono is self-hosted at one weight (400), so mono
+     text never asks for a heavier weight — size does that job. Eyebrows are
+     mono, uppercase, letterspaced (.13em): clearly a label, never a heading.
+   · Tap targets: >=44px everywhere, 48px for anything touched mid-set (chips),
+     52px for the weight stepper and the primary button. That constraint
+     outranks every aesthetic decision in this file.
+
+   This replaced an earlier version whose header said the palette was fixed
+   ("Do not change") and that claret was "never a fill for a whole control".
+   Both were dropped on purpose; docs/design-rethink.md records what that bought
+   and what it cost. The contrast table below replaces the old one — it is the
+   record that the new pairs were measured.
    ========================================================================== */
 
-/* ---- Fonts -------------------------------------------------------------- */
+/* ---- Fonts ----------------------------------------------------------------
+   Both faces are self-hosted and preloaded by index.html; the service worker
+   caches them, so the app's type renders offline. Nothing here touches the
+   network beyond these two files. */
 
 @font-face {
 	font-family: 'IBM Plex Sans';
@@ -39,72 +61,101 @@
 	font-display: swap;
 }
 
-/* ---- Tokens --------------------------------------------------------------
-   Every value here is measured against the ground it is actually used on, not
-   estimated, and the ratios are recorded in docs/design-rethink.md §3. The
-   names are the original ones so that every rule below keeps working; the
-   values are the refined palette.
+/* ---- Tokens ---------------------------------------------------------------
+   Warm stone neutrals with a slight claret bias, so the accent sits inside
+   the palette rather than on top of it — a pure mid-grey reads as
+   unconsidered. Components use only these names; dark mode redefines only
+   these names.
 
-   The neutrals are warm and carry a slight claret bias, so the accent sits
-   inside the palette rather than on top of it — a pure grey reads as
-   unconsidered. */
+   Contrast, measured (WCAG ratio), each token against the ground it actually
+   sits on. Everything that is text clears AA (4.5:1) at small sizes:
+
+     pair                              light   dark
+     --ink        on --bg              16.2    16.4
+     --ink        on --surface         17.8    15.3
+     --ink-2      on --bg               6.7     7.2
+     --ink-2      on --surface-2        6.2     6.1
+     --ink-3      on --bg               5.2     5.5
+     --ink-3      on --surface          5.7     5.2
+     --ink-3      on --surface-2        4.8     4.7
+     --accent-ink on --bg               7.3     7.3
+     --accent-ink on --accent-soft      7.0     6.5
+     --on-accent  on --accent-fill      8.0     5.6
+     --done       on --bg               6.6     7.3
+     --done       on --done-soft        6.3     6.0
+
+   Two things this table is here to stop someone undoing:
+   · --ink-3 carries eyebrows and mono figures at 11-13px. The lighter tone it
+     started as measured 3.7:1 light and 4.2:1 dark on --surface-2 — under AA.
+     The first draft only checked --bg and missed it; check the raised
+     surfaces too.
+   · In dark mode --on-accent on --accent (the light text tint) is 3.1:1. That
+     is why filled things use --accent-fill, never --accent, as their ground.
+
+   Not text, and below 3:1 by design: --line and --line-strong are hairlines
+   (1.6-1.8:1 against their grounds). No control is identified by its border
+   alone — each carries a label, and its state is carried by fill, weight or
+   a rule (see .tap-btn). */
 
 :root {
-	--paper: #f5f3f1; /* the page ground */
-	--paper-alt: #eeeae7; /* a raised surface: cards, inputs, chips */
-	--surface: #fffefd; /* the highest surface, for panels that must lift */
+	--bg: #f5f3f1; /* the page ground */
+	--surface: #fffefd; /* raised: cards, panels, controls, the tab bar */
+	--surface-2: #eeeae7; /* tinted: skeletons, the prompt, the feedback card */
+	--line: #e0dad5; /* hairline */
+	--line-strong: #cdc4bd; /* the border of a control you are meant to notice */
 	--ink: #1b1614;
-	--rule: #e0dad5; /* hairline */
-	--rule-strong: #cdc4bd; /* a border you are meant to notice, e.g. a control */
-	--muted: #5d5450; /* secondary text — 6.7:1 */
-	/* Carries the eyebrows and mono figures at 11-12px, so it is darker than it
-	   looks like it wants to be: the obvious lighter tone measures 3.7:1, under
-	   AA at that size. 5.2:1 on --paper, 4.8:1 on --paper-alt. */
-	--muted-2: #6f645e;
+	--ink-2: #5d5450; /* secondary text */
+	--ink-3: #6f645e; /* eyebrows, small mono figures — see the table */
 
-	--accent: #96262b; /* claret, unchanged from the original palette */
-	--accent-fill: #96262b; /* claret as a large filled area — see the dark override */
-	--accent-soft: #f7ecec;
-	--on-accent: #fffefd;
-	--done: #4a5a4d; /* desaturated moss: a state, never a second brand */
+	--accent: #96262b; /* claret: rules, rings, borders */
+	--accent-ink: #96262b; /* claret as text */
+	--accent-fill: #96262b; /* claret as a large filled area */
+	--accent-soft: #f7ecec; /* claret as a tint: selected chips, the current rail item */
+	--on-accent: #fffefd; /* text on --accent-fill */
 
+	--done: #4a5a4d; /* desaturated moss — a state, never a second brand */
+	--done-soft: #eaeeea;
+
+	--r: 3px; /* the one radius */
 	--sans: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 	--mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Consolas, monospace;
+
 	--s1: 0.25rem;
 	--s2: 0.5rem;
 	--s3: 0.75rem;
 	--s4: 1rem;
 	--s5: 1.5rem;
 	--s6: 2rem;
-	color-scheme: light dark;
 
 	--nav-h: 56px;
 	--rail-w: 200px; /* the tab bar becomes this wide on a laptop */
-	--radius: 3px;
-	--radius-sheet: 12px; /* the bottom sheet keeps its corners: it is a sheet */
+
+	color-scheme: light dark;
 }
 
-/* Only tokens are redefined per theme, never a component. Guarded so an
-   explicit light choice would still beat a dark OS if a toggle is ever added. */
+/* Dark follows the OS. Only tokens are redefined here, never a component —
+   if a rule below needs a dark special case, the token is wrong. There is
+   deliberately no theme toggle. */
 @media (prefers-color-scheme: dark) {
 	:root {
-		--paper: #14120f;
-		--paper-alt: #262220;
+		--bg: #14120f;
 		--surface: #1c1917;
+		--surface-2: #262220;
+		--line: #332e2b;
+		--line-strong: #453e3a;
 		--ink: #f3efec;
-		--rule: #332e2b;
-		--rule-strong: #453e3a;
-		--muted: #a89f99;
-		--muted-2: #948a83;
+		--ink-2: #a89f99;
+		--ink-3: #948a83;
 		--accent: #d4666b;
-		/* The light tint above is a TEXT colour. Filling a whole button with it
-		   reads hot, so the fill goes deeper and the tint becomes the border:
-		   the label passes on the fill (5.6:1) and the border carries the shape
-		   contrast against the page (5.3:1). */
+		--accent-ink: #e08a8e;
+		/* The light tint above reads hot as a wide fill, and --on-accent fails on
+		   it (3.1:1). Fills go deeper; the tint becomes the border, which is what
+		   carries the button's shape against the page. */
 		--accent-fill: #a83840;
 		--accent-soft: #2b1a1b;
 		--on-accent: #f3efec;
 		--done: #8fa894;
+		--done-soft: #20261f;
 	}
 }
 
@@ -121,53 +172,53 @@ html {
 body {
 	margin: 0;
 	padding: 0;
-	background: var(--paper);
+	background: var(--bg);
 	color: var(--ink);
-	font-family: var(--sans);
-	font-size: 16px;
-	line-height: 1.6;
+	font: 400 16px/1.6 var(--sans);
 	-webkit-font-smoothing: antialiased;
 }
 
 ::selection {
-	background: var(--accent);
-	color: var(--paper);
+	background: var(--accent-fill);
+	color: var(--on-accent);
 }
 
 p {
 	margin: var(--s2) 0;
 }
 
-/* Screen title (h1-equivalent) */
+/* Screen title. */
 h1 {
-	font-size: clamp(28px, 5vw, 34px);
+	font-size: 28px;
 	font-weight: 600;
-	letter-spacing: -0.025em;
-	line-height: 1.12;
+	letter-spacing: -0.016em;
+	line-height: 1.15;
 	margin: var(--s2) 0 var(--s4);
+	text-wrap: balance;
 }
 
-/* Default h2 — used as a component/dialog title (Today card label, Swap
-   sheet heading). Deliberately has NO divider/border-top: that treatment is
-   reserved for .section-heading, the true "section divider" heading used
-   on list screens. */
+/* Default h2 — a component or dialog title (the Swap sheet heading). It has no
+   rule above it on purpose: that treatment belongs to .section-heading, the
+   divider heading used between groups on list screens. */
 h2 {
-	font-size: 1.3rem;
-	font-weight: 600;
-	letter-spacing: -0.015em;
-	line-height: 1.3;
-	margin: var(--s1) 0;
-}
-
-/* Section heading (h2-equivalent, list/screen dividers e.g. "This week") */
-.section-heading {
 	font-size: 19px;
 	font-weight: 600;
-	letter-spacing: -0.015em;
+	letter-spacing: -0.01em;
 	line-height: 1.3;
-	margin: var(--s6) 0 var(--s4);
-	padding-top: 1.1rem;
-	border-top: 1px solid var(--rule);
+	margin: var(--s1) 0;
+	text-wrap: balance;
+}
+
+/* Section heading — a divider between groups ("Week 4 · 5 of 5 done", an
+   exercise on Review). A hairline above, never a filled band. */
+.section-heading {
+	font-size: 17px;
+	font-weight: 600;
+	letter-spacing: -0.006em;
+	line-height: 1.3;
+	margin: var(--s6) 0 var(--s3);
+	padding-top: var(--s4);
+	border-top: 1px solid var(--line);
 }
 .section-heading:first-child {
 	margin-top: 0;
@@ -178,7 +229,7 @@ h2 {
 a {
 	color: var(--ink);
 	text-decoration: underline;
-	text-decoration-color: var(--rule);
+	text-decoration-color: var(--line-strong);
 	text-underline-offset: 0.16em;
 	transition: text-decoration-color 0.15s ease;
 }
@@ -195,122 +246,186 @@ button:disabled {
 	cursor: not-allowed;
 }
 
-/* Eyebrow — small-caps style metadata label (dates, categories, tags). Mono,
-   because most of these carry a date or a count, and --muted-2 rather than
-   --muted because at 11px the lighter tone falls under AA. */
+/* Eyebrow — the small label above a title: dates, categories, counts. Mono
+   because most of them carry a date or a number; --ink-3 is dark enough for
+   11px (see the contrast table). A plain block; add .card-eyebrow when it
+   has to hold badges as well as words. */
 .eyebrow {
 	display: block;
-	font-family: var(--mono);
-	font-size: 11px;
-	font-weight: 500;
+	font: 400 11px/1.4 var(--mono);
 	font-variant-numeric: tabular-nums;
 	text-transform: uppercase;
-	letter-spacing: 0.12em;
-	color: var(--muted-2);
+	letter-spacing: 0.13em;
+	color: var(--ink-3);
 	margin: 0;
 }
+/* A label that needs attention — a download error, the Superset flag, the
+   pain-flag note. Claret as text, never as a fill. Also rendered on its own,
+   inside an .eyebrow, by SessionRow's status badge. */
 .eyebrow--accent {
-	color: var(--accent);
+	color: var(--accent-ink);
+}
+/* The prescription line — "3 × 8-10 @ 22kg" — is a figure, not a label, and
+   uppercasing turns the unit into "22KG", which reads as shouting. Keeps the
+   mono, size and colour; drops the shouting. */
+.eyebrow--plain {
+	text-transform: none;
+	letter-spacing: 0.02em;
 }
 
-/* Numerals utility — weights, reps, clocks, table figures: tabular mono */
+/* Text that is for assistive tech only: a fact the screen shows as a figure or
+   a tick still needs its sentence in the DOM. */
+.visually-hidden {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	margin: -1px;
+	padding: 0;
+	overflow: hidden;
+	clip: rect(0 0 0 0);
+	white-space: nowrap;
+	border: 0;
+}
+
+/* Tabular mono for any figure dropped into prose. */
 .num {
 	font-family: var(--mono);
 	font-variant-numeric: tabular-nums;
 }
 
 /* A sentence introducing a screen, and a sentence explaining a control. Both
-   are prose and both are sans — .exercise-target and .eyebrow are mono, which
-   is right for a figure or a short label and wrong for a line you actually
-   read. An uppercase letterspaced sentence is worse still. */
+   are prose, so both are sans — an uppercase letterspaced sentence is a label
+   pretending to be a paragraph. */
 .lede {
-	color: var(--muted);
+	color: var(--ink-2);
 	margin: 0 0 var(--s5);
 	max-width: 60ch;
 }
 
 .hint {
-	color: var(--muted);
-	font-size: 0.9rem;
+	color: var(--ink-2);
+	font-size: 14.5px;
 	margin: var(--s2) 0 0;
 	max-width: 60ch;
+}
+
+/* ---- Icons ---------------------------------------------------------------
+   components/Icon.tsx: one hand-drawn family, inline SVG, two sizes. They
+   inherit currentColor, so an icon is always the colour of the word beside
+   it. The vertical-align nudge sits a 16px glyph on the text baseline. */
+
+.icon {
+	flex: none;
+	display: inline-block;
+	vertical-align: -0.2em;
+}
+/* A chevron pointing down — an open accordion. One glyph, rotated, rather
+   than a second chevron to keep in step with the first. */
+.icon--down {
+	transform: rotate(90deg);
 }
 
 /* ---- Screen chrome --------------------------------------------------------- */
 
 .screen {
-	max-width: 480px;
+	max-width: 520px;
 	margin: 0 auto;
 	padding: var(--s4) var(--s4) var(--s6);
 }
 
+/* A title with something small beside it (Today's sync badge). */
+.screen-head {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: var(--s2) var(--s3);
+	margin: var(--s2) 0 var(--s4);
+}
+.screen-head > h1 {
+	margin: 0;
+}
+
+/* Figures-as-a-line: "4 of 18 sets logged", a prescription, a pace. Mono
+   because it is almost always a figure. */
 .exercise-target {
-	color: var(--muted);
+	color: var(--ink-2);
 	margin-top: 0;
-	font-family: var(--mono);
+	font: 400 14px/1.5 var(--mono);
 	font-variant-numeric: tabular-nums;
 }
 
 .back-btn {
 	display: inline-flex;
 	align-items: center;
+	gap: var(--s1);
 	min-height: 44px;
 	background: none;
 	border: none;
-	font: 600 15px var(--sans);
-	padding: var(--s2) 0;
-	margin: 0 0 var(--s1);
+	font: 500 15px var(--sans);
+	/* The chevron's own side-bearing would indent the label; pulling it left
+	   lines the word up with the content edge below it. */
+	padding: var(--s2) var(--s2) var(--s2) 0;
+	margin: 0 0 var(--s1) -3px;
 	color: var(--ink);
 	cursor: pointer;
 }
 
-.exercise-nav {
+/* Lift screen header: sticky, so the progress bar and the 4/18 figure are on
+   screen however far down the exercise list you scroll (the old muted line was
+   not). The negative margins carry its ground to the screen edges; the height
+   is fixed so the rest timer can sit directly beneath it. */
+.session-head {
+	--session-head-h: 68px;
+	position: sticky;
+	top: 0;
+	z-index: 11;
+	box-sizing: border-box;
+	height: var(--session-head-h);
+	margin: calc(-1 * var(--s4)) calc(-1 * var(--s4)) var(--s3);
+	padding: var(--s2) var(--s4) 0;
+	background: var(--bg);
+	border-bottom: 1px solid var(--line);
+}
+
+.session-head-row {
 	display: flex;
 	align-items: center;
-	justify-content: center;
-	gap: var(--s4);
-	margin: var(--s3) 0 var(--s4);
+	justify-content: space-between;
 }
 
-.exercise-nav button {
-	min-width: 44px;
-	min-height: 44px;
-	font-size: 1.25rem;
-	line-height: 1;
-	border-radius: var(--radius);
-	border: 1px solid var(--rule);
-	background: transparent;
-	color: var(--ink);
-	cursor: pointer;
+.session-head .back-btn {
+	margin-bottom: 0;
 }
 
-.exercise-nav button:disabled {
-	opacity: 0.3;
-}
-
-.exercise-nav span {
-	font-family: var(--mono);
+/* The count in heavy numerals: mono 400 at size is how a figure leads here. */
+.session-head-figure {
+	font: 400 24px/1 var(--mono);
 	font-variant-numeric: tabular-nums;
-	color: var(--muted);
-	font-size: 0.9rem;
-	min-width: 3.5rem;
-	text-align: center;
+	letter-spacing: -0.02em;
 }
 
-/* ---- App shell / bottom nav ------------------------------------------------
-   Not yet wired into app.tsx, but the markup is coming: a persistent 3-tab
-   bar (Today · Plan · History) fixed to the bottom of the viewport. */
+.session-head .session-head-bar {
+	margin: var(--s1) 0 0;
+}
+
+/* ---- App shell / tab bar ---------------------------------------------------
+   Shell.tsx renders this around Today, Plan, History and Generate: content,
+   then a four-tab bar fixed to the bottom of the viewport. The session
+   screens (lift, run, review) render without it — they have a back button.
+   At 900px the same markup becomes a left rail (see Laptop, below). */
 
 .shell {
 	display: flex;
 	flex-direction: column;
-	min-height: 100dvh;
+	/* vh first, dvh second: browsers without dvh keep the fallback, the rest
+	   get the height that excludes mobile browser chrome. */
 	min-height: 100vh;
+	min-height: 100dvh;
 }
 
 .shell-content {
 	flex: 1 1 auto;
-	overflow-y: auto;
 	padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + var(--s4));
 }
 
@@ -321,62 +436,54 @@ button:disabled {
 	bottom: 0;
 	z-index: 30;
 	display: flex;
-	background: var(--paper);
-	border-top: 1px solid var(--rule);
+	background: var(--surface);
+	border-top: 1px solid var(--line);
 	padding-bottom: env(safe-area-inset-bottom);
 }
 
+/* The product name only earns space on the laptop rail. */
+.tabbar-brand {
+	display: none;
+}
+
 .tabbar-item {
-	position: relative;
 	flex: 1 1 0;
 	display: flex;
 	flex-direction: column;
 	align-items: center;
 	justify-content: center;
-	gap: var(--s1);
+	gap: 2px;
 	min-height: var(--nav-h);
-	background: none;
-	border: none;
-	color: var(--muted);
+	color: var(--ink-3);
 	font: 500 12px var(--sans);
+	letter-spacing: 0.02em;
 	text-decoration: none;
 	cursor: pointer;
 }
 
+/* Current tab: claret label and a 2px rule along the bar's bottom edge — a
+   rule, not a filled block, because the bar sits under every screen and a
+   fill there would compete with each screen's own primary button. */
 .tabbar-item[aria-current='page'] {
-	color: var(--ink);
-	font-weight: 600;
-}
-
-.tabbar-item[aria-current='page']::before {
-	content: '';
-	position: absolute;
-	top: 0;
-	left: 50%;
-	transform: translateX(-50%);
-	width: 28px;
-	height: 2px;
-	background: var(--accent);
-	border-radius: 1px;
+	color: var(--accent-ink);
+	box-shadow: inset 0 -2px 0 var(--accent);
 }
 
 /* ---- Row primitive ---------------------------------------------------------
-   Replaces three ad-hoc bordered-box variants (today-card, set-row, sheet
-   options) with one hairline list-item. .today-card and .set-row are kept
-   as compatibility selectors so the current markup (which still uses those
-   class names) renders correctly; new screens should use .row directly. */
+   The one list item: hairline-separated, open to the page, no box. Lists on
+   Plan, History, the pending proposal and the collapsed exercise cards are
+   all made of these. A boxed group of rows is a .card holding rows, not a
+   row with a border. .set-row shares the treatment because a logged set is a
+   row in the same sense. */
 
 .row,
-.today-card,
 .set-row {
 	display: block;
 	width: 100%;
 	text-align: left;
-	padding: var(--s4) 0;
-	border-bottom: 1px solid var(--rule);
-	border-left: none;
-	border-right: none;
-	border-top: none;
+	padding: 14px 0;
+	border: 0;
+	border-bottom: 1px solid var(--line);
 	background: none;
 	color: inherit;
 	font: inherit;
@@ -387,28 +494,16 @@ button:disabled {
 	border-bottom: 0;
 }
 
-.row,
-.today-card {
+/* A whole-row link carries its affordance through the chevron, so it drops the
+   global underline — which otherwise strikes a line under the date, the title
+   and the meta separately and makes every row look ruled. */
+a.row {
+	text-decoration: none;
 	cursor: pointer;
 }
 
-/* Today card — a .row containing an eyebrow date, title, and status line */
-.today-card-date {
-	font-size: 11px;
-	font-weight: 600;
-	text-transform: uppercase;
-	letter-spacing: 0.12em;
-	color: var(--muted);
-	margin: 0;
-}
-
-.today-card h2 {
-	margin: var(--s1) 0;
-}
-
-/* Plan / History list row — a .row variant with eyebrow+title left,
-   muted progress string, and a trailing chevron. Combine as
-   class="row plan-row" (add "plan-row--today" to accent the eyebrow). */
+/* Plan / History list row: eyebrow + title + meta on the left, chevron on the
+   right. Combine as class="row plan-row". */
 .plan-row {
 	display: flex;
 	align-items: center;
@@ -416,53 +511,169 @@ button:disabled {
 	gap: var(--s3);
 }
 
+a.plan-row {
+	text-decoration: none;
+}
+
 .plan-row-main {
 	display: flex;
 	flex-direction: column;
-	gap: var(--s1);
+	gap: 2px;
+	/* Flex children refuse to shrink below their content without this, which
+	   is what pushes a long exercise name past the screen edge. */
 	min-width: 0;
 }
 
 .plan-row-title {
-	font-size: 1rem;
+	font-size: 16px;
 	font-weight: 500;
-	letter-spacing: -0.01em;
+	letter-spacing: -0.006em;
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
 }
 
 .plan-row-meta {
-	font-size: 0.85rem;
-	color: var(--muted);
-	font-family: var(--mono);
+	font: 400 13px/1.5 var(--mono);
+	color: var(--ink-2);
 	font-variant-numeric: tabular-nums;
 }
 
 .plan-row-chevron {
 	flex-shrink: 0;
-	color: var(--muted);
-	font-size: 1.25rem;
-	line-height: 1;
+	display: inline-flex;
+	color: var(--ink-3);
 }
 
-/* ---- Reschedule (Plan rows only) --------------------------------------------- */
+/* A completed row's tick. Moss, because it is a state; the "Completed" word in
+   the row's eyebrow is what makes it more than a colour. */
+.plan-row-chevron--done {
+	color: var(--done);
+}
+
+/* ---- Plan / History item (day column + row + reschedule) -------------------
+   .plan-item wraps one session row so the reschedule toggle can sit beside the
+   link, not inside it (a button in an anchor is invalid). The hairline moves
+   from the row to the wrapper for the same reason. */
+
+.plan-item {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	border-bottom: 1px solid var(--line);
+}
+
+.plan-item:last-child {
+	border-bottom: 0;
+}
+
+.plan-item > .row {
+	flex: 1 1 0;
+	min-width: 0;
+	width: auto;
+	border-bottom: 0;
+}
+
+/* Fixed-width day column: weekday over date, so a list of rows scans down the
+   left edge as a calendar. Mono, because they are figures. */
+.plan-day {
+	flex: none;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	width: 44px;
+	padding: var(--s1) 0;
+	border-radius: var(--r);
+	font: 400 11px/1.2 var(--mono);
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	color: var(--ink-3);
+}
+
+.plan-day-num {
+	font-size: 20px;
+	letter-spacing: -0.02em;
+	color: var(--ink);
+	font-variant-numeric: tabular-nums;
+}
+
+/* Today: the day column fills with the same claret as the primary button and
+   today's cell in the week strip. The row's word badges are untouched. */
+.plan-item--today .plan-day {
+	background: var(--accent-fill);
+	color: var(--on-accent);
+}
+.plan-item--today .plan-day-num {
+	color: var(--on-accent);
+}
+
+/* A finished or skipped row drops to --ink-2 and stays tappable. */
+.plan-item:has(.plan-row-chevron--done) .plan-row-title {
+	color: var(--ink-2);
+}
+
+/* History: one line per row. No meta line, so the row is shorter, and the
+   result rides on the right as a mono badge. */
+.plan-item--dense > .row {
+	padding: var(--s2) 0;
+}
+.plan-item--dense .plan-row-title {
+	font-size: 15px;
+}
+.badge--result {
+	flex: none;
+	background: var(--surface-2);
+	color: var(--ink);
+	text-transform: none;
+	letter-spacing: 0.02em;
+	font-size: 12px;
+}
+
+/* ---- Reschedule (Plan rows only) ------------------------------------------
+   Occasional, so it recedes: a small quiet toggle beside the row (44px target,
+   see .btn-small), with the seven day chips unchanged underneath. */
+
+.plan-item .plan-item-move {
+	flex: none;
+	margin: 0;
+	color: var(--ink-2);
+}
 
 .reschedule {
+	flex: 1 0 100%;
 	margin: 0 0 var(--s3);
 }
 
-.reschedule-toggle {
-	width: auto;
-	min-height: 36px;
-	padding: var(--s1) var(--s3);
-	margin: 0 0 var(--s2);
-	font-size: 0.85rem;
+/* Plan's empty state: the pinned message and the way forward, in one card. */
+.empty-card {
+	margin: var(--s4) 0;
+}
+.empty-card .empty-state {
+	margin: 0 0 var(--s3);
+	padding: var(--s4) 0;
+	border: 0;
+	background: none;
+}
+.empty-card .btn-primary {
+	margin-bottom: 0;
 }
 
-/* ---- Exercise accordion (ExerciseCard) --------------------------------------
-   Builds on the .row/.plan-row primitives above: a collapsible card whose
-   summary reuses .plan-row layout, expanding to reveal set/actions detail. */
+/* A stack of placeholders spaced like real content. */
+.skeleton-list {
+	display: flex;
+	flex-direction: column;
+	gap: var(--s3);
+	margin: var(--s4) 0;
+}
+.skeleton-list > .skeleton + .skeleton {
+	margin-top: 0;
+}
+
+/* ---- Exercise accordion (ExerciseCard) -------------------------------------
+   Collapsed, a card is a .row whose summary reuses the .plan-row layout.
+   Expanded (solo exercises), it also becomes a .panel — a bordered box with a
+   head and a body — because the open card is the one thing on the lift screen
+   that is at full volume. Supersets stay open to the page; see below. */
 
 .exercise-card {
 	padding: 0;
@@ -474,7 +685,8 @@ button:disabled {
 	justify-content: space-between;
 	gap: var(--s3);
 	width: 100%;
-	padding: var(--s4) 0;
+	min-height: 48px;
+	padding: 14px 0;
 	background: none;
 	border: none;
 	color: inherit;
@@ -487,39 +699,46 @@ button:disabled {
 	padding: 0 0 var(--s4);
 }
 
+/* Swap / Skip: secondary to Log set, so they sit side by side at the
+   secondary size rather than stacking as two full-width commitments. */
 .exercise-card-actions {
 	display: flex;
-	gap: var(--s3);
+	gap: var(--s2);
 	margin-bottom: var(--s3);
 }
 
 .exercise-card-actions .btn-secondary {
 	width: auto;
 	flex: 1 1 0;
+	min-height: 44px;
 	margin: 0;
+	font-size: 14.5px;
 }
 
 .exercise-card--skipped .plan-row-title,
 .exercise-card--skipped .plan-row-meta {
-	color: var(--muted);
+	color: var(--ink-3);
 	text-decoration: line-through;
-	text-decoration-color: var(--rule);
+	text-decoration-color: var(--line-strong);
 }
 
 .exercise-card--expanded .exercise-card-summary {
-	border-bottom: 1px solid var(--rule);
+	border-bottom: 1px solid var(--line);
 }
 
-/* Superset: one card holding every member, so this left rule now spans the
-   whole group as a single unbroken line. It used to be applied per-card, which
-   meant .row's border-bottom cut straight through it between partners. */
+/* Superset: one card holding every member, so this left rule spans the whole
+   group as a single unbroken line. --ink, not claret: it marks structure, and
+   claret's rule on a .set-row means "being edited". A superset card never
+   gets .panel — the panel's border shorthand would erase this rule — which
+   is why .panel is declared after this block (ExerciseCard.tsx relies on that
+   order). */
 .exercise-card--superset {
 	border-left: 3px solid var(--ink);
 	padding-left: var(--s3);
 	margin-left: calc(-1 * var(--s3) - 3px);
 }
 
-/* Member names stack in the summary, so they must wrap rather than inherit
+/* Member names stack in the summary, so they wrap rather than inherit
    .plan-row-title's nowrap+ellipsis — two names truncate on a phone. */
 .exercise-card--superset .plan-row-title {
 	white-space: normal;
@@ -529,7 +748,7 @@ button:disabled {
 .superset-round + .superset-round {
 	margin-top: var(--s4);
 	padding-top: var(--s3);
-	border-top: 1px solid var(--rule);
+	border-top: 1px solid var(--line);
 }
 
 .superset-round-label {
@@ -537,7 +756,7 @@ button:disabled {
 }
 
 /* Per-member Swap/Skip, since a superset card has more than one exercise to
-   act on. Solo cards keep the full-width .exercise-card-actions pair. */
+   act on. Solo cards keep the paired .exercise-card-actions. */
 .exercise-card-members {
 	margin-bottom: var(--s3);
 }
@@ -545,15 +764,15 @@ button:disabled {
 .exercise-card-member {
 	display: flex;
 	align-items: center;
-	gap: var(--s3);
+	gap: var(--s2);
 	margin-bottom: var(--s2);
 }
 
 .exercise-card-member-name {
 	flex: 1 1 auto;
 	min-width: 0;
-	font-size: 0.9rem;
-	font-weight: 600;
+	font-size: 15px;
+	font-weight: 500;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
@@ -565,83 +784,522 @@ button:disabled {
 	margin: 0;
 	min-height: 44px;
 	padding: 0 var(--s3);
-	font-size: 0.85rem;
+	font-size: 14px;
 }
 
 .exercise-card-member--skipped .exercise-card-member-name {
-	color: var(--muted);
+	color: var(--ink-3);
 	text-decoration: line-through;
-	text-decoration-color: var(--rule);
+	text-decoration-color: var(--line-strong);
 }
 
 /* Review: a skipped exercise should read as skipped, not as an empty table. */
 .review-exercise--skipped .section-heading {
-	color: var(--muted);
+	color: var(--ink-3);
 	text-decoration: line-through;
-	text-decoration-color: var(--rule);
+	text-decoration-color: var(--line-strong);
 }
 
-.plan-row--today .eyebrow {
-	color: var(--accent);
+/* One exercise on Review is a card; the heading's divider is the card's edge.
+   The tick says "every set logged" (its aria-label carries the words). */
+.review-exercise .section-heading {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--s3);
+}
+.review-tick {
+	display: inline-flex;
+	color: var(--done);
 }
 
-/* ---- Buttons ---------------------------------------------------------------- */
+/* ---- Surfaces: panel and card ----------------------------------------------
+   Two boxes, both a hairline on --surface with the one radius, neither with a
+   shadow. They differ in job, not in look:
+
+   .panel — a box with a head and a body (.panel-head, .panel-body): the open
+            exercise card, the Generate aside.
+   .card  — a padded box for one self-contained thing: Today's hero, a week on
+            Plan, a summary. Stack them; adjacent cards space themselves.
+            .card--link makes the whole card an anchor.
+
+   Both are declared after .row so that a ".row.panel" (the open exercise card)
+   gets the full border rather than .row's bottom rule. */
+
+.panel {
+	border: 1px solid var(--line);
+	border-radius: var(--r);
+	background: var(--surface);
+}
+
+.panel-head {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: var(--s1) var(--s3);
+	padding: var(--s3) var(--s4);
+	border-bottom: 1px solid var(--line);
+}
+
+.panel-head > * {
+	min-width: 0;
+}
+
+.panel-body {
+	padding: var(--s4);
+}
+
+/* The open exercise card: the summary keeps .plan-row's centred layout even
+   though .panel-head is baseline-aligned, so the chevron stays centred on a
+   two-line title. */
+/* The bottom border is restated because .row:last-child (two classes)
+   would otherwise strip it from the last card on the screen. */
+.exercise-card.panel {
+	margin: var(--s3) 0;
+	border-bottom: 1px solid var(--line);
+}
+.exercise-card-summary.panel-head {
+	align-items: center;
+	padding: var(--s3) var(--s4);
+}
+/* .exercise-card-body has no horizontal padding of its own (it never needed
+   any while the card was open to the page), so inside the panel's border it
+   needs the panel's inset. */
+.exercise-card.panel > .exercise-card-body {
+	padding: var(--s4);
+}
+
+.card {
+	display: block;
+	background: var(--surface);
+	border: 1px solid var(--line);
+	border-radius: var(--r);
+	padding: var(--s4);
+	color: inherit;
+}
+
+/* A card laid out as a row (Today's compact second session): .card's
+   display:block is declared after .plan-row's flex, so restate it. */
+.card.plan-row {
+	display: flex;
+}
+
+.card + .card {
+	margin-top: var(--s3);
+}
+
+a.card,
+.card--link {
+	text-decoration: none;
+	cursor: pointer;
+}
+
+.card--link:hover {
+	border-color: var(--line-strong);
+}
+
+/* An eyebrow line that holds badges as well as words: a wrapping row, so a
+   type badge, the date and a state badge sit on one line when they fit and
+   wrap cleanly when they don't. */
+.card-eyebrow {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--s1) var(--s2);
+}
+
+/* ---- Badge -----------------------------------------------------------------
+   A small boxed word: what kind of session this is, or what state it is in.
+   Mono uppercase like the eyebrow, so a badge inside an eyebrow line reads as
+   part of the same label. The word is the signal; colour and the icon only
+   reinforce it — a badge is never colour alone.
+
+   .badge            neutral (the sync count on Today)
+   .badge--lift      type; pair with <Icon name="lift" />, word "Lift"
+   .badge--run       type; pair with <Icon name="run" />, word = run type
+   .badge--done      state; pair with <Icon name="check" />, word "Completed"/"Done"
+   .badge--skipped   state; dashed border, word "Skipped"
+   .badge--accent    a flag that needs noticing: "Superset", "Deload",
+                     "Speculative" */
+
+.badge {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	min-height: 22px;
+	padding: 1px 6px;
+	border: 1px solid var(--line-strong);
+	border-radius: var(--r);
+	background: var(--surface);
+	color: var(--ink-2);
+	font: 400 11px/1.2 var(--mono);
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	white-space: nowrap;
+	vertical-align: middle;
+}
+
+.badge .icon {
+	width: 13px;
+	height: 13px;
+}
+
+.badge--lift,
+.badge--run {
+	color: var(--ink);
+}
+
+.badge--done {
+	background: var(--done-soft);
+	border-color: var(--done);
+	color: var(--done);
+}
+
+/* Dashed, so "skipped" differs from "done" by shape as well as by tone. */
+.badge--skipped {
+	border-style: dashed;
+	background: transparent;
+	color: var(--ink-3);
+}
+
+.badge--accent {
+	background: var(--accent-soft);
+	border-color: var(--accent);
+	color: var(--accent-ink);
+}
+
+/* ---- Progress bar ----------------------------------------------------------
+   A thin track with a claret fill. Set the fraction (0-1) as a custom
+   property; give it role="progressbar" with aria-valuenow/-max so the number
+   exists for a screen reader too, and always show the figure ("4/18") as
+   text next to it — the bar is the glance, the figure is the fact.
+
+     <div class="progress-bar" role="progressbar" aria-valuemin="0"
+          aria-valuemax="18" aria-valuenow="4" style="--value: 0.22"></div>
+
+   .progress-bar--done switches the fill to moss once the work is finished. */
+
+.progress-bar {
+	position: relative;
+	height: 6px;
+	margin: var(--s3) 0;
+	background: var(--surface-2);
+	border-radius: var(--r);
+	overflow: hidden;
+}
+
+.progress-bar::before {
+	content: '';
+	position: absolute;
+	inset: 0 auto 0 0;
+	width: calc(var(--value, 0) * 100%);
+	background: var(--accent-fill);
+	transition: width 0.3s ease;
+}
+
+.progress-bar--done::before {
+	background: var(--done);
+}
+
+/* ---- Ring ------------------------------------------------------------------
+   A progress ring as one conic-gradient — zero bytes, no SVG. A circle
+   because a ring is one by definition; the no-rounding rule is about boxes.
+   The figure goes inside as text and is the real signal; give the ring
+   role="img" and an aria-label that says it in words.
+
+     <span class="ring" style="--value: 0.4" role="img"
+           aria-label="2 of 5 sessions done"><span class="ring-label">2/5</span></span>
+
+   Moss fill, because what it counts is completion. */
+
+.ring {
+	--ring-size: 40px;
+	position: relative;
+	display: inline-grid;
+	place-items: center;
+	flex: none;
+	width: var(--ring-size);
+	height: var(--ring-size);
+	border-radius: 50%;
+	background: conic-gradient(var(--done) calc(var(--value, 0) * 360deg), var(--surface-2) 0);
+}
+
+/* The hole: a disc of the surface the ring sits on, leaving a 4px band. */
+.ring::before {
+	content: '';
+	position: absolute;
+	inset: 4px;
+	border-radius: 50%;
+	background: var(--surface);
+}
+
+/* On the collapsible week header the ground is the page (--bg), not a raised
+   surface, so the hole matches it. */
+.exercise-card-summary .ring::before {
+	background: var(--bg);
+}
+
+.ring-label {
+	position: relative;
+	font: 400 11px var(--mono);
+	font-variant-numeric: tabular-nums;
+	color: var(--ink);
+}
+
+/* ---- Skeleton --------------------------------------------------------------
+   A grey block at the exact size of the thing arriving. Its job is to stop
+   the layout jumping when cached or fetched data lands, not to entertain, so
+   the pulse is slow and faint — and under prefers-reduced-motion it is a
+   static block (the global rule at the end of this file kills the animation).
+   Mark the container aria-hidden; announce loading elsewhere if at all.
+
+   .skeleton--line    one line of small text (an eyebrow)
+   .skeleton--title   a heading
+   .skeleton--block   a figures strip or a short paragraph
+   .skeleton--button  a primary button
+   .skeleton--row     a list row
+   Width is set inline where it should differ from 100%. */
+
+.skeleton {
+	display: block;
+	width: 100%;
+	height: 14px;
+	background: var(--surface-2);
+	border-radius: var(--r);
+	animation: skeleton-pulse 1.6s ease-in-out infinite alternate;
+}
+
+.skeleton + .skeleton {
+	margin-top: var(--s3);
+}
+
+.skeleton--line {
+	height: 12px;
+}
+.skeleton--title {
+	height: 28px;
+}
+.skeleton--block {
+	height: 64px;
+}
+.skeleton--button {
+	height: 52px;
+}
+.skeleton--row {
+	height: 56px;
+}
+
+@keyframes skeleton-pulse {
+	from {
+		opacity: 1;
+	}
+	to {
+		opacity: 0.55;
+	}
+}
+
+/* ---- Summary strip ---------------------------------------------------------
+   A row of headline figures, each a mono value over a mono label, ruled off
+   above and below. A <dl>: each .stat is a <div> holding <dt class=
+   "stat-label"> then <dd class="stat-value"> — label first in the markup, for
+   the semantics; value first on screen, via column-reverse, because the
+   figure is what the eye wants.
+
+     <dl class="summary-strip">
+       <div class="stat"><dt class="stat-label">Km</dt><dd class="stat-value">9.4</dd></div>
+       ...
+     </dl>
+
+   Columns share the width equally and a hairline separates them, so three
+   figures line up as a table would. Mono 400 at size, not a heavy weight:
+   that is how a figure leads here. */
+
+.summary-strip {
+	display: grid;
+	grid-auto-flow: column;
+	grid-auto-columns: minmax(0, 1fr);
+	margin: var(--s4) 0;
+	padding: var(--s3) 0;
+	border-top: 1px solid var(--line);
+	border-bottom: 1px solid var(--line);
+}
+
+.stat {
+	display: flex;
+	flex-direction: column-reverse;
+	justify-content: flex-end;
+	gap: 2px;
+	min-width: 0;
+	padding: 0 var(--s3);
+}
+
+.stat:first-child {
+	padding-left: 0;
+}
+
+.stat + .stat {
+	border-left: 1px solid var(--line);
+}
+
+.stat-value {
+	margin: 0;
+	font: 400 26px/1.1 var(--mono);
+	font-variant-numeric: tabular-nums;
+	letter-spacing: -0.02em;
+	color: var(--ink);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.stat-label {
+	font: 400 11px/1.3 var(--mono);
+	letter-spacing: 0.13em;
+	text-transform: uppercase;
+	color: var(--ink-3);
+}
+
+/* Run screen's target: the same strip at display size. */
+.summary-strip--hero .stat-value {
+	font-size: 44px;
+}
+
+/* ---- Buttons ---------------------------------------------------------------
+   Four tiers, deliberately unequal so a screen answers "which is the thing to
+   tap" before it is read:
+
+   .btn-primary    claret fill, 52px. One per screen, the action the screen
+                   exists for (Log set, Start the session, Save run).
+   .btn-secondary  a soft raised fill with a control border, 48px.
+   .btn-quiet      text only, 44px: cheap, recoverable actions (Mark skipped,
+                   Reject, Add a run).
+   .btn-danger     claret outline, 48px: the confirm step of something
+                   destructive. Outline rather than fill so it can never be
+                   mistaken for the primary action sitting above it.
+
+   .btn-small is a modifier for any of them: inline, auto width, still 44px. */
 
 .btn-primary,
-.btn-secondary {
+.btn-secondary,
+.btn-danger {
 	display: block;
 	width: 100%;
 	min-height: 48px;
 	margin: var(--s3) 0;
-	border-radius: var(--radius);
+	padding: 0 var(--s4);
+	border-radius: var(--r);
 	font: 500 15.5px var(--sans);
+	text-align: center;
 	cursor: pointer;
+	transition:
+		background-color 0.12s ease,
+		border-color 0.12s ease,
+		filter 0.12s ease;
 }
 
-/* The one filled thing on any screen, which is what keeps a single accent
-   legible: if several controls were filled, none of them would read as "the
-   action". The border is the lighter claret tint so the shape stays visible
-   against the page in dark mode, where the fill is deliberately deeper. */
+/* The fill is --accent-fill and the border the lighter --accent: in dark mode
+   the two differ, and the border is what keeps the button's edge visible
+   against the page while the label sits on a fill it passes against. */
 .btn-primary {
+	min-height: 52px;
 	background: var(--accent-fill);
 	color: var(--on-accent);
 	border: 1px solid var(--accent);
 }
 
+.btn-primary:hover {
+	filter: brightness(1.06);
+}
+
+.btn-primary:active {
+	filter: brightness(0.92);
+}
+
+/* Disabled-but-explained: the label still reads (opacity, not a grey swap),
+   and the screen says why next to it. A disabled primary must not look like
+   a live secondary, so it keeps its fill. */
 .btn-primary:disabled {
 	opacity: 0.4;
+	filter: none;
 	cursor: not-allowed;
 }
 
 .btn-secondary {
 	background: var(--surface);
-	border: 1px solid var(--rule-strong);
+	border: 1px solid var(--line-strong);
 	color: var(--ink);
 }
 
-/* Destructive / confirm-pain affordance in the swap flow — the one place
-   besides focus rings and "today" that spends the claret budget. */
+.btn-secondary:hover {
+	border-color: var(--ink-3);
+}
+
+.btn-secondary:active {
+	background: var(--surface-2);
+}
+
 .btn-danger {
-	background: var(--accent);
-	color: var(--paper);
+	background: var(--surface);
+	border: 1px solid var(--accent);
+	color: var(--accent-ink);
+}
+
+.btn-danger:active {
+	background: var(--accent-soft);
+}
+
+.btn-quiet {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--s1);
+	min-height: 44px;
+	margin: var(--s2) 0;
+	padding: 0 var(--s1);
+	background: none;
 	border: 0;
+	border-radius: var(--r);
+	color: var(--ink-2);
+	font: 500 15px var(--sans);
+	text-decoration: none;
+	cursor: pointer;
+}
+
+.btn-quiet:hover {
+	color: var(--ink);
 }
 
 /* Small inline variant — a secondary action hanging off the thing above it
    ("Copy these problems"), not a full-width commitment. It overrides the
-   block/100% base above, so it has to stay after it in this file. */
+   block/100% base above, so it has to stay after it in this file. 44px, not
+   smaller: small is about width, never about the target. */
 .btn-small {
 	display: inline-flex;
 	align-items: center;
+	justify-content: center;
 	width: auto;
-	min-height: 40px;
-	padding: var(--s2) var(--s3);
-	font-size: 0.85rem;
+	min-height: 44px;
+	padding: 0 var(--s3);
+	font-size: 14px;
 }
 
-/* ---- Tap targets (reps, RIR, RPE, swap reasons/candidates) ------------------
-   .tap is the new primitive; .tap-btn is kept as a compatibility alias for
-   the class name currently rendered by SetRow/SwapSheet/RunSession. */
+/* A link that is really an action — Today's "Start the session" navigates, so
+   it is an anchor, but it has to look and size like a button. Without this it
+   inherits the global underline and left-aligns its label. */
+a.btn-primary,
+a.btn-secondary,
+a.btn-danger {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: var(--s2);
+	text-decoration: none;
+}
+
+/* ---- Chips (reps, RIR, RPE, swap reasons, goals) ---------------------------
+   .tap-btn is the chip; .tap-row lays a set of them out. The markup marks
+   selection both ways — aria-pressed and .tap-btn--selected — and both are
+   matched below so either is enough. */
 
 .tap-row {
 	display: flex;
@@ -654,112 +1312,141 @@ button:disabled {
 	flex-direction: column;
 }
 
-.tap,
 .tap-btn {
 	min-height: 48px;
 	min-width: 48px;
-	/* Basis auto rather than a fixed 2.75rem: with a fixed basis the chips all
+	/* Basis auto rather than a fixed width: with a fixed basis the chips all
 	   stretch to equal width, and a long word label is squeezed until it wraps
 	   inside its own border and clips. Sizing to content lets the numeric rows
 	   stay near-uniform anyway, because their content is uniform. */
 	flex: 0 1 auto;
 	background: var(--surface);
-	border: 1px solid var(--rule-strong);
-	color: var(--muted);
-	border-radius: var(--radius);
-	/* Sans, not mono. Most of these are numerals (reps, RIR, RPE) and mono was
-	   tempting, but the same class carries word labels — "Stay injury free",
-	   "Protect shoulder" — and mono is wide enough to clip them. tabular-nums
-	   on the sans face lines the digits up just as well. */
-	font: 400 15px var(--sans);
+	border: 1px solid var(--line-strong);
+	color: var(--ink-2);
+	border-radius: var(--r);
+	/* Sans by default: the same class carries word labels ("Stay injury
+	   free", "Protect shoulder") and mono is wide enough to clip them. The
+	   numeric rows switch to mono below. */
+	font: 400 16px var(--sans);
 	font-variant-numeric: tabular-nums;
 	padding: var(--s2) var(--s3);
 	text-align: center;
 	cursor: pointer;
+	transition:
+		background-color 0.12s ease,
+		border-color 0.12s ease,
+		transform 0.08s ease;
 }
 
-/* Marks reps inside the prescribed target range: full-strength ink instead of
-   muted, plus a rule under the digits, so it reads without having to go and
-   read the adjacent "target N-M" text. Two carriers rather than one, because
-   colour alone would vanish in greyscale.
+/* Reps and RIR are always numbers, and every figure is mono. */
+.set-row .tap-btn {
+	font-family: var(--mono);
+}
 
-   Composes with the selected-state rule below — both classes can apply at
-   once — giving four distinct looks: plain (muted digits, hairline border),
-   target (ink digits, underscored), selected (claret digits, claret border,
-   soft claret fill), and target+selected (all of it). Don't collapse this
-   with !important. */
-.tap--target,
+/* A press you can feel. Short enough never to be waited out — logging a set
+   is two taps and nothing may slow the second one. */
+.tap-btn:active {
+	transform: scale(0.96);
+}
+
+/* THE FOUR CHIP STATES. SetRow composes target and selected on the same
+   chip, giving plain / target / selected / target+selected, and all four must
+   be told apart without colour — in greyscale, by a colour-blind reader, in
+   bad light:
+
+     plain            hairline border, --ink-2, weight 400
+     target           3px rule under the digits, --ink, weight 500
+     selected         2px claret outline, soft claret ground, weight 500
+     target+selected  the outline AND the rule, weight 600
+
+   The carriers are the rule, the outline's thickness and the weight; colour
+   only reinforces them. Don't collapse this with !important — the combined
+   state has its own rule below because box-shadow does not stack across
+   rules, and an !important on either single state would silently delete the
+   other half of the combination. */
+
+/* In the prescribed rep range: reads without going to find "target N-M". */
 .tap-btn--target {
 	color: var(--ink);
-	box-shadow: inset 0 -2px 0 var(--rule-strong);
+	font-weight: 500;
+	box-shadow: inset 0 -3px 0 var(--ink-3);
 }
 
-/* Selected/pressed state — claret on a soft claret ground rather than a solid
-   claret fill. A whole row of chips where the chosen one is a saturated block
-   fights the primary button for attention, and the button has to win: it is
-   the thing that commits the set. Measured 6.96:1 light, 4.67:1 dark, both
-   past AA. New markup should use aria-pressed; the .tap-btn--selected class is
-   kept for the markup that exists today. */
-.tap[aria-pressed='true'],
+/* Selected: a soft claret tint, not a solid fill. A row of chips where the
+   chosen one is a saturated block fights the Log set button for attention,
+   and the button has to win — it is the thing that commits the set. The
+   inset ring doubles the border to 2px, so selection survives greyscale.
+   --accent-ink on --accent-soft: 7.0:1 light, 6.5:1 dark. */
+.tap-btn[aria-pressed='true'],
 .tap-btn--selected {
 	background: var(--accent-soft);
-	color: var(--accent);
+	color: var(--accent-ink);
 	border-color: var(--accent);
+	box-shadow: inset 0 0 0 1px var(--accent);
 	font-weight: 500;
 }
 
-.tap-row--stacked .tap,
+.tap-btn--target[aria-pressed='true'],
+.tap-btn--target.tap-btn--selected {
+	font-weight: 600;
+	box-shadow:
+		inset 0 0 0 1px var(--accent),
+		inset 0 -3px 0 var(--accent);
+}
+
 .tap-row--stacked .tap-btn {
 	flex: 1 1 100%;
 	width: 100%;
 	text-align: left;
 }
 
-/* ---- Stepper (weight increment/decrement) ----------------------------------- */
+/* ---- Stepper (weight) ------------------------------------------------------
+   − value + at 52px: the biggest controls on the lift screen after the
+   primary button, because they get hit with a thumb between sets. */
 
 .stepper {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	gap: var(--s5);
+	gap: var(--s3);
 	margin: var(--s3) 0;
 }
 
 .stepper-btn {
-	min-width: 48px;
-	min-height: 48px;
-	width: 3.25rem;
-	height: 3.25rem;
-	border-radius: var(--radius);
-	border: 1.5px solid var(--ink);
-	background: var(--paper-alt);
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex: none;
+	width: 52px;
+	height: 52px;
+	border-radius: var(--r);
+	border: 1px solid var(--line-strong);
+	background: var(--surface);
 	color: var(--ink);
-	font-size: 1.6rem;
-	line-height: 1;
 	cursor: pointer;
 }
 
+.stepper-btn:active {
+	background: var(--surface-2);
+}
+
 .stepper-input {
-	width: 4.75rem;
-	min-height: 48px;
+	width: 5.5rem;
+	height: 52px;
 	text-align: center;
-	font: 600 1.4rem var(--mono);
+	font: 400 22px var(--mono);
 	font-variant-numeric: tabular-nums;
-	border: 1.5px solid var(--ink);
-	border-radius: var(--radius);
-	background: var(--paper-alt);
+	border: 1px solid var(--line-strong);
+	border-radius: var(--r);
+	background: var(--surface);
 	color: var(--ink);
-	padding: var(--s1) var(--s2);
+	padding: 0 var(--s2);
 	appearance: textfield;
 	-moz-appearance: textfield;
 }
 
-.stepper-input:hover {
-	border-color: var(--ink);
-}
-
-/* Hide native spin arrows — the custom ± buttons replace them; both at once
-   would read as a confusing double control. */
+/* Hide native spin arrows — the ± buttons replace them; both at once would
+   read as a confusing double control. */
 .stepper-input::-webkit-inner-spin-button,
 .stepper-input::-webkit-outer-spin-button {
 	-webkit-appearance: none;
@@ -767,35 +1454,35 @@ button:disabled {
 }
 
 .stepper-suffix {
-	font: 600 1rem var(--mono);
-	color: var(--muted);
+	font: 400 15px var(--mono);
+	color: var(--ink-2);
 }
 
-/* ---- Set field (label + hint + control group) ------------------------------- */
+/* ---- Set field (label + hint + control group) ------------------------------
+   Margins here are tight on purpose: in a 390×844 viewport the stepper, both
+   chip rows and Log set must be on screen together, because logging a set is
+   two taps and a scroll between them would make it three. */
 
 .set-field {
-	margin: var(--s4) 0;
+	margin: var(--s3) 0;
 }
 
 .set-field .eyebrow {
-	margin-bottom: var(--s2);
+	margin-bottom: var(--s1);
 }
 
 .set-field-hint {
-	margin: 0 0 var(--s2);
-	font-size: 0.8rem;
-	color: var(--muted);
+	margin: 0 0 var(--s1);
+	font-size: 13px;
+	color: var(--ink-2);
 }
 
-/* ---- Set row internals ------------------------------------------------------- */
+/* ---- Set row internals ------------------------------------------------------ */
 
-/* A finished set collapses to one line. That collapse IS the "done" signal —
-   there is deliberately no fill. The obvious candidate, --paper-alt, sits at
-   ~1.03:1 against --paper (and ~1.2:1 dark), i.e. invisible, and it's the same
-   colour .tap-btn already uses, so chips inside a tinted row lost their own
-   contrast. Claret is reserved from whole-control fills (see the header note).
-   48px of mono summary next to a ~400px live row is the contrast that
-   actually reads mid-workout. */
+/* A finished set collapses to one line, and that collapse IS the "done"
+   signal — 48px of mono summary next to a ~400px live row is the contrast
+   that actually reads mid-workout. No fill: a tinted row would put the chips
+   of the next set on a ground they were not checked against. */
 .set-row--collapsed {
 	display: flex;
 	align-items: baseline;
@@ -808,30 +1495,37 @@ button:disabled {
 
 .set-row--collapsed .set-row-index {
 	flex: 0 0 auto;
+	color: var(--ink-2);
 }
 
-/* Mono + tabular-nums so the finished sets stack into a scannable column:
-   60kg × 8 / 60kg × 8 / 60kg × 7 line up digit-for-digit. */
+/* Mono + tabular so finished sets stack into a scannable column:
+   60kg × 8 / 60kg × 8 / 60kg × 7 line up digit for digit. */
 .set-row-summary {
 	flex: 1 1 auto;
 	text-align: right;
-	font-family: var(--mono);
+	font: 400 14px var(--mono);
 	font-variant-numeric: tabular-nums;
-	font-size: 0.9rem;
+}
+
+/* The moss tick that makes a collapsed set read as done. Inline with the
+   figures; the summary text is still the whole fact. */
+.set-row-summary .set-row-tick {
+	margin-right: var(--s2);
+	vertical-align: -2px;
+	color: var(--done);
 }
 
 .set-row-edit {
 	flex: 0 0 auto;
-	font-size: 11px;
-	font-weight: 600;
+	font: 400 11px var(--mono);
 	text-transform: uppercase;
-	letter-spacing: 0.12em;
-	color: var(--accent);
+	letter-spacing: 0.13em;
+	color: var(--accent-ink);
 }
 
-/* A logged set reopened for editing — claret rule, not a fill: this is the
-   same "active" budget spent on focus and today. Distinct from the --ink rule
-   on .exercise-card--superset, which never appears on a .set-row. */
+/* A logged set reopened for editing — a claret rule, the same "active" use of
+   the accent as focus and today. Distinct from the --ink rule on
+   .exercise-card--superset, which never appears on a .set-row. */
 .set-row--editing {
 	border-left: 3px solid var(--accent);
 	padding-left: var(--s3);
@@ -842,25 +1536,27 @@ button:disabled {
 	display: flex;
 	justify-content: space-between;
 	align-items: baseline;
-	font-size: 0.9rem;
-	margin-bottom: var(--s2);
+	font-size: 15px;
+	margin-bottom: var(--s1);
 	gap: var(--s3);
 }
 
 .set-row-index {
-	font-weight: 600;
+	font-weight: 500;
 }
 
 .set-row-lastweek {
-	color: var(--muted);
-	font-family: var(--mono);
+	color: var(--ink-2);
+	font: 400 13px var(--mono);
 	font-variant-numeric: tabular-nums;
-	font-size: 0.85rem;
 	white-space: nowrap;
 }
 
 /* ---- Rest timer --------------------------------------------------------------
-   Sticky, quiet by default; turns claret + a subtle indicator when over. */
+   Sticky at the top of the scroll, so it stays visible while you scroll back
+   to the set you are about to log. A boxed bar, quiet while counting; once
+   rest runs over, the border, label and clock turn claret — and the label's
+   word changes to "Over by", so the state is not colour alone. */
 
 .rest-timer {
 	position: sticky;
@@ -869,113 +1565,128 @@ button:disabled {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
-	gap: var(--s4);
-	padding: var(--s3) 0;
+	gap: var(--s3);
+	padding: var(--s2) var(--s3);
 	margin: var(--s3) 0;
-	background: var(--paper);
-	border-bottom: 1px solid var(--rule);
+	background: var(--surface);
+	border: 1px solid var(--line);
+	border-radius: var(--r);
 }
 
 .rest-timer--over {
-	border-bottom-color: var(--accent);
+	border-color: var(--accent);
+}
+
+/* Below the sticky lift header, not behind it. */
+.session-head ~ * .rest-timer {
+	top: 68px;
 }
 
 .rest-timer-label {
-	font-size: 11px;
-	font-weight: 600;
+	font: 400 11px var(--mono);
 	text-transform: uppercase;
-	letter-spacing: 0.12em;
-	color: var(--muted);
+	letter-spacing: 0.13em;
+	color: var(--ink-3);
 }
 
 .rest-timer--over .rest-timer-label {
-	color: var(--accent);
+	color: var(--accent-ink);
 }
 
 .rest-timer-clock {
-	font-family: var(--mono);
-	font-size: 1.75rem;
-	font-weight: 600;
+	font: 400 28px var(--mono);
 	font-variant-numeric: tabular-nums;
 	margin-right: auto;
-	margin-left: var(--s3);
+	margin-left: var(--s2);
 }
 
 .rest-timer--over .rest-timer-clock {
-	color: var(--accent);
+	color: var(--accent-ink);
 }
 
 .rest-timer-skip {
 	min-height: 44px;
 	min-width: 44px;
-	border: 1px solid var(--rule);
-	background: transparent;
+	border: 1px solid var(--line-strong);
+	background: var(--surface);
 	color: var(--ink);
-	border-radius: var(--radius);
-	font: 600 14px var(--sans);
-	padding: var(--s2) var(--s3);
+	border-radius: var(--r);
+	font: 500 14px var(--sans);
+	padding: 0 var(--s3);
 	cursor: pointer;
 }
 
-/* ---- Swap sheet --------------------------------------------------------------- */
+/* ---- Swap sheet ----------------------------------------------------------------
+   A bottom sheet. The same 3px radius as everything else — it is a sheet
+   because it rises from the bottom edge, not because its corners are soft. On
+   a laptop it stays a sheet but stops at a readable width. */
 
 .sheet-backdrop {
 	position: fixed;
 	inset: 0;
-	background: rgba(0, 0, 0, 0.5);
+	background: rgba(20, 18, 15, 0.55);
 	display: flex;
 	align-items: flex-end;
-	z-index: 20;
+	justify-content: center;
+	z-index: 40;
 }
 
 .sheet {
-	background: var(--paper);
+	background: var(--surface);
 	color: var(--ink);
 	width: 100%;
+	max-width: 560px;
 	max-height: 85vh;
 	overflow-y: auto;
-	border-radius: var(--radius-sheet) var(--radius-sheet) 0 0;
-	padding: var(--s5) var(--s4) var(--s6);
+	overscroll-behavior: contain;
+	border: 1px solid var(--line);
+	border-bottom: 0;
+	border-radius: var(--r) var(--r) 0 0;
+	padding: var(--s4) var(--s4) calc(var(--s6) + env(safe-area-inset-bottom));
 }
 
+/* The grab handle: says "this is a sheet" without words. Decorative only —
+   the sheet closes from its own Cancel button or the backdrop. */
 .sheet::before {
 	content: '';
 	display: block;
 	width: 36px;
 	height: 4px;
 	margin: 0 auto var(--s4);
-	background: var(--rule);
-	border-radius: 2px;
+	background: var(--line-strong);
+	border-radius: var(--r);
 }
 
 .sheet h2 {
 	margin: 0 0 var(--s4);
 }
 
-/* ---- Run session form ----------------------------------------------------------- */
+/* ---- Form fields -------------------------------------------------------------- */
 
 .field {
 	display: block;
 	margin: var(--s4) 0;
-	font-size: 0.9rem;
-	color: var(--muted);
+	font: 500 14px var(--sans);
+	color: var(--ink-2);
 	/* Inputs never want to be as wide as a laptop. No effect on a phone, where
 	   the column is already narrower than this. */
 	max-width: 60ch;
 }
 
+/* 16px input text, not smaller: iOS Safari zooms the page into any focused
+   input below 16px, and a zoomed gym screen is a broken one. */
 .field input,
 .field select,
 .field textarea {
 	display: block;
 	width: 100%;
 	min-height: 44px;
-	margin-top: var(--s2);
-	padding: var(--s3);
-	font: 400 1.05rem var(--sans);
-	border-radius: var(--radius);
-	border: 1px solid var(--rule);
-	background: transparent;
+	margin-top: var(--s1);
+	padding: 10px var(--s3);
+	font: 400 16px var(--sans);
+	border-radius: var(--r);
+	border: 1px solid var(--line-strong);
+	background: var(--surface);
 	color: var(--ink);
 }
 
@@ -984,66 +1695,115 @@ button:disabled {
 	font-variant-numeric: tabular-nums;
 }
 
-.field input:focus-visible,
-.field select:focus-visible,
-.field textarea:focus-visible {
-	outline: 2px solid var(--accent);
-	outline-offset: 2px;
-}
-
 .duration-inputs {
 	display: flex;
 	gap: var(--s2);
 }
 
+
+/* Interval structure on the run screen: one row per step, with a short bar
+   whose length is the duration. The fill is the accent at three strengths
+   (pale warmup/recovery, middle, solid work) — no new hues; the effort word is
+   printed in the row, so the shade is never the only carrier. */
 .run-steps {
-	padding-left: 1.25rem;
-	line-height: 1.7;
-	color: var(--ink);
+	list-style: none;
+	margin: var(--s4) 0;
+	padding: 0;
+	border-top: 1px solid var(--line);
 }
 
-.run-steps li {
-	margin: var(--s1) 0;
+.run-step {
+	display: grid;
+	grid-template-columns: 1fr auto;
+	grid-template-areas:
+		'name min'
+		'effort effort'
+		'bar bar';
+	gap: 2px var(--s3);
+	padding: var(--s3) 0;
+	border-bottom: 1px solid var(--line);
 }
 
-.run-steps .num {
-	font-family: var(--mono);
+.run-step-name {
+	grid-area: name;
+	font-weight: 500;
+	text-transform: capitalize;
+}
+
+/* A repeat group is a count in front of the step's name. */
+.run-step-repeat {
+	margin-right: var(--s2);
+	font: 400 14px var(--mono);
+	color: var(--accent-ink);
+}
+
+.run-step-effort {
+	grid-area: effort;
+	font: 400 12px var(--mono);
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--ink-3);
+}
+
+.run-step-min {
+	grid-area: min;
+	font: 400 15px var(--mono);
 	font-variant-numeric: tabular-nums;
 }
 
-/* ---- Review / end-of-session table ------------------------------------------------
-   Not yet built, but the markup will need this: wrap the <table> in
-   .table-scroll so a narrow phone scrolls the table, not the page. */
+.run-step-bar {
+	grid-area: bar;
+	width: calc(var(--len, 1) * 100%);
+	height: 8px;
+	margin-top: var(--s1);
+	border-radius: var(--r);
+	background: var(--accent-fill);
+}
+.run-step--l1 .run-step-bar {
+	opacity: 0.3;
+}
+.run-step--l2 .run-step-bar {
+	opacity: 0.6;
+}
+
+.run-step--repeat {
+	padding-left: var(--s3);
+	border-left: 3px solid var(--line-strong);
+}
+
+/* ---- Review / run-metrics table -------------------------------------------------
+   The one place the old editorial treatment was already right: a data-entry
+   table, mono figures, hairline rows. Wrapped in .table-scroll so a narrow
+   phone scrolls the table, not the page. */
 
 .table-scroll {
 	overflow-x: auto;
-	margin: var(--s4) 0;
+	margin: var(--s3) 0;
 }
 
 .review-table {
 	width: 100%;
 	border-collapse: collapse;
-	font-size: 0.95rem;
+	font-size: 15px;
 }
 
 .review-table th,
 .review-table td {
-	padding: var(--s3) var(--s4) var(--s3) 0;
+	padding: var(--s2) var(--s3) var(--s2) 0;
 	text-align: left;
 	white-space: nowrap;
 }
 
 .review-table thead th {
-	border-bottom: 1px solid var(--rule);
-	font-size: 11px;
-	font-weight: 600;
+	border-bottom: 1px solid var(--line);
+	font: 400 11px var(--mono);
 	text-transform: uppercase;
-	letter-spacing: 0.08em;
-	color: var(--muted);
+	letter-spacing: 0.13em;
+	color: var(--ink-3);
 }
 
 .review-table tbody tr {
-	border-bottom: 1px solid var(--rule);
+	border-bottom: 1px solid var(--line);
 }
 
 .review-table tbody tr:last-child {
@@ -1055,49 +1815,67 @@ button:disabled {
 	font-variant-numeric: tabular-nums;
 }
 
-/* First column is assumed to be a text label (exercise name) — revert to sans */
+/* The first column is a text label (a row name) — back to sans. */
 .review-table tbody td:first-child {
 	font-family: var(--sans);
 	font-variant-numeric: normal;
-	font-weight: 600;
+	font-weight: 500;
 }
 
-/* ---- Copyable prompt (GenerateWeekFlow) ---------------------------------------------
+/* The editable cells. 16px for the same iOS-zoom reason as .field, and wide
+   enough for "102.5" without the column jumping as you type. */
+.review-table input {
+	width: 5.5rem;
+	min-height: 44px;
+	padding: 0 var(--s2);
+	font: 400 16px var(--mono);
+	font-variant-numeric: tabular-nums;
+	border: 1px solid var(--line-strong);
+	border-radius: var(--r);
+	background: var(--surface);
+	color: var(--ink);
+}
+
+/* ---- Copyable prompt (GenerateFlow) -------------------------------------------------
    Shown alongside the "Copy instructions" button so the clipboard contents
-   aren't a hidden surprise. pre-wrap keeps long lines from overflowing the
-   480px .screen column. */
+   aren't a hidden surprise. Capped and scrollable: at full length the prompt
+   is a wall of mono text, and everything below it sat two screens away. */
 
 .prompt-preview {
 	white-space: pre-wrap;
-	font-family: var(--mono);
-	font-size: 0.8rem;
-	color: var(--muted);
-	background: var(--paper-alt);
+	font: 400 12.5px/1.65 var(--mono);
+	color: var(--ink-2);
+	background: var(--surface-2);
 	padding: var(--s3);
-	border-radius: var(--radius);
+	border-radius: var(--r);
 	margin: var(--s3) 0;
-	/* Capped and scrollable: at full length the prompt is a wall of mono text
-	   on a 480px column, and everything below it sat two screens away. */
 	max-height: 45vh;
 	overflow-y: auto;
 	overscroll-behavior: contain;
 }
 
-/* ---- Import problems (Generate step 3) ----------------------------------------------
-   A rejected import can come back with a dozen validation problems. Joined into
-   one paragraph they were unreadable; as a list they can be scanned, and the
-   whole list is one tap from the clipboard so it can go straight back to the
-   assistant that produced the bad plan. Claret as a rule rather than as text —
-   the problems themselves need to stay legible. */
+/* Inside the aside's panel the panel is already the box. */
+.panel > .prompt-preview {
+	background: none;
+	margin: 0;
+	border-radius: 0;
+	padding: var(--s4);
+	max-height: 70vh;
+}
+
+/* ---- Import problems / validation errors ---------------------------------------------
+   A rejected import can come back with a dozen validation problems. As a list
+   they can be scanned, and the whole list is one tap from the clipboard so it
+   can go straight back to the assistant that produced the bad plan. Claret as
+   a rule rather than as text — the problems themselves need to stay legible,
+   so they are --ink. */
 
 .error-list {
 	list-style: none;
 	margin: var(--s2) 0 var(--s3);
 	padding: 0 0 0 var(--s3);
 	border-left: 2px solid var(--accent);
-	font-family: var(--mono);
-	font-size: 0.8rem;
-	line-height: 1.6;
+	font: 400 13px/1.6 var(--mono);
 	color: var(--ink);
 }
 
@@ -1106,14 +1884,12 @@ button:disabled {
 }
 
 /* ---- Disclosure ---------------------------------------------------------------------
-   A styled <details>. The bare ones this replaces had no marker treatment and
-   no tap target, so on a phone they read as ordinary body text you couldn't
-   press. Chevron on the right, turning as it opens — the same affordance as
-   the exercise accordion, so "there's more under here" means one thing
+   A styled <details>: a full-width 46px summary with a mono + / – on the
+   right, so "there's more under here" is pressable and means one thing
    everywhere. */
 
 .disclosure {
-	border-top: 1px solid var(--rule);
+	border-top: 1px solid var(--line);
 	margin-top: var(--s4);
 }
 
@@ -1122,95 +1898,342 @@ button:disabled {
 	align-items: center;
 	justify-content: space-between;
 	gap: var(--s3);
-	min-height: 44px;
-	padding: var(--s3) 0;
-	font: 600 15px var(--sans);
+	min-height: 46px;
+	padding: var(--s2) 0;
+	font: 500 15px var(--sans);
 	color: var(--ink);
 	cursor: pointer;
 	list-style: none;
 }
 
-/* Safari draws its own triangle on top of the chevron without this. */
+/* Safari draws its own triangle on top of the marker without this. */
 .disclosure-summary::-webkit-details-marker {
 	display: none;
 }
 
 .disclosure-summary::after {
-	content: '\203A';
+	content: '+';
 	flex-shrink: 0;
-	color: var(--muted);
-	font-size: 1.25rem;
-	line-height: 1;
-	transform: rotate(90deg);
-	transition: transform 0.15s ease;
+	font: 400 18px/1 var(--mono);
+	color: var(--ink-3);
 }
 
 .disclosure[open] > .disclosure-summary::after {
-	transform: rotate(-90deg);
+	content: '–';
 }
 
 .disclosure-body {
 	padding-bottom: var(--s3);
 }
 
-/* ---- Loading / empty states -------------------------------------------------------- */
+/* ---- Empty states ------------------------------------------------------------------
+   A boxed, centred sentence, so "nothing here" looks deliberate rather than
+   like a screen that failed to render. Screens with a better empty state (a
+   rest-day card, a "Generate a plan" card) build it from .card instead. */
 
 .empty-state {
+	margin: var(--s4) 0;
 	padding: var(--s6) var(--s4);
 	text-align: center;
-	color: var(--muted);
-	font-size: 0.95rem;
+	color: var(--ink-2);
+	font-size: 15px;
+	background: var(--surface);
+	border: 1px solid var(--line);
+	border-radius: var(--r);
+}
+
+/* ---- Session feedback card ---------------------------------------------------
+   Sits at the bottom of Review, after the logging tables. A tinted box on
+   --surface-2 (no border, no shadow) so it reads as a different question from
+   the logging above it — it's the one part of Review that feeds next week's
+   plan (the pain flags) rather than the training log itself. Chips keep their
+   --surface fill, which stays distinct from the tint. */
+
+.feedback-card {
+	margin-top: var(--s6);
+	padding: var(--s4);
+	background: var(--surface-2);
+	border-radius: var(--r);
+}
+
+.feedback-card .section-heading {
+	margin-top: 0;
+	padding-top: 0;
+	border-top: 0;
+}
+
+/* ---- Numbered steps (Generate) ----------------------------------------------
+   One card per step, headed by a numeral in a circle (a circle is the right
+   shape for a count). Ahead of you it is outlined; the active step fills with
+   the primary's claret; a finished step shows a moss tick. The number is a
+   position, the heading beside it is the meaning, and "Done" is in the DOM for
+   a screen reader, so state is never colour alone. The body is indented under
+   the numeral — except on the narrowest screens, where 40px of indent costs
+   more than the alignment is worth. */
+
+.step-head {
+	display: flex;
+	align-items: center;
+	gap: var(--s3);
+}
+
+.step-head h2 {
+	margin: 0;
+}
+
+.step-n {
+	flex: 0 0 auto;
+	display: inline-grid;
+	place-items: center;
+	width: 28px;
+	height: 28px;
+	border: 1px solid var(--line-strong);
+	border-radius: 50%;
+	font: 400 13px var(--mono);
+	color: var(--ink-2);
+}
+
+.step--active .step-n {
+	background: var(--accent-fill);
+	border-color: var(--accent);
+	color: var(--on-accent);
+}
+
+.step--done .step-n {
+	background: var(--done-soft);
+	border-color: var(--done);
+	color: var(--done);
+}
+
+.step-body {
+	margin-left: 40px;
+}
+
+@media (max-width: 520px) {
+	.step-body {
+		margin-left: 0;
+		margin-top: var(--s3);
+	}
+}
+
+/* The live status line: a chip, only present while it has something to say. */
+.badge--status {
+	margin: 0 0 var(--s3);
+	white-space: normal;
+	text-transform: none;
+	letter-spacing: 0.02em;
+}
+
+/* A rejected import, the most common bad state on this screen: the count is
+   the heading, the problems are --ink mono (they get read and pasted back), and
+   the claret rule says "this needs you". Same left-rule idiom as .error-list. */
+.error-card {
+	margin-top: var(--s4);
+	background: var(--accent-soft);
+	border-left: 3px solid var(--accent);
+}
+
+.error-card-title {
+	display: flex;
+	align-items: center;
+	gap: var(--s2);
+	margin: 0 0 var(--s2);
+	font-size: 16px;
+	color: var(--accent-ink);
+}
+
+.error-card .error-list {
+	border-left: 0;
+	padding-left: 0;
+}
+
+/* Goals and proposal weeks are cards; their first heading starts at the top
+   of the card rather than under a divider. */
+.goals-card .section-heading,
+.proposal-week-title {
+	margin-top: 0;
+}
+.goals-card {
+	margin-bottom: var(--s4);
+}
+.goals-status {
+	margin-bottom: 0;
+}
+
+/* ---- Split screen -----------------------------------------------------------
+   One column on a phone, two on a laptop, with genuinely secondary material in
+   the second. Generate uses it to put the prompt beside the three steps rather
+   than two screens below them — on a phone the same prompt stays inside a
+   disclosure, because there is nowhere else for it to go. */
+
+.screen-aside {
+	display: none;
+}
+
+/* ---- Today ---------------------------------------------------------------------
+   Today does not share Plan's list layout: a week strip, then one hero card
+   for the session you are about to do (or a rest-day card of the same shape),
+   then any second session as a compact card. */
+
+/* Seven equal cells. At 390px each is ~50px wide and 64px tall — a real
+   target, since a day with a session links to it. */
+.week-strip {
+	list-style: none;
+	display: grid;
+	grid-template-columns: repeat(7, minmax(0, 1fr));
+	gap: 4px;
+	margin: 0 0 var(--s4);
+	padding: 0;
+}
+
+.week-day {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 1px;
+	min-height: 64px;
+	padding: 7px 0 6px;
+	background: var(--surface);
+	border: 1px solid var(--line);
+	border-radius: var(--r);
+	color: var(--ink-2);
+	text-decoration: none;
+}
+
+a.week-day:hover {
+	border-color: var(--line-strong);
+}
+
+.week-day-name {
+	font: 400 10.5px/1.2 var(--mono);
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--ink-3);
+}
+
+.week-day-num {
+	font: 400 16px/1.3 var(--mono);
+	font-variant-numeric: tabular-nums;
+	color: var(--ink);
+}
+
+.week-day-mark {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	height: 16px;
+}
+
+/* Something still to do. A dot is the one other legitimate circle. */
+.week-day-dot {
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	background: var(--ink-3);
+}
+
+/* Done: a moss ring (the inset doubles the border) and a tick. */
+.week-day--done {
+	border-color: var(--done);
+	box-shadow: inset 0 0 0 1px var(--done);
+	color: var(--done);
+}
+
+.week-day--skipped .week-day-mark {
+	color: var(--ink-3);
+}
+
+/* A past day with nothing on it recedes onto the page ground. */
+.week-day--past.week-day--rest {
+	background: transparent;
+}
+
+/* Today: the one filled cell — the same claret fill as the primary button,
+   because it is the same idea: this is where you act. Every mark inside goes
+   to --on-accent so the tick or dot still reads on the fill. */
+.week-day--today {
+	background: var(--accent-fill);
+	border-color: var(--accent);
+	box-shadow: none;
+}
+.week-day--today .week-day-name,
+.week-day--today .week-day-num,
+.week-day--today .week-day-mark {
+	color: var(--on-accent);
+}
+.week-day--today .week-day-dot {
+	background: var(--on-accent);
+}
+
+.hero {
+	padding: var(--s5) var(--s4) var(--s4);
+}
+
+.hero-title {
+	font-size: 26px;
+	line-height: 1.2;
+	letter-spacing: -0.014em;
+	margin: var(--s2) 0 0;
+}
+
+.hero .summary-strip {
+	margin: var(--s4) 0 var(--s3);
+}
+
+.hero .progress-bar {
+	margin-top: 0;
+}
+
+.hero-preview {
+	list-style: none;
+	margin: var(--s3) 0 0;
+	padding: 0;
+	color: var(--ink-2);
+	font-size: 15px;
+}
+
+.hero-preview li {
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.hero-note {
+	color: var(--ink-2);
+	margin: var(--s2) 0 0;
+}
+
+.hero > .btn-primary,
+.hero > .btn-secondary {
+	margin: var(--s4) 0 0;
 }
 
 /* ---- Accessibility ------------------------------------------------------------------- */
 
+/* One focus ring everywhere: 2px claret, offset so it clears a filled
+   button's own edge and stays visible against the fill. */
 a:focus-visible,
 button:focus-visible,
 input:focus-visible,
 textarea:focus-visible,
 select:focus-visible,
+summary:focus-visible,
 [tabindex]:focus-visible {
 	outline: 2px solid var(--accent);
 	outline-offset: 2px;
 }
 
-@media (prefers-reduced-motion: reduce) {
-	* {
-		transition: none !important;
-		animation: none !important;
-	}
-}
-
-/* ---- Session feedback card -------------------------------------------------
-   Sits at the bottom of Review, after the sets/run table. Ruled off above so
-   it reads as a distinct question rather than more of the same logging form —
-   it's the one part of Review that feeds next week's plan (the pain flags)
-   rather than the training log itself. */
-
-.feedback-card {
-	margin-top: var(--s6);
-	padding-top: var(--s5);
-	border-top: 1px solid var(--rule);
-}
-
-.feedback-card .section-heading {
-	margin-top: 0;
-}
-
 /* ---- Laptop ----------------------------------------------------------------
    Everything above is written for a phone held in one hand, which is where
-   this app is used. But it is also opened on a laptop to plan a week and to
-   run the Generate flow, which involves a file, a prompt and a chat window at
-   once — and until now that gave you a 480px column stranded in a field of
-   empty page.
+   this app is used. It is also opened on a laptop to plan a week and to run
+   the Generate flow, which involves a file, a prompt and a chat window at
+   once.
 
    One breakpoint. The bottom tab bar becomes a left rail and the content
-   column centres in what is left of the width. Nothing else changes: same
-   tokens, same components, same >=44px targets, which cost nothing with a
-   mouse and mean the two layouts are one system rather than two designs.
-
-   Deliberately no component changes — Shell.tsx renders the same markup at
-   every width, and this is purely a matter of where the same boxes sit. */
+   column centres in what is left. Nothing else changes: same tokens, same
+   components, same >=44px targets, which cost nothing with a mouse and mean
+   the two layouts are one system rather than two designs. Shell.tsx renders
+   the same markup at every width; this is only where the same boxes sit. */
 
 @media (min-width: 900px) {
 	.tabbar {
@@ -1222,8 +2245,17 @@ select:focus-visible,
 		justify-content: flex-start;
 		gap: 2px;
 		border-top: 0;
-		border-right: 1px solid var(--rule);
-		padding: var(--s5) var(--s3);
+		border-right: 1px solid var(--line);
+		padding: var(--s6) var(--s3);
+	}
+
+	.tabbar-brand {
+		display: block;
+		padding: 0 var(--s3) var(--s5);
+		font: 400 11px var(--mono);
+		letter-spacing: 0.13em;
+		text-transform: uppercase;
+		color: var(--ink-3);
 	}
 
 	.tabbar-item {
@@ -1232,19 +2264,19 @@ select:focus-visible,
 		flex: 0 0 auto;
 		flex-direction: row;
 		justify-content: flex-start;
-		min-height: 42px;
+		gap: var(--s3);
+		min-height: 44px;
 		padding: 0 var(--s3);
-		border-radius: var(--radius);
+		border-radius: var(--r);
+		font-size: 14px;
+		letter-spacing: 0;
 	}
 
-	/* The bottom bar marks the current tab with a rule above it, which reads as
-	   a rule through the middle of a vertical list. A soft claret fill instead. */
+	/* The bottom bar's rule along the edge would read as a line through a
+	   vertical list. A soft claret fill instead. */
 	.tabbar-item[aria-current='page'] {
 		background: var(--accent-soft);
-	}
-
-	.tabbar-item[aria-current='page']::before {
-		display: none;
+		box-shadow: none;
 	}
 
 	.shell-content {
@@ -1252,113 +2284,28 @@ select:focus-visible,
 		padding-bottom: var(--s6);
 	}
 
-	/* The measure stays capped: a 1400px window must not produce 1400px lines.
-	   Slightly wider than the phone column because there is room for it, not
-	   because the text wants it. */
+	/* The measure stays capped: a 1400px window must not produce 1400px
+	   lines. */
 	.screen {
-		max-width: 680px;
-		padding: var(--s6) var(--s5);
+		max-width: 760px;
+		padding: var(--s6) var(--s6) 64px;
 	}
-}
 
-/* ---- Numbered steps (Generate) ----------------------------------------------
-   A rule and a mono numeral rather than a filled badge: the number tells you
-   where you are in a three-part process, which is information, not decoration.
-   The body is indented under the numeral so the sequence reads as a column —
-   except on the narrowest screens, where 34px of indent costs more than the
-   alignment is worth. */
-
-.step {
-	border-top: 1px solid var(--rule);
-	padding: var(--s5) 0 var(--s6);
-}
-
-.step:first-of-type {
-	border-top: 0;
-	padding-top: 0;
-}
-
-.step-head {
-	display: flex;
-	align-items: baseline;
-	gap: var(--s3);
-}
-
-.step-n {
-	flex: 0 0 auto;
-	width: 22px;
-	font-family: var(--mono);
-	font-size: 11px;
-	font-weight: 500;
-	letter-spacing: 0.1em;
-	color: var(--muted-2);
-}
-
-.step--active .step-n {
-	color: var(--accent);
-}
-
-.step-body {
-	margin-left: 34px;
-}
-
-@media (max-width: 520px) {
-	.step-body {
-		margin-left: 0;
-	}
-}
-
-/* ---- Panel ------------------------------------------------------------------
-   A hairline box for content that is genuinely secondary to what sits beside
-   it. Used by the Generate aside; deliberately not a "card" — there are no
-   shadows in this system and nothing floats. */
-
-.panel {
-	border: 1px solid var(--rule);
-	border-radius: var(--radius);
-	background: var(--surface);
-}
-
-.panel-head {
-	display: flex;
-	flex-wrap: wrap;
-	align-items: baseline;
-	justify-content: space-between;
-	gap: var(--s1) var(--s3);
-	padding: var(--s3) var(--s4);
-	border-bottom: 1px solid var(--rule);
-}
-
-.panel-head > * {
-	min-width: 0;
-}
-
-/* ---- Split screen -----------------------------------------------------------
-   One column on a phone, two on a laptop, with genuinely secondary material in
-   the second. Generate uses it to put the prompt beside the three steps rather
-   than two screens below them — on a phone the same prompt stays where it was,
-   inside a disclosure, because there is nowhere else for it to go. */
-
-.screen-aside {
-	display: none;
-}
-
-@media (min-width: 900px) {
 	.screen--split {
-		max-width: 1080px;
+		max-width: 1180px;
 	}
 
 	.screen-split {
 		display: grid;
-		grid-template-columns: minmax(0, 1fr) 320px;
-		gap: var(--s6);
+		grid-template-columns: minmax(0, 1fr) 340px;
+		gap: 40px;
 		align-items: start;
 	}
 
 	.screen-aside {
 		display: block;
 		position: sticky;
-		top: var(--s5);
+		top: var(--s6);
 	}
 
 	/* The disclosure exists so a phone can reach the prompt at all. With the
@@ -1368,38 +2315,454 @@ select:focus-visible,
 	}
 }
 
-/* A link that is really an action — Today's "Start the session" navigates, so
-   it is an anchor, but it has to look and size like the primary button. Without
-   this it inherits the global link underline and left-aligns its label. */
-a.btn-primary,
-a.btn-secondary {
+/* ---- Reduced motion ----------------------------------------------------------
+   Every transition and animation in this file goes through here: button and
+   chip colour fades, the chip press, the progress-bar fill, the link
+   underline, and the skeleton pulse — which becomes a static block. The press
+   transform is removed outright rather than just made instant. */
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		transition: none !important;
+		animation: none !important;
+	}
+
+	.tap-btn:active {
+		transform: none;
+	}
+}
+
+/* ---- Run entry (RunEditor, Review's run block) ---------------------------------
+   Labels above, units inside the field, a two-column grid that holds at 360px
+   (two ~156px boxes), and Save in a bar that sticks to the bottom edge. Run
+   screens render without the tab bar, so the bar only has to clear the home
+   indicator. */
+
+.run-field-label {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: var(--s2);
+	font: 500 14px var(--sans);
+	color: var(--ink-2);
+}
+
+.run-type,
+.date-chips,
+.rpe {
+	margin: var(--s4) 0;
+}
+
+.run-type .tap-row,
+.date-chips .tap-row {
+	margin: var(--s2) 0 0;
+}
+
+/* Run type is the first decision: four big chips filling the row. */
+.run-type .tap-btn {
+	flex: 1 1 calc(50% - var(--s2));
+	min-height: 52px;
+}
+
+.date-chips .tap-btn {
+	flex: 1 1 0;
+}
+
+.date-chips .field {
+	margin-top: var(--s3);
+}
+
+.run-summary {
+	margin: var(--s4) 0 var(--s2);
+	padding: var(--s3);
+	background: var(--surface-2);
+	border-radius: var(--r);
+	font: 500 17px/1.3 var(--mono);
+	font-variant-numeric: tabular-nums;
+	color: var(--ink);
+	overflow-wrap: anywhere;
+}
+
+.run-planned {
 	display: flex;
 	align-items: center;
 	justify-content: center;
+	gap: var(--s2);
+	margin-top: var(--s4);
+}
+
+.run-planned-detail {
+	font: 400 14px var(--mono);
+	color: var(--ink-3);
+}
+
+.run-grid {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 0 var(--s3);
+}
+
+.run-field {
+	min-width: 0;
+}
+
+.run-field-box {
+	position: relative;
+	display: block;
+}
+
+.run-field .run-field-box input {
+	min-height: 48px;
+	padding-right: 3.2em;
+	font-family: var(--mono);
+	font-variant-numeric: tabular-nums;
+}
+
+.run-field-suffix {
+	position: absolute;
+	right: var(--s3);
+	bottom: 0;
+	height: 48px;
+	display: flex;
+	align-items: center;
+	font: 400 13px var(--mono);
+	color: var(--ink-3);
+	pointer-events: none;
+}
+
+/* A worked-out value reads as a suggestion: dashed rule and a small tag, so
+   the person can see which of duration/pace they actually typed. */
+.run-field--derived .run-field-box input {
+	border-style: dashed;
+	background: var(--surface-2);
+	color: var(--ink-2);
+}
+
+.run-field-tag {
+	font: 400 12px var(--mono);
+	color: var(--ink-3);
+}
+
+.run-field--error .run-field-box input {
+	border-color: var(--accent);
+	box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.run-field-error {
+	display: block;
+	margin-top: var(--s1);
+	padding-left: var(--s2);
+	border-left: 2px solid var(--accent);
+	font: 400 13px/1.4 var(--sans);
+	color: var(--ink);
+}
+
+.rpe-word {
+	font: 400 13px var(--mono);
+	color: var(--ink-3);
+}
+
+.rpe-scale {
+	display: grid;
+	grid-template-columns: repeat(5, minmax(0, 1fr));
+	gap: var(--s2);
+	margin-top: var(--s2);
+}
+
+.rpe-scale .tap-btn {
+	min-width: 0;
+	font-family: var(--mono);
+}
+
+.run-form .disclosure-body {
+	padding-bottom: var(--s2);
+}
+
+.run-delete {
+	display: block;
+	margin-top: var(--s5);
+}
+
+.run-actionbar {
+	position: sticky;
+	bottom: 0;
+	z-index: 20;
+	/* Bleed to the screen edges, past .screen's own padding. */
+	margin: var(--s4) calc(-1 * var(--s4)) calc(-1 * var(--s6));
+	padding: var(--s3) var(--s4) calc(var(--s3) + env(safe-area-inset-bottom));
+	background: var(--surface);
+	border-top: 1px solid var(--line);
+}
+
+.run-actionbar .btn-primary {
+	margin: 0;
+}
+
+/* ==========================================================================
+   New plan flow — plan blocks (Agent A)
+   Step indicator, start chips, the weeks control, the Ask/Paste panels and the
+   review screen. Tokens only; no new colours.
+   ========================================================================== */
+
+.wizard-steps {
+	display: flex;
+	gap: var(--s2);
+	list-style: none;
+	margin: 0 0 var(--s3);
+	padding: 0;
+}
+
+.wizard-step {
+	flex: 1;
+	display: flex;
+	align-items: center;
+	gap: var(--s2);
+}
+
+/* A connector after every step but the last, so five numerals read as a path. */
+.wizard-step:not(:last-child)::after {
+	content: '';
+	flex: 1;
+	height: 1px;
+	background: var(--line-strong);
+}
+
+.wizard-step:last-child {
+	flex: 0 0 auto;
+}
+
+.wizard-step--now .step-n {
+	background: var(--accent-fill);
+	border-color: var(--accent);
+	color: var(--on-accent);
+}
+
+.wizard-step--done .step-n,
+.step-n--done {
+	background: var(--done-soft);
+	border-color: var(--done);
+	color: var(--done);
+}
+
+.wizard-title {
+	font-size: 20px;
+	margin: 0 0 var(--s3);
+}
+
+.step-panel {
+	display: block;
+}
+
+.plan-setup .section-heading {
+	margin-top: var(--s4);
+}
+
+.plan-setup .section-heading:first-child {
+	margin-top: 0;
+}
+
+.plan-setup-summary {
+	margin-bottom: 0;
+}
+
+/* Three chips across a 360px screen: label over date, wrapping if it must. */
+.start-row {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: var(--s2);
+}
+
+.start-chip {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 2px;
+	padding: var(--s2);
+	line-height: 1.25;
+}
+
+.start-chip-label {
+	font-size: 14px;
+	font-weight: 500;
+}
+
+.start-chip-sub {
+	font: 400 12px var(--mono);
+}
+
+.weeks-control {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--s3);
+	margin: var(--s3) 0;
+}
+
+.weeks-control .stepper-btn:disabled {
+	opacity: 0.4;
+	cursor: not-allowed;
+}
+
+.weeks-control-value {
+	flex: 1;
+	text-align: center;
+	color: var(--ink-2);
+}
+
+.weeks-control-n {
+	font: 400 28px var(--mono);
+	color: var(--ink);
+}
+
+/* What is being sent: a few read-only chips. */
+.chip-summary {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--s2);
+	list-style: none;
+	margin: 0 0 var(--s2);
+	padding: 0;
+}
+
+.chip {
+	padding: var(--s1) var(--s3);
+	border: 1px solid var(--line-strong);
+	border-radius: var(--r);
+	background: var(--surface);
+	color: var(--ink-2);
+	font: 400 13px var(--mono);
+}
+
+.step-panel a.btn-secondary {
 	text-decoration: none;
+	display: flex;
+	align-items: center;
+	justify-content: center;
 }
 
-/* A whole-row link carries its affordance through the chevron and the row's own
-   hairline, so it does not need the global link underline — which struck a line
-   under the date, the title and the meta separately and made every list row
-   look ruled. */
-a.row,
-a.plan-row {
-	text-decoration: none;
+.wizard-done {
+	text-align: center;
 }
 
-/* An expanded exercise card becomes a .panel, which draws a border round it —
-   but .exercise-card-body has no horizontal padding of its own (it never needed
-   any while the card was open to the page), so its contents sat flush against
-   that new border. Scoped to the boxed case so a collapsed card is unaffected. */
-.exercise-card.panel > .exercise-card-body {
-	padding: var(--s4);
+.wizard-done .step-n {
+	width: 40px;
+	height: 40px;
 }
 
-/* The prescription line — "3 × 8-10 @ 22kg" — is a figure, not a label, and
-   .eyebrow's uppercasing turns the unit into "20KG", which reads as shouting.
-   Keeps the mono, size and colour; drops the shouting. */
-.eyebrow--plain {
-	text-transform: none;
-	letter-spacing: 0.02em;
+/* Review: week cards, session rows, and the bar that stays put. */
+.rv-week {
+	padding: 0;
+}
+
+.rv-week-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--s3);
+	width: 100%;
+	min-height: 56px;
+	padding: var(--s3) var(--s4);
+	background: none;
+	border: 0;
+	color: inherit;
+	font: inherit;
+	text-align: left;
+	cursor: pointer;
+}
+
+.rv-week-main {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+}
+
+.rv-week-main .section-heading {
+	margin: 0;
+}
+
+.rv-week-body {
+	padding: 0 var(--s4) var(--s3);
+}
+
+.rv-session {
+	border-top: 1px solid var(--line);
+}
+
+.rv-session-head {
+	display: flex;
+	align-items: center;
+	gap: var(--s3);
+	min-height: 56px;
+	padding: var(--s2) 0;
+	cursor: pointer;
+	list-style: none;
+}
+
+.rv-session-head::-webkit-details-marker {
+	display: none;
+}
+
+.rv-day {
+	flex: 0 0 5.5rem;
+	font: 400 13px var(--mono);
+	color: var(--ink-2);
+}
+
+.rv-session-main {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+}
+
+.rv-session-title {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: var(--s2);
+	font-weight: 500;
+}
+
+.rv-session-meta {
+	font: 400 13px var(--mono);
+	color: var(--ink-3);
+}
+
+.rv-session-body {
+	padding: 0 0 var(--s3) 0;
+}
+
+.rv-was {
+	color: var(--accent-ink);
+	font: 400 13px var(--mono);
+}
+
+/* The decision bar. The tab bar is fixed to the bottom on a phone, so this
+   sits just above it rather than under it. */
+.rv-bar {
+	position: sticky;
+	bottom: calc(var(--nav-h) + env(safe-area-inset-bottom));
+	margin: var(--s4) calc(var(--s4) * -1) 0;
+	padding: var(--s3) var(--s4);
+	background: var(--surface);
+	border-top: 1px solid var(--line-strong);
+}
+
+.rv-outcome {
+	margin: 0 0 var(--s2);
+	font-weight: 500;
+}
+
+.rv-bar-actions {
+	display: grid;
+	grid-template-columns: 1fr 2fr;
+	gap: var(--s3);
+}
+
+.rv-bar-actions .btn-primary,
+.rv-bar-actions .btn-quiet {
+	margin: 0;
 }

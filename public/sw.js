@@ -8,7 +8,7 @@
 //
 // Bump CACHE_VERSION whenever the shell assets change, so old caches are
 // dropped on activate rather than serving a stale bundle forever.
-const CACHE_VERSION = 'ta-shell-v1';
+const CACHE_VERSION = 'ta-shell-v2';
 const SHELL = ['/', '/index.html', '/app.js', '/styles.css'];
 
 self.addEventListener('install', (event) => {

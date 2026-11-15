@@ -1,3 +1,4 @@
+import { Icon } from '../components/Icon';
 import { setSessionStatus } from '../api';
 import { RunStructure } from '../components/RunStructure';
 import { SessionScreenFallback } from '../components/SessionScreenFallback';
@@ -31,14 +32,35 @@ export function RunSession({ sessionId, onBack }: RunSessionProps) {
 	return (
 		<main class="screen">
 			<button type="button" class="back-btn" onClick={onBack}>
-				← Back
+				<Icon name="chevron-left" />
+				Back
 			</button>
 			{error && <p class="eyebrow">{error}</p>}
-			<h1>{capitalize(run.run_type)} run</h1>
-			<p class="exercise-target">
-				{run.target_minutes ? `${run.target_minutes} min` : ''}
-				{run.target_km ? ` · ${run.target_km} km` : ''}
+			<p class="eyebrow card-eyebrow">
+				<span class="badge badge--run">
+					<Icon name="run" />
+					{run.run_type}
+				</span>
 			</p>
+			<h1>{capitalize(run.run_type)} run</h1>
+
+			{/* The target, huge: this is what you are about to go and do. */}
+			{Boolean(run.target_minutes || run.target_km) && (
+				<dl class="summary-strip summary-strip--hero">
+					{run.target_minutes ? (
+						<div class="stat">
+							<dt class="stat-label">Min</dt>
+							<dd class="stat-value">{run.target_minutes}</dd>
+						</div>
+					) : null}
+					{run.target_km ? (
+						<div class="stat">
+							<dt class="stat-label">Km</dt>
+							<dd class="stat-value">{run.target_km}</dd>
+						</div>
+					) : null}
+				</dl>
+			)}
 
 			<RunStructure structureJson={run.structure_json} />
 
@@ -50,7 +72,7 @@ export function RunSession({ sessionId, onBack }: RunSessionProps) {
 			<button type="button" class="btn-secondary" onClick={() => (location.hash = `#/review/${sessionId}`)}>
 				Log what you ran
 			</button>
-			<button type="button" class="btn-secondary" onClick={() => finish('skipped')} disabled={session.status === 'skipped'}>
+			<button type="button" class="btn-quiet" onClick={() => finish('skipped')} disabled={session.status === 'skipped'}>
 				{session.status === 'skipped' ? 'Skipped' : 'Mark skipped'}
 			</button>
 		</main>
