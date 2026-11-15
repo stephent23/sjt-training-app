@@ -61,13 +61,16 @@ export function parsePace(text: string): number | null {
 	return parseDuration(text);
 }
 
-/** Keeps a numeric keypad usable for duration entry: with no colon typed, the
- * digits are grouped from the right, so "2840" shows as 28:40 and "10215" as
- * 1:02:15. One or two digits stay plain minutes. If the person types colons
- * themselves (a hardware keyboard) the text is kept as written, minus junk. */
+/** Keeps a numeric keypad usable for duration entry: the digits are grouped
+ * from the right on every keystroke, so "2840" shows as 28:40 and "10215" as
+ * 1:02:15. One or two digits stay plain minutes. Colons typed by hand are
+ * ignored — the grouping supplies them. */
 export function autoColon(raw: string): string {
-	const cleaned = raw.replace(/[^\d:]/g, '');
-	if (cleaned.includes(':')) return cleaned;
+	// Always regroup from the digits alone. The field's own value already holds
+	// the colons this function put in, so treating "has a colon" as "typed by
+	// hand, leave it" froze the grouping after the third digit: 2840 came out
+	// as 2:840. Six digits (h:mm:ss up to 99:59:59) is the most a time needs.
+	const cleaned = raw.replace(/\D/g, '').slice(0, 6);
 	if (cleaned.length <= 2) return cleaned;
 	const secs = cleaned.slice(-2);
 	const mins = cleaned.slice(-4, -2);

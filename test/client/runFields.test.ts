@@ -281,9 +281,24 @@ describe('autoColon', () => {
 		expect(autoColon('102215')).toBe('10:22:15');
 	});
 
-	it('keeps whatever a person who types colons themselves wrote, minus junk', () => {
-		expect(autoColon('28:4')).toBe('28:4');
+	// The regression: the field feeds its own formatted value back in, so every
+	// keystroke after the third arrives with a colon already in it.
+	it('regroups on every keystroke, as the field actually feeds it', () => {
+		const typed = (digits: string) => [...digits].reduce((value, digit) => autoColon(value + digit), '');
+		expect(typed('2840')).toBe('28:40');
+		expect(typed('10215')).toBe('1:02:15');
+		expect(typed('530')).toBe('5:30');
+	});
+
+	it('regroups after a backspace too', () => {
+		expect(autoColon('28:4')).toBe('2:84');
+		expect(autoColon('1:02:1')).toBe('10:21');
+	});
+
+	it('ignores colons and junk typed by hand, and stops at six digits', () => {
 		expect(autoColon('28:40 min')).toBe('28:40');
+		expect(autoColon('5:')).toBe('5');
+		expect(autoColon('1022155')).toBe('10:22:15');
 	});
 });
 
