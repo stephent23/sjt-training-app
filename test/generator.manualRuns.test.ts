@@ -10,7 +10,7 @@ async function setDaysPerWeek(n: number) {
 // The clock is an argument, never read inside the module — see generator.test.ts's
 // TODAY comment. Every fixture here anchors on the same 2026-08-03 week 1, so
 // +7 lands on 2026-08-10 exactly as it does everywhere else.
-const TODAY = '2026-08-04';
+const TODAY = '2026-08-05';
 
 // migrations/0008_manual_runs.sql: a run recorded by hand (origin='manual')
 // must not become a template for every future week, but it must still reach

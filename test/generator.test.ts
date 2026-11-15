@@ -28,7 +28,7 @@ describe('buildExportContext / generateNextWeeks', () => {
 
 		expect(context.deterministicProposal.weeks).toHaveLength(1);
 		const week1 = context.deterministicProposal.weeks[0];
-		expect(week1.week_number).toBe(2);
+		expect(week1.week_number).toBe(1);
 		expect(week1.sessions).toHaveLength(1);
 
 		const session = week1.sessions[0];
@@ -56,9 +56,9 @@ describe('buildExportContext / generateNextWeeks', () => {
 		expect(context.deterministicProposal.weeks).toHaveLength(3);
 		const [week1, week2, week3] = context.deterministicProposal.weeks;
 
-		expect(week1.week_number).toBe(2);
-		expect(week2.week_number).toBe(3);
-		expect(week3.week_number).toBe(4);
+		expect(week1.week_number).toBe(1);
+		expect(week2.week_number).toBe(2);
+		expect(week3.week_number).toBe(3);
 
 		expect(week1.sessions[0].date).toBe('2026-08-10'); // +7 from 2026-08-03
 		expect(week2.sessions[0].date).toBe('2026-08-17'); // week1 +7
@@ -115,7 +115,7 @@ describe('importProposal', () => {
 			.first<{ status: string; plan_json: string; deterministic_json: string; first_week_number: number; week_count: number; source: string }>();
 
 		expect(row?.status).toBe('pending');
-		expect(row?.first_week_number).toBe(2);
+		expect(row?.first_week_number).toBe(1);
 		expect(row?.week_count).toBe(1);
 		expect(row?.source).toBe('external-import');
 
@@ -138,12 +138,12 @@ describe('importProposal', () => {
 		const row = await env.DB.prepare(`SELECT * FROM generated_plans WHERE id = ?`)
 			.bind(result.id)
 			.first<{ first_week_number: number; week_count: number; plan_json: string }>();
-		expect(row?.first_week_number).toBe(2);
+		expect(row?.first_week_number).toBe(1);
 		expect(row?.week_count).toBe(3);
 
 		const plan = JSON.parse(row!.plan_json);
 		expect(plan.weeks).toHaveLength(3);
-		expect(plan.weeks.map((w: { week_number: number }) => w.week_number)).toEqual([2, 3, 4]);
+		expect(plan.weeks.map((w: { week_number: number }) => w.week_number)).toEqual([1, 2, 3]);
 	});
 
 	it('rejects an empty weeks array with a clear validation error', async () => {

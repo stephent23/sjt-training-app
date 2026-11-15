@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
-import { todayIso, weekStartOnOrAfter } from '../dates';
-import { generateNextWeeks, importProposal, insertWeeksFromProposal, type ExportPayload } from '../generator';
+import { isMondayIso, todayIso, weekStartOnOrAfter } from '../dates';
+import { describeAcceptOutcome, generateNextWeeks, importProposal, insertWeeksFromProposal, type ExportPayload } from '../generator';
+import { buildTrainingSummary } from '../trainingSummary';
 import type { MultiWeekProposal, MultiWeekProposalInput } from '../types';
 
 export const generator = new Hono<{ Bindings: Env }>();
@@ -30,12 +31,25 @@ generator.get('/export', async (c) => {
 	const weeks = Number.isInteger(weeksParam) && weeksParam >= 1 && weeksParam <= MAX_WEEKS ? weeksParam : 1;
 
 	// The clock lives here, not in buildExportContext — see ExportPayload's doc
-	// comment. weekStartDate is what a from-scratch plan should be built on;
-	// with prior sessions it's ignored, since week 1's dates are shifted
-	// forward from the anchor week instead.
+	// comment. startDate is where week 1 of the new plan (block) lands: optional,
+	// but if given it must be a real Monday that is today or later. Unlike
+	// `weeks` it is rejected rather than silently corrected — quietly moving a
+	// plan to a different week than the one asked for would be worse than an error.
 	const today = todayIso();
-	const context = await generateNextWeeks(c.env.DB, weeks, today);
-	const payload: ExportPayload = { ...context, today, weekStartDate: weekStartOnOrAfter(today) };
+	const startParam = c.req.query('startDate');
+	if (startParam !== undefined && !isMondayIso(startParam)) {
+		return c.json({ error: 'startDate must be a Monday, as YYYY-MM-DD' }, 400);
+	}
+	if (startParam !== undefined && startParam < today) {
+		return c.json({ error: 'startDate must be today or later' }, 400);
+	}
+	const startDate = startParam ?? weekStartOnOrAfter(today);
+
+	const [context, trainingSummary] = await Promise.all([
+		generateNextWeeks(c.env.DB, weeks, today, startDate),
+		buildTrainingSummary(c.env.DB, today),
+	]);
+	const payload: ExportPayload = { ...context, today, weekStartDate: startDate, trainingSummary };
 	return c.json(payload);
 });
 
@@ -45,7 +59,8 @@ generator.get('/export', async (c) => {
 // plan is already pending.
 generator.post('/import', async (c) => {
 	const body = await c.req.json<MultiWeekProposalInput>();
-	const result = await importProposal(c.env.DB, body, todayIso(), c.req.query('replace') === 'true');
+	const source = c.req.query('source') === 'live-api' || c.req.header('X-Source') === 'live-api' ? 'live-api' : 'external-import';
+	const result = await importProposal(c.env.DB, body, todayIso(), c.req.query('replace') === 'true', source);
 	// `errors` is the list; `error` is the same thing joined, kept because it is
 	// what every existing caller reads. The list is what lets the UI show one
 	// line per problem, and hand them all back to the assistant that caused them.
@@ -57,13 +72,18 @@ generator.get('/pending', async (c) => {
 	const row = await c.env.DB.prepare(`SELECT * FROM generated_plans WHERE status = 'pending' ORDER BY id DESC LIMIT 1`).first<GeneratedPlanRow>();
 	if (!row) return c.json({ pending: null });
 
+	const plan = JSON.parse(row.plan_json) as MultiWeekProposal;
 	return c.json({
 		pending: {
 			id: row.id,
 			first_week_number: row.first_week_number,
 			week_count: row.week_count,
 			created_at: row.created_at,
-			plan: JSON.parse(row.plan_json) as MultiWeekProposal,
+			plan,
+			// What the mechanical pass proposed (so the review can show what the
+			// assistant changed), and what accepting would replace.
+			deterministic: JSON.parse(row.deterministic_json) as MultiWeekProposalInput,
+			...(await describeAcceptOutcome(c.env.DB, plan)),
 		},
 	});
 });
@@ -74,7 +94,7 @@ generator.post('/:id/accept', async (c) => {
 	if (!row) return c.json({ error: 'not found' }, 404);
 
 	const plan = JSON.parse(row.plan_json) as MultiWeekProposal;
-	const result = await insertWeeksFromProposal(c.env.DB, plan);
+	const result = await insertWeeksFromProposal(c.env.DB, plan, id);
 	if (!result.ok) return c.json({ error: result.errors.join('; '), errors: result.errors }, 409);
 
 	await c.env.DB.prepare(`UPDATE generated_plans SET status = 'accepted', reviewed_at = datetime('now') WHERE id = ?`).bind(id).run();

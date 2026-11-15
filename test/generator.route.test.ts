@@ -1,6 +1,6 @@
 import { SELF } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
-import { addDaysIso } from '../src/dates';
+import { addDaysIso, daysBetweenIso, weekStartOnOrAfter, weekStartOnOrBefore } from '../src/dates';
 import type { MultiWeekProposalInput } from '../src/types';
 import { insertExercise, insertLoggedSet, insertPlannedSet, insertSession, todayIso } from './fixtures';
 
@@ -50,17 +50,18 @@ describe('GET /export', () => {
 
 		expect(body.deterministicProposal.weeks).toHaveLength(3);
 		const [week1, week2, week3] = body.deterministicProposal.weeks;
-		expect(week1.week_number).toBe(2);
-		expect(week2.week_number).toBe(3);
-		expect(week3.week_number).toBe(4);
+		expect(week1.week_number).toBe(1);
+		expect(week2.week_number).toBe(2);
+		expect(week3.week_number).toBe(3);
 
 		const week1Date = week1.sessions[0].date;
 		const week2Date = week2.sessions[0].date;
 		const week3Date = week3.sessions[0].date;
 
-		expect(week1Date).toBe(addDaysIso(anchorDate, 7));
-		expect(week2Date).toBe(addDaysIso(anchorDate, 14));
-		expect(week3Date).toBe(addDaysIso(anchorDate, 21));
+		const shift = daysBetweenIso(weekStartOnOrBefore(anchorDate), weekStartOnOrAfter(today)); // whole weeks, to the next Monday
+		expect(week1Date).toBe(addDaysIso(anchorDate, shift));
+		expect(week2Date).toBe(addDaysIso(anchorDate, shift + 7));
+		expect(week3Date).toBe(addDaysIso(anchorDate, shift + 14));
 
 		// Every proposed date lands strictly after today, and each week is
 		// exactly 7 days after the last (the day-of-week pattern preserved).
@@ -119,8 +120,9 @@ describe('GET /export', () => {
 });
 
 describe('generator export -> import -> pending -> accept/reject flow', () => {
-	it('export -> import -> pending -> accept (multi-week) lands real sessions across all N weeks with incrementing week_number', async () => {
+	it('export -> import -> pending -> accept (multi-week) lands real sessions across all N weeks, numbered 1..N within a new block', async () => {
 		const { anchorDate } = await seedOneSessionWeek();
+		const shift = daysBetweenIso(weekStartOnOrBefore(anchorDate), weekStartOnOrAfter(todayIso()));
 
 		const exportRes = await SELF.fetch('https://training-app.test/api/generator/export?weeks=3');
 		expect(exportRes.status).toBe(200);
@@ -137,7 +139,7 @@ describe('generator export -> import -> pending -> accept/reject flow', () => {
 			pending: { id: number; first_week_number: number; week_count: number; plan: MultiWeekProposalInput } | null;
 		};
 		expect(pendingBody.pending?.id).toBe(id);
-		expect(pendingBody.pending?.first_week_number).toBe(2);
+		expect(pendingBody.pending?.first_week_number).toBe(1);
 		expect(pendingBody.pending?.week_count).toBe(3);
 		expect(pendingBody.pending?.plan.weeks).toHaveLength(3);
 
@@ -151,11 +153,11 @@ describe('generator export -> import -> pending -> accept/reject flow', () => {
 		const sessionsBody = (await sessionsRes.json()) as { sessions: { week_number: number; date: string; label: string }[] };
 
 		for (const [weekNumber, daysAhead] of [
-			[2, 7],
-			[3, 14],
-			[4, 21],
+			[1, shift],
+			[2, shift + 7],
+			[3, shift + 14],
 		] as const) {
-			const matches = sessionsBody.sessions.filter((s) => s.week_number === weekNumber);
+			const matches = sessionsBody.sessions.filter((s) => s.week_number === weekNumber && s.date !== anchorDate);
 			expect(matches).toHaveLength(1);
 			expect(matches[0].date).toBe(addDaysIso(anchorDate, daysAhead));
 			expect(matches[0].label).toBe('Lift A');

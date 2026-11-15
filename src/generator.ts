@@ -5,12 +5,13 @@
 // to paste into whatever AI assistant they have; importProposal validates and
 // persists whatever comes back.
 
-import { addDaysIso } from './dates';
+import { addDaysIso, daysBetweenIso, weekStartOnOrAfter, weekStartOnOrBefore } from './dates';
 import { deleteSessionStatements } from './sessionDelete';
 import { sqlIn } from './sql';
 import { progressExercise, type ExercisePrescription, type LoggedSetForProgression } from './progression';
 import { MAX_WEEKLY_RUN_GROWTH, progressRun, type LoggedRunForProgression } from './runProgression';
 import { parseGoalTags, RUN_TYPES } from './types';
+import type { TrainingSummary } from './trainingSummary';
 import type {
 	Exercise,
 	LoggedRunEntry,
@@ -91,6 +92,10 @@ export interface ExportContext {
 export interface ExportPayload extends ExportContext {
 	today: string;
 	weekStartDate: string;
+	/** Twelve weeks of per-week aggregates (see src/trainingSummary.ts) — the
+	 * trend view historyWindow's raw rows are too short to show. Built in the
+	 * route alongside the clock, so buildExportContext stays as it was. */
+	trainingSummary: TrainingSummary;
 }
 
 export type ImportResult = { ok: true; id: number } | { ok: false; errors: string[] };
@@ -141,17 +146,6 @@ type LoggedRunRow = LoggedRunEntry & { id: number; session_id: number };
  * comment on HistoryWindow. */
 export const RUN_HISTORY_WEEKS = 6;
 
-/** The smallest positive multiple-of-7-days shift that lands strictly after
- * `today` — used to move a stale anchor week's dates into the future while
- * preserving its day-of-week pattern. A single +7 is only enough when the
- * anchor is less than a week behind today; a longer-neglected plan needs
- * more. */
-function smallestWeeklyShiftAfter(dateIso: string, today: string): number {
-	let k = 1;
-	while (addDaysIso(dateIso, 7 * k) <= today) k++;
-	return k;
-}
-
 /**
  * Runs the deterministic progression pass over the most recently scheduled
  * week to produce week 1, then — for weekCount > 1 — appends flat copies of
@@ -169,7 +163,12 @@ function smallestWeeklyShiftAfter(dateIso: string, today: string): number {
  * window, not a single session); the speculative weeks are pure in-memory
  * copies, no further queries.
  */
-export async function buildExportContext(db: D1Database, weekCount: number, today: string): Promise<ExportContext> {
+export async function buildExportContext(
+	db: D1Database,
+	weekCount: number,
+	today: string,
+	startDate: string = weekStartOnOrAfter(today),
+): Promise<ExportContext> {
 	const settingsRow = await db
 		.prepare(`SELECT * FROM settings WHERE id = 1`)
 		.first<{ id: number; goals: string; days_per_week: number; goal_tags: string }>();
@@ -179,32 +178,60 @@ export async function buildExportContext(db: D1Database, weekCount: number, toda
 
 	const { results: exerciseCatalogue } = await db.prepare(`SELECT * FROM exercises`).all<Exercise>();
 
-	// maxWeekNumber ("newest scheduled week") and anchorWeekNumber ("newest
-	// LOGGED week") are different questions. Multi-week accept inserts weeks
-	// maxWeekNumber+1..+N as unlogged 'planned' rows in one go, so right after
-	// that MAX(week_number) points at a week nobody has trained yet. The
-	// proposal is still numbered from maxWeekNumber (no gaps, no duplicate week
-	// headings in the client), but progression has to read from whatever week
-	// was actually logged.
-	const maxWeekRow = await db.prepare(`SELECT MAX(week_number) AS w FROM sessions`).first<{ w: number | null }>();
-	const maxWeekNumber = maxWeekRow?.w ?? null;
+	// A proposal is always a NEW BLOCK: its weeks are numbered 1..weekCount and
+	// week 1 lands on startDate (a Monday). Week numbers restart per block
+	// (migrations/0010_plan_blocks.sql), so nothing here may use week_number to
+	// decide which week is "newest" — everything is date-based.
+	//
+	// The anchor week is the calendar week (Mon-Sun) holding the newest session
+	// with something logged against it. Multi-week accept schedules unlogged
+	// future weeks, so "newest scheduled" and "newest logged" differ; progression
+	// has to read from whatever was actually trained. Manual runs are ignored
+	// when choosing the anchor — they are not part of any plan's week, and a
+	// run logged ahead of the schedule must not make an empty week the anchor.
+	const anchorDateRow = await db
+		.prepare(
+			`SELECT MAX(s.date) AS d FROM sessions s
+			 WHERE s.origin <> 'manual'
+			   AND (EXISTS (SELECT 1 FROM logged_sets ls WHERE ls.session_id = s.id)
+			     OR EXISTS (SELECT 1 FROM logged_runs lr WHERE lr.session_id = s.id))`,
+		)
+		.first<{ d: string | null }>();
+	const anchorDate = anchorDateRow?.d ?? null;
 
-	if (maxWeekNumber === null) {
-		const painFlags: PainFlags = { shoulder: false, back: false }; // no sessions => no feedback to read
-		// No sessions exist at all yet — nothing to progress from for week 1,
-		// and with no week-1 baseline there's nothing to flat-copy for weeks
-		// 2..N either. We still respect the requested weekCount by returning
-		// that many empty weeks (numbered 1..weekCount) rather than collapsing
-		// to a single empty week — the caller asked for N weeks, and an empty
-		// N-week shape is more useful/consistent for it to render than a
-		// silently-truncated 1-week one, even though every week is empty.
+	// Bulk query 5/6: logged_runs across the wider RUN_HISTORY_WEEKS window —
+	// six weeks of actual running history, not based on session week_numbers
+	// (which may not exist). Columns listed rather than SELECT * so `logged_at`
+	// (an internal audit timestamp) doesn't leak into the exported history window.
+	// Not filtered by origin — a manual run's data belongs here even though manual
+	// sessions are excluded from the copy-forward template above.
+	const sixWeeksAgoIso = addDaysIso(today, -7 * RUN_HISTORY_WEEKS);
+	const { results: loggedRunRows } = await db
+		.prepare(
+			`SELECT lr.id, lr.session_id, lr.distance_km, lr.duration_seconds, lr.avg_hr, lr.max_hr, lr.avg_cadence_spm,
+			        lr.elevation_gain_m, lr.aerobic_training_effect, lr.rpe_1_10, lr.interval_pace_seconds_per_km,
+			        lr.performed_on, lr.note
+			 FROM logged_runs lr
+			 WHERE lr.performed_on >= ? AND lr.performed_on <= ?`,
+		)
+		.bind(sixWeeksAgoIso, today)
+		.all<LoggedRunRow>();
+
+	if (anchorDate === null) {
+		// Nothing has ever been logged — either no plan exists yet or one was
+		// scheduled that nobody has started. Either way there is nothing to
+		// progress from, so every week is empty and the assistant writes them
+		// from scratch. We still honour weekCount with that many empty weeks
+		// (1..weekCount) rather than collapsing to one — an empty N-week shape
+		// is more useful for the caller to render than a truncated one.
+		const painFlags: PainFlags = { shoulder: false, back: false }; // nothing logged => no feedback to read
 		return {
 			deterministicProposal: {
 				weeks: Array.from({ length: weekCount }, (_, i) => ({ week_number: i + 1, sessions: [] })),
 			},
 			speculativeFromWeek: 2,
 			reasons: {},
-			historyWindow: { loggedSets: [], loggedRuns: [] },
+			historyWindow: { loggedSets: [], loggedRuns: loggedRunRows.map(({ id: _id, ...run }) => run) },
 			skippedSessions: [],
 			goals,
 			goalTags,
@@ -214,47 +241,17 @@ export async function buildExportContext(db: D1Database, weekCount: number, toda
 		};
 	}
 
-	const anchorWeekRow = await db
-		.prepare(
-			`SELECT MAX(s.week_number) AS w FROM sessions s
-			 WHERE EXISTS (SELECT 1 FROM logged_sets ls WHERE ls.session_id = s.id)
-			    OR EXISTS (SELECT 1 FROM logged_runs lr WHERE lr.session_id = s.id)`,
-		)
-		.first<{ w: number | null }>();
-	const anchorWeekNumber = anchorWeekRow?.w ?? null;
+	const anchorMonday = weekStartOnOrBefore(anchorDate);
+	const anchorSunday = addDaysIso(anchorMonday, 6);
+	const priorMonday = addDaysIso(anchorMonday, -7);
 
-	if (anchorWeekNumber === null) {
-		// Sessions exist (a plan was scheduled), but nothing has ever been
-		// logged against any of them — a plan nobody has started. There's
-		// nothing to progress from, so this is the same empty shape as
-		// cold-start, just numbered on from the sessions that already exist
-		// instead of from 1.
-		const painFlags: PainFlags = { shoulder: false, back: false };
-		return {
-			deterministicProposal: {
-				weeks: Array.from({ length: weekCount }, (_, i) => ({ week_number: maxWeekNumber + i + 1, sessions: [] })),
-			},
-			speculativeFromWeek: 2,
-			reasons: {},
-			historyWindow: { loggedSets: [], loggedRuns: [] },
-			skippedSessions: [],
-			goals,
-			goalTags,
-			daysPerWeek,
-			exerciseCatalogue,
-			painFlags,
-		};
-	}
-
-	const priorWeekNumber = anchorWeekNumber - 1;
-
-	// Bulk query 1/5: sessions across the last two LOGGED-anchored weeks (just one if this is week 1).
+	// Bulk query 1/5: sessions across the anchor week and the one before it.
 	const { results: windowSessions } = await db
-		.prepare(`SELECT * FROM sessions WHERE week_number IN (?, ?) ORDER BY date`)
-		.bind(priorWeekNumber, anchorWeekNumber)
+		.prepare(`SELECT * FROM sessions WHERE date >= ? AND date <= ? ORDER BY date`)
+		.bind(priorMonday, anchorSunday)
 		.all<SessionRow>();
 
-	const anchorWeekSessions = windowSessions.filter((s) => s.week_number === anchorWeekNumber);
+	const anchorWeekSessions = windowSessions.filter((s) => s.date >= anchorMonday);
 	// A run recorded by hand (migrations/0008_manual_runs.sql) must not become a
 	// template for every future week — validateSessionCount requires week 1 to
 	// hold exactly days_per_week sessions, so an extra copied-forward session
@@ -295,24 +292,6 @@ export async function buildExportContext(db: D1Database, weekCount: number, toda
 				.all<PlannedRunRow>()
 		: { results: [] as PlannedRunRow[] };
 
-	// Bulk query 5/6: logged_runs across the wider RUN_HISTORY_WEEKS window —
-	// six weeks of actual running history, not based on session week_numbers
-	// (which may not exist). Columns listed rather than SELECT * so `logged_at`
-	// (an internal audit timestamp) doesn't leak into the exported history window.
-	// Not filtered by origin — a manual run's data belongs here even though manual
-	// sessions are excluded from the copy-forward template above.
-	const sixWeeksAgoIso = addDaysIso(today, -7 * RUN_HISTORY_WEEKS);
-	const { results: loggedRunRows } = await db
-		.prepare(
-			`SELECT lr.id, lr.session_id, lr.distance_km, lr.duration_seconds, lr.avg_hr, lr.max_hr, lr.avg_cadence_spm,
-			        lr.elevation_gain_m, lr.aerobic_training_effect, lr.rpe_1_10, lr.interval_pace_seconds_per_km,
-			        lr.performed_on, lr.note
-			 FROM logged_runs lr
-			 WHERE lr.performed_on >= ? AND lr.performed_on <= ?`,
-		)
-		.bind(sixWeeksAgoIso, today)
-		.all<LoggedRunRow>();
-
 	// Bulk query 6/6: session feedback across the window — this is what makes
 	// the shoulder_safe/back_safe checks in validateWeekAgainstBaseline able to
 	// fire at all. A flag trips at 2+ on the 0-3 scale: 1 is "noticed it",
@@ -344,19 +323,10 @@ export async function buildExportContext(db: D1Database, weekCount: number, toda
 
 	const proposedSessions: ProposedSessionInput[] = [];
 
-	// The anchor week can be several weeks behind today (multi-week accept
-	// schedules ahead; the anchor only moves once something is actually
-	// logged), so a flat +7 can propose a date that's already in the past.
-	// Shift by whichever multiple of 7 days clears today, computed once from
-	// the earliest date among the sessions being progressed — the tightest
-	// constraint, since it needs the largest shift — and applied uniformly to
-	// every session in the week so it moves as a unit (day-of-week pattern
-	// preserved, no need for it to also clear today session-by-session).
-	const earliestDate = sessionsToProgress.reduce<string | null>(
-		(min, s) => (min === null || s.date < min ? s.date : min),
-		null,
-	);
-	const shiftDays = earliestDate !== null ? 7 * smallestWeeklyShiftAfter(earliestDate, today) : 7;
+	// The anchor week can be any number of weeks behind startDate, so the whole
+	// week moves as a unit by the whole-week shift that puts its Monday on
+	// startDate (day-of-week pattern preserved).
+	const shiftDays = daysBetweenIso(anchorMonday, startDate);
 
 	for (const session of sessionsToProgress) {
 		const newDate = addDaysIso(session.date, shiftDays);
@@ -426,11 +396,7 @@ export async function buildExportContext(db: D1Database, weekCount: number, toda
 		}
 	}
 
-	// Numbered from maxWeekNumber (the newest SCHEDULED week), not the anchor —
-	// a duplicate week number would split a week heading in the client's
-	// SessionList grouping, whereas a numbering gap (when the anchor is behind
-	// maxWeekNumber) is harmless.
-	const week1: WeekProposalInput = { week_number: maxWeekNumber + 1, sessions: proposedSessions };
+	const week1: WeekProposalInput = { week_number: 1, sessions: proposedSessions };
 
 	// Weeks 2..weekCount: flat copies of week 1 — structurally identical
 	// sessions/plannedSets/plannedRun values, dates shifted an additional 7
@@ -448,7 +414,7 @@ export async function buildExportContext(db: D1Database, weekCount: number, toda
 			plannedSets: session.plannedSets.map((set) => ({ ...set })),
 			plannedRun: session.plannedRun ? { ...session.plannedRun } : null,
 		}));
-		weeks.push({ week_number: maxWeekNumber + w, sessions });
+		weeks.push({ week_number: w, sessions });
 	}
 
 	// `reasons` is only ever populated for week 1 (above). Weeks 2..N are flat
@@ -494,8 +460,8 @@ export async function buildExportContext(db: D1Database, weekCount: number, toda
  * seam where Phase 2 would swap this for a live API call stays obvious;
  * nothing is persisted here since nothing has been reviewed yet.
  */
-export async function generateNextWeeks(db: D1Database, weekCount: number, today: string): Promise<ExportContext> {
-	return buildExportContext(db, weekCount, today);
+export async function generateNextWeeks(db: D1Database, weekCount: number, today: string, startDate?: string): Promise<ExportContext> {
+	return buildExportContext(db, weekCount, today, startDate);
 }
 
 /** True only for a real calendar date in YYYY-MM-DD form. The regex alone
@@ -952,7 +918,13 @@ function proposalDateSpan(sessions: { date: string }[]): { first: string; last: 
  * self-contained and avoids needing the client to round-trip extra state it
  * has no reason to keep.
  */
-export async function importProposal(db: D1Database, input: MultiWeekProposalInput, today: string, replace = false): Promise<ImportResult> {
+export async function importProposal(
+	db: D1Database,
+	input: MultiWeekProposalInput,
+	today: string,
+	replace = false,
+	source: 'external-import' | 'live-api' = 'external-import',
+): Promise<ImportResult> {
 	if (input.weeks.length === 0) {
 		return { ok: false, errors: ['proposal must include at least one week'] };
 	}
@@ -967,7 +939,13 @@ export async function importProposal(db: D1Database, input: MultiWeekProposalInp
 		return { ok: false, errors: ['A plan is already pending review — accept or reject it before importing another.'] };
 	}
 
-	const context = await buildExportContext(db, input.weeks.length, today);
+	// The baseline has to be rebuilt for the same start date the export used,
+	// because week 1 is validated by date. Recover it from the proposal itself:
+	// the Monday of the week its earliest session falls in. A proposal with no
+	// readable date falls back to the default and fails structural validation.
+	const firstDates = (input.weeks[0]?.sessions ?? []).map((s) => s?.date).filter((d): d is string => isRealIsoDate(d));
+	const startDate = firstDates.length > 0 ? weekStartOnOrBefore(firstDates.reduce((a, b) => (a < b ? a : b))) : undefined;
+	const context = await buildExportContext(db, input.weeks.length, today, startDate);
 	const errors = validateProposal(input, context);
 	if (errors.length > 0) {
 		return { ok: false, errors };
@@ -1002,9 +980,9 @@ export async function importProposal(db: D1Database, input: MultiWeekProposalInp
 	statements.push(
 		db
 			.prepare(
-				`INSERT INTO generated_plans (first_week_number, week_count, plan_json, deterministic_json) VALUES (?, ?, ?, ?) RETURNING id`,
+				`INSERT INTO generated_plans (first_week_number, week_count, plan_json, deterministic_json, source) VALUES (?, ?, ?, ?, ?) RETURNING id`,
 			)
-			.bind(input.weeks[0].week_number, input.weeks.length, JSON.stringify(hydrated), JSON.stringify(context.deterministicProposal)),
+			.bind(input.weeks[0].week_number, input.weeks.length, JSON.stringify(hydrated), JSON.stringify(context.deterministicProposal), source),
 	);
 
 	const results = await db.batch<{ id: number }>(statements);
@@ -1041,8 +1019,15 @@ export async function importProposal(db: D1Database, input: MultiWeekProposalInp
  * deleted in their own batch, ahead of the two below — a small, already
  * -tolerated failure window (see above), not forced into one atomic call.
  */
-export async function insertWeeksFromProposal(db: D1Database, plan: MultiWeekProposal): Promise<{ ok: true } | { ok: false; errors: string[] }> {
-	const flattened = plan.weeks.flatMap((week) => week.sessions.map((session) => ({ session, week_number: week.week_number })));
+export async function insertWeeksFromProposal(
+	db: D1Database,
+	plan: MultiWeekProposal,
+	generatedPlanId: number | null = null,
+): Promise<{ ok: true } | { ok: false; errors: string[] }> {
+	// Accepting a plan starts a new block, so its weeks are numbered 1..N by
+	// position whatever the proposal said (the export already numbers them that
+	// way; this just makes a stale or hand-edited numbering harmless).
+	const flattened = plan.weeks.flatMap((week, weekIndex) => week.sessions.map((session) => ({ session, week_number: weekIndex + 1 })));
 	if (flattened.length === 0) return { ok: true };
 
 	const span = proposalDateSpan(flattened.map(({ session }) => session));
@@ -1055,11 +1040,26 @@ export async function insertWeeksFromProposal(db: D1Database, plan: MultiWeekPro
 		if (deleteStatements.length > 0) await db.batch(deleteStatements);
 	}
 
+	// The block row: named by position, with the goals as they stand right now.
+	const startDate = weekStartOnOrBefore(span!.first); // flattened is non-empty, so a span exists
+	const block = await db
+		.prepare(
+			`INSERT INTO plan_blocks (name, start_date, week_count, goals, goal_tags, generated_plan_id)
+			 SELECT 'Block ' || ((SELECT COUNT(*) FROM plan_blocks) + 1), ?1, ?2,
+			        COALESCE((SELECT goals FROM settings WHERE id = 1), ''),
+			        COALESCE((SELECT goal_tags FROM settings WHERE id = 1), '[]'),
+			        ?3
+			 RETURNING id`,
+		)
+		.bind(startDate, plan.weeks.length, generatedPlanId)
+		.first<{ id: number }>();
+	const blockId = block!.id;
+
 	const sessionRows = await db.batch<{ id: number }>(
 		flattened.map(({ session, week_number }) =>
 			db
-				.prepare(`INSERT INTO sessions (date, kind, label, status, week_number) VALUES (?, ?, ?, 'planned', ?) RETURNING id`)
-				.bind(session.date, session.kind, session.label, week_number),
+				.prepare(`INSERT INTO sessions (date, kind, label, status, week_number, block_id) VALUES (?, ?, ?, 'planned', ?, ?) RETURNING id`)
+				.bind(session.date, session.kind, session.label, week_number, blockId),
 		),
 	);
 
@@ -1108,4 +1108,14 @@ export async function insertWeeksFromProposal(db: D1Database, plan: MultiWeekPro
 
 	if (children.length > 0) await db.batch(children);
 	return { ok: true };
+}
+
+/** How many untouched planned sessions accepting `plan` would replace, and the
+ * date it starts on — the one-line outcome the review screen states before you
+ * commit. Same span rule as accept, without writing anything. */
+export async function describeAcceptOutcome(db: D1Database, plan: MultiWeekProposal): Promise<{ replaces: number; start_date: string | null }> {
+	const span = proposalDateSpan(plan.weeks.flatMap((w) => w.sessions));
+	if (!span) return { replaces: 0, start_date: null };
+	const { replaceableIds } = await findReplaceableSessions(db, span.first, span.last);
+	return { replaces: replaceableIds.length, start_date: weekStartOnOrBefore(span.first) };
 }

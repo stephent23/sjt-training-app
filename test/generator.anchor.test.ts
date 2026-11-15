@@ -11,7 +11,7 @@
 // directly with an explicit `today` — the whole point of that parameter.
 import { env, SELF } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
-import { addDaysIso } from '../src/dates';
+import { addDaysIso, daysBetweenIso, weekStartOnOrAfter, weekStartOnOrBefore } from '../src/dates';
 import { buildExportContext } from '../src/generator';
 import type { MultiWeekProposalInput } from '../src/types';
 import { insertExercise, insertLoggedSet, insertPlannedSet, insertSession, todayIso } from './fixtures';
@@ -72,7 +72,8 @@ function smallestWeeklyShiftAfter(dateIso: string, today: string): number {
 describe('buildExportContext — anchors on the last LOGGED week, not the last SCHEDULED one', () => {
 	it('a 3-week accept leaves history/painFlags/skippedSessions/reasons reflecting the real logged week, not the newest unlogged one', async () => {
 		const today = todayIso();
-		const anchorDate = addDaysIso(today, -8); // over a week behind today
+		// A Monday, so the second session stays in the same calendar week whatever today is.
+		const anchorDate = weekStartOnOrBefore(addDaysIso(today, -8));
 		const secondDate = addDaysIso(anchorDate, 1);
 
 		const exerciseId = await insertExercise({ name: 'Goblet squat', pattern: 'squat', increment_kg: 2 });
@@ -114,8 +115,7 @@ describe('buildExportContext — anchors on the last LOGGED week, not the last S
 		// -8 days needs a *second* +7 shift to actually clear today (-8+7 = -1,
 		// still behind it) — computed via the same helper the rest of this file
 		// uses, rather than assuming a single +7 suffices.
-		const k = smallestWeeklyShiftAfter(anchorDate, today);
-		const proposedDate = addDaysIso(anchorDate, 7 * k);
+		const proposedDate = addDaysIso(anchorDate, daysBetweenIso(anchorDate, weekStartOnOrAfter(today)));
 		const reason = context.reasons[`${proposedDate}:${exerciseId}`];
 		expect(reason).toBeDefined();
 		expect(reason).toMatch(/weight increase earned/);
@@ -134,8 +134,8 @@ describe('buildExportContext — anchors on the last LOGGED week, not the last S
 
 		const context = await buildExportContext(env.DB, 1, today);
 
-		// Numbering still continues from maxWeekNumber (4), not the anchor (1).
-		expect(context.deterministicProposal.weeks[0].week_number).toBe(5);
+		// A proposal is a new block: numbered from 1 whatever the old numbering.
+		expect(context.deterministicProposal.weeks[0].week_number).toBe(1);
 
 		expect(context.historyWindow.loggedSets.some((s) => s.exercise_id === exerciseId)).toBe(true);
 
@@ -148,7 +148,7 @@ describe('buildExportContext — anchors on the last LOGGED week, not the last S
 		expect(reason).toMatch(/weight increase earned/);
 	});
 
-	it('numbers the proposal from maxWeekNumber + 1 even when the anchor is far behind it', async () => {
+	it('numbers the proposal from 1 even when scheduled weeks sit ahead of the anchor', async () => {
 		const today = '2026-08-04';
 		const exerciseId = await insertExercise({ name: 'Goblet squat', pattern: 'squat', increment_kg: 2 });
 
@@ -157,10 +157,10 @@ describe('buildExportContext — anchors on the last LOGGED week, not the last S
 
 		const context = await buildExportContext(env.DB, 2, today);
 
-		expect(context.deterministicProposal.weeks.map((w) => w.week_number)).toEqual([8, 9]);
+		expect(context.deterministicProposal.weeks.map((w) => w.week_number)).toEqual([1, 2]);
 	});
 
-	it('sessions exist but nothing has ever been logged: empty weeks numbered from maxWeekNumber + 1, empty history, no pain flags', async () => {
+	it('sessions exist but nothing has ever been logged: empty weeks numbered from 1, empty history, no pain flags', async () => {
 		const today = '2026-08-04';
 		const exerciseId = await insertExercise({ name: 'Goblet squat', pattern: 'squat', increment_kg: 2 });
 		await seedLiftWeek(1, '2026-07-06', exerciseId); // planned, never logged
@@ -170,9 +170,9 @@ describe('buildExportContext — anchors on the last LOGGED week, not the last S
 
 		expect(context.deterministicProposal).toEqual({
 			weeks: [
+				{ week_number: 1, sessions: [] },
+				{ week_number: 2, sessions: [] },
 				{ week_number: 3, sessions: [] },
-				{ week_number: 4, sessions: [] },
-				{ week_number: 5, sessions: [] },
 			],
 		});
 		expect(context.historyWindow).toEqual({ loggedSets: [], loggedRuns: [] });
@@ -211,7 +211,7 @@ describe('buildExportContext — anchors on the last LOGGED week, not the last S
 		expect(new Date(`${proposedDate}T00:00:00Z`).getUTCDay()).toBe(new Date(`${anchorDate}T00:00:00Z`).getUTCDay());
 	});
 
-	it('a partly-elapsed anchor week (some sessions logged, some not yet) still anchors there, with the unlogged exercise holding', async () => {
+	it('a partly-elapsed anchor week (some sessions logged, some not yet) still anchors there, moved to the next Monday, with the unlogged exercise holding', async () => {
 		const today = '2026-08-04';
 		const loggedDate = '2026-07-29';
 		const unloggedDate = '2026-07-31';
@@ -224,9 +224,9 @@ describe('buildExportContext — anchors on the last LOGGED week, not the last S
 
 		const context = await buildExportContext(env.DB, 1, today);
 
-		expect(context.deterministicProposal.weeks[0].week_number).toBe(2);
-		const proposedLoggedDate = addDaysIso(loggedDate, 7);
-		const proposedUnloggedDate = addDaysIso(unloggedDate, 7);
+		expect(context.deterministicProposal.weeks[0].week_number).toBe(1);
+		const proposedLoggedDate = addDaysIso(loggedDate, 14);
+		const proposedUnloggedDate = addDaysIso(unloggedDate, 14);
 		expect(context.reasons[`${proposedLoggedDate}:${loggedExerciseId}`]).toMatch(/weight increase earned/);
 		expect(context.reasons[`${proposedUnloggedDate}:${unloggedExerciseId}`]).toMatch(/No sets logged/);
 	});

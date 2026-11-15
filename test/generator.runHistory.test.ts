@@ -10,7 +10,7 @@ import { insertExercise, insertLoggedRun, insertLoggedSet, insertPlannedRun, ins
 // it. Lift history is untouched — the deterministic weight-progression
 // formula only ever needs the immediately preceding week, and a longer lift
 // history would just bloat the export for no benefit.
-const TODAY = '2026-08-04';
+const TODAY = '2026-06-02';
 
 describe('buildExportContext — loggedRuns reaches back further than loggedSets', () => {
 	it('includes a run from three weeks before the anchor, but not a lift set from the same week', async () => {
@@ -43,8 +43,8 @@ describe('buildExportContext — loggedRuns reaches back further than loggedSets
 		await insertLoggedSet(anchorLiftId, exerciseId, { set_index: 1, performed_on: '2026-06-01' });
 
 		// Week 5 = anchor(10) - 5: the oldest week the 6-week window still covers.
-		const oldestInRangeRunId = await insertSession({ date: '2026-04-20', kind: 'run', label: 'Oldest in range', week_number: 5 });
-		await insertLoggedRun(oldestInRangeRunId, { performed_on: '2026-04-20' });
+		const oldestInRangeRunId = await insertSession({ date: '2026-04-21', kind: 'run', label: 'Oldest in range', week_number: 5 });
+		await insertLoggedRun(oldestInRangeRunId, { performed_on: '2026-04-21' });
 
 		const context = await buildExportContext(env.DB, 1, TODAY);
 

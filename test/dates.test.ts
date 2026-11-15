@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { todayIso, weekStartOnOrAfter } from '../src/dates';
+import { daysBetweenIso, isMondayIso, todayIso, weekStartOnOrAfter, weekStartOnOrBefore } from '../src/dates';
 
 describe('todayIso', () => {
 	it('returns a YYYY-MM-DD formatted string', () => {
@@ -72,3 +72,28 @@ function addDays(dateIso: string, days: number): string {
 	const [year, month, day] = dateIso.split('-').map(Number);
 	return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10);
 }
+
+describe('weekStartOnOrBefore', () => {
+	it('returns a Monday unchanged and walks other days back to it', () => {
+		expect(weekStartOnOrBefore('2026-08-03')).toBe('2026-08-03');
+		expect(weekStartOnOrBefore('2026-08-05')).toBe('2026-08-03');
+		expect(weekStartOnOrBefore('2026-08-09')).toBe('2026-08-03'); // Sunday belongs to the week before it
+	});
+});
+
+describe('isMondayIso', () => {
+	it('accepts only real Mondays', () => {
+		expect(isMondayIso('2026-08-03')).toBe(true);
+		expect(isMondayIso('2026-08-04')).toBe(false);
+		expect(isMondayIso('2026-02-30')).toBe(false);
+		expect(isMondayIso('next monday')).toBe(false);
+		expect(isMondayIso(undefined)).toBe(false);
+	});
+});
+
+describe('daysBetweenIso', () => {
+	it('counts whole days, signed', () => {
+		expect(daysBetweenIso('2026-08-03', '2026-08-17')).toBe(14);
+		expect(daysBetweenIso('2026-08-17', '2026-08-03')).toBe(-14);
+	});
+});

@@ -38,6 +38,8 @@ export interface SessionRow {
 	status: SessionStatus;
 	week_number: number;
 	origin: SessionOrigin;
+	/** The plan block this session belongs to (null for manual runs and pre-block data). */
+	block_id?: number | null;
 }
 
 export interface LoggedSetEntry {
@@ -147,6 +149,10 @@ export interface SessionSummary {
 	status: SessionStatus;
 	week_number: number;
 	origin: SessionOrigin;
+	/** Plan block info for "Block 2 · Week 1 of 8" labels. week_number is the week within the block. */
+	block_id?: number | null;
+	block_name?: string | null;
+	block_week_count?: number | null;
 	exercise_count: number;
 	planned_set_count: number;
 	logged_set_count: number;

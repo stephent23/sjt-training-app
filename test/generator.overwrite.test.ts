@@ -122,7 +122,7 @@ describe('import/accept replaces the sessions inside the proposal date span', ()
 		const sessions = await listSessions('2026-08-10', '2026-08-10');
 		expect(sessions).toHaveLength(1);
 		expect(sessions[0].id).not.toBe(oldId);
-		expect(sessions[0].week_number).toBe(2);
+		expect(sessions[0].week_number).toBe(1);
 	});
 
 	it('leaves sessions dated before and after the span alone, however they are numbered', async () => {

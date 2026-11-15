@@ -138,6 +138,7 @@ sessions.get('/', async (c) => {
 		// back to planned_sets on (session_id, exercise_id).
 		`SELECT
 		   s.id, s.date, s.kind, s.label, s.status, s.week_number, s.origin,
+		   s.block_id, pb.name AS block_name, pb.week_count AS block_week_count,
 		   COUNT(DISTINCT CASE WHEN ps.status <> 'skipped' THEN ps.id END) AS exercise_count,
 		   COALESCE(SUM(CASE WHEN ps.status <> 'skipped' THEN ps.target_sets END), 0) AS planned_set_count,
 		   (SELECT COUNT(*) FROM logged_sets ls
@@ -150,6 +151,7 @@ sessions.get('/', async (c) => {
 		   (lr.id IS NOT NULL) AS has_logged_run,
 		   lr.distance_km AS logged_distance_km, lr.duration_seconds AS logged_duration_seconds
 		 FROM sessions s
+		 LEFT JOIN plan_blocks pb ON pb.id = s.block_id
 		 LEFT JOIN planned_sets ps ON ps.session_id = s.id
 		 LEFT JOIN planned_runs pr ON pr.session_id = s.id
 		 LEFT JOIN logged_runs  lr ON lr.session_id = s.id
