@@ -3,6 +3,7 @@ import { useMemo, useState } from 'preact/hooks';
 import type { PlannedSetDetail, SessionDetail } from '../../types';
 import { logSet, setExerciseStatus, setSessionStatus } from '../api';
 import { ExerciseCard } from '../components/ExerciseCard';
+import { FinishBar } from '../components/FinishBar';
 import { RestTimer } from '../components/RestTimer';
 import { SessionScreenFallback } from '../components/SessionScreenFallback';
 import { SwapSheet } from '../components/SwapSheet';
@@ -135,7 +136,11 @@ function LoadedLiftSession({ sessionId, detail, error, setDetail, reload, onBack
 				/>
 			</header>
 
-			{error && <p class="eyebrow">{error}</p>}
+			{error && (
+				<p class="eyebrow" role="alert">
+					{error}
+				</p>
+			)}
 
 			{groups.map((group) => (
 				<ExerciseCard
@@ -155,17 +160,7 @@ function LoadedLiftSession({ sessionId, detail, error, setDetail, reload, onBack
 
 			{/* `ready` drives prominence only, never disabled — finishing early
 			    stays possible, and completion is never automatic. */}
-			<button
-				type="button"
-				class={ready ? 'btn-primary' : 'btn-secondary'}
-				disabled={detail.session.status === 'completed'}
-				onClick={() => finish('completed')}
-			>
-				{detail.session.status === 'completed' ? 'Completed' : 'Mark complete'}
-			</button>
-			<button type="button" class="btn-quiet" disabled={detail.session.status === 'skipped'} onClick={() => finish('skipped')}>
-				{detail.session.status === 'skipped' ? 'Skipped' : 'Mark skipped'}
-			</button>
+			<FinishBar status={detail.session.status} primary={ready} onComplete={() => finish('completed')} onSkip={() => finish('skipped')} />
 
 			{swapFor && (
 				<SwapSheet

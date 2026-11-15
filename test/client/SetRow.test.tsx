@@ -169,3 +169,23 @@ describe('SetRow — the prescribed target', () => {
 		expect(weightLabel(container)).toBe('Weight');
 	});
 });
+
+describe('SetRow — RIR carried from the previous set', () => {
+	it('shows the previous set\'s RIR as selected, and it stays changeable', async () => {
+		const { container, onLog } = mount({ defaultReps: 8, defaultRir: 2 });
+
+		expect(pressedChip(container, 'RIR')?.textContent).toBe('2');
+		chips(container, 'RIR').find((c) => c.textContent === '3')!.click();
+		await tick();
+		expect(pressedChip(container, 'RIR')?.textContent).toBe('3');
+
+		primaryButton(container).click();
+		expect(onLog).toHaveBeenCalledWith(20, 8, 3);
+	});
+
+	it('logs with the carried RIR in one tap', () => {
+		const { container, onLog } = mount({ defaultReps: 8, defaultRir: 1 });
+		primaryButton(container).click();
+		expect(onLog).toHaveBeenCalledWith(20, 8, 1);
+	});
+});

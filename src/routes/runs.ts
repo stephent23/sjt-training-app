@@ -37,6 +37,21 @@ async function resolveWeekNumber(db: D1Database, date: string): Promise<number> 
 	return 1;
 }
 
+/** The plan block whose date range contains `date` (start_date up to
+ * week_count weeks later), with the week within it; null when none does. */
+async function resolveBlock(db: D1Database, date: string): Promise<{ id: number; week: number } | null> {
+	const row = await db
+		.prepare(
+			`SELECT id, CAST((julianday(?1) - julianday(start_date)) / 7 AS INTEGER) + 1 AS week
+			 FROM plan_blocks
+			 WHERE start_date <= ?1 AND date(start_date, '+' || (week_count * 7) || ' days') > ?1
+			 ORDER BY start_date DESC LIMIT 1`,
+		)
+		.bind(date)
+		.first<{ id: number; week: number }>();
+	return row ?? null;
+}
+
 /** Same 400-before-any-write validation for POST (new run) and PUT (correct
  * an existing one) — the shapes are identical. Returns an error message, or
  * null if the body is good to write. */
@@ -56,14 +71,17 @@ runs.post('/', async (c) => {
 	if (error) return c.json({ error }, 400);
 
 	const label = `${capitalize(body.run_type)} run`;
-	const weekNumber = await resolveWeekNumber(c.env.DB, body.date);
+	// A run inside a plan block's dates belongs to that block (and its week);
+	// outside any block it keeps inheriting the nearest session's week.
+	const block = await resolveBlock(c.env.DB, body.date);
+	const weekNumber = block ? block.week : await resolveWeekNumber(c.env.DB, body.date);
 
 	// A child row needs the parent's generated id, so this can't be one batch:
 	// the session insert has to complete before planned_runs/logged_runs can
 	// reference it.
 	const session = await c.env.DB
-		.prepare(`INSERT INTO sessions (date, kind, label, status, week_number, origin) VALUES (?, 'run', ?, 'completed', ?, 'manual') RETURNING id`)
-		.bind(body.date, label, weekNumber)
+		.prepare(`INSERT INTO sessions (date, kind, label, status, week_number, origin, block_id) VALUES (?, 'run', ?, 'completed', ?, 'manual', ?) RETURNING id`)
+		.bind(body.date, label, weekNumber, block?.id ?? null)
 		.first<{ id: number }>();
 	const sessionId = session!.id;
 

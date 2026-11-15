@@ -10,7 +10,7 @@ const TABS: { id: ShellProps['active']; href: string; label: string; icon: IconN
 	{ id: 'today', href: '#/', label: 'Today', icon: 'today' },
 	{ id: 'plan', href: '#/plan', label: 'Plan', icon: 'calendar' },
 	{ id: 'history', href: '#/history', label: 'History', icon: 'history' },
-	{ id: 'generate', href: '#/generate', label: 'Generate', icon: 'plus' },
+	{ id: 'generate', href: '#/generate', label: 'New plan', icon: 'plus' },
 ];
 
 export function Shell({ active, children }: ShellProps) {

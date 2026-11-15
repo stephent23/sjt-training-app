@@ -1,7 +1,7 @@
 import { render } from 'preact';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Today } from '../../src/client/screens/Today';
-import { todayIso } from '../../src/dates';
+import { addDaysIso, todayIso } from '../../src/dates';
 import type { SessionSummary } from '../../src/types';
 
 // Today's single-session fast path used to say a session was done only via
@@ -99,5 +99,53 @@ describe('Today — plan block label', () => {
 		const root = await mount([session({ week_number: 6 })]);
 		expect(root.textContent).toContain('Week 6');
 		expect(root.textContent).not.toContain('Block');
+	});
+});
+
+describe('Today — race countdown', () => {
+	function race(overrides: Record<string, unknown> = {}) {
+		return { id: 1, name: 'Brighton Half', date: addDaysIso(todayIso(), 119), distance_km: 21.1, target_seconds: null, result_seconds: null, priority: 'A', ...overrides };
+	}
+
+	async function mountWith(races: unknown, failRaces = false) {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async (url: string) => {
+				if (String(url).includes('/api/races')) {
+					if (failRaces) throw new Error('offline');
+					return new Response(JSON.stringify({ races }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+				}
+				return new Response(JSON.stringify({ sessions: [session()] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+			}),
+		);
+		container = document.createElement('div');
+		document.body.appendChild(container);
+		render(<Today />, container);
+		await waitFor(() => container!.querySelector('h2') !== null);
+		await tick();
+		await tick();
+		return container;
+	}
+
+	it('links the soonest unfinished race to the goals screen', async () => {
+		const root = await mountWith([
+			race({ id: 2, name: 'Later Half', date: addDaysIso(todayIso(), 200) }),
+			race({ id: 3, name: 'Done 10k', date: addDaysIso(todayIso(), 5), result_seconds: 3000 }),
+			race(),
+		]);
+		const link = root.querySelector<HTMLAnchorElement>('a.race-line')!;
+		expect(link.textContent).toContain('Brighton Half · 17 weeks');
+		expect(link.getAttribute('href')).toBe('#/goals');
+	});
+
+	it('shows nothing with no upcoming race', async () => {
+		const root = await mountWith([race({ date: addDaysIso(todayIso(), -3) })]);
+		expect(root.querySelector('.race-line')).toBeNull();
+	});
+
+	it('still renders Today when the races request fails', async () => {
+		const root = await mountWith([], true);
+		expect(root.querySelector('.race-line')).toBeNull();
+		expect(root.textContent).toContain('Lift A');
 	});
 });

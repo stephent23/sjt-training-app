@@ -1,5 +1,6 @@
 import { Icon } from '../components/Icon';
 import { setSessionStatus } from '../api';
+import { FinishBar } from '../components/FinishBar';
 import { RunStructure } from '../components/RunStructure';
 import { SessionScreenFallback } from '../components/SessionScreenFallback';
 import { capitalize } from '../format';
@@ -35,7 +36,11 @@ export function RunSession({ sessionId, onBack }: RunSessionProps) {
 				<Icon name="chevron-left" />
 				Back
 			</button>
-			{error && <p class="eyebrow">{error}</p>}
+			{error && (
+				<p class="eyebrow" role="alert">
+					{error}
+				</p>
+			)}
 			<p class="eyebrow card-eyebrow">
 				<span class="badge badge--run">
 					<Icon name="run" />
@@ -64,17 +69,12 @@ export function RunSession({ sessionId, onBack }: RunSessionProps) {
 
 			<RunStructure structureJson={run.structure_json} />
 
-			<button type="button" class="btn-primary" onClick={() => finish('completed')} disabled={session.status === 'completed'}>
-				{session.status === 'completed' ? 'Completed' : 'Mark complete'}
-			</button>
 			{/* Finishing a run used to lead nowhere near the screen that records
 			    what it was, so the numbers on the watch face went unlogged. */}
 			<button type="button" class="btn-secondary" onClick={() => (location.hash = `#/review/${sessionId}`)}>
 				Log what you ran
 			</button>
-			<button type="button" class="btn-quiet" onClick={() => finish('skipped')} disabled={session.status === 'skipped'}>
-				{session.status === 'skipped' ? 'Skipped' : 'Mark skipped'}
-			</button>
+			<FinishBar status={session.status} onComplete={() => finish('completed')} onSkip={() => finish('skipped')} />
 		</main>
 	);
 }

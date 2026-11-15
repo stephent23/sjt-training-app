@@ -1,5 +1,7 @@
-import type { SessionSummary } from '../../types';
-import { addDaysIso, todayIso } from '../../dates';
+import { useEffect, useState } from 'preact/hooks';
+import type { Race, SessionSummary } from '../../types';
+import { addDaysIso, daysBetweenIso, todayIso } from '../../dates';
+import { fetchRaces } from '../api';
 import { Icon } from '../components/Icon';
 import { longDate, weekdayName, WeekStrip } from '../components/WeekStrip';
 import { formatDuration, formatPace } from '../format';
@@ -198,6 +200,17 @@ function RestCard({ today, next, week }: { today: string; next: SessionSummary |
 	);
 }
 
+/** The soonest race still ahead of you with no result yet. */
+export function nextRace(races: Race[], today: string): Race | undefined {
+	return races.filter((r) => r.date >= today && r.result_seconds == null).sort((a, b) => a.date.localeCompare(b.date))[0];
+}
+
+export function raceCountdown(race: Race, today: string): string {
+	const days = daysBetweenIso(today, race.date);
+	const when = days === 0 ? 'today' : days === 1 ? 'tomorrow' : days < 14 ? `${days} days` : `${Math.floor(days / 7)} weeks`;
+	return `${race.name} · ${when}`;
+}
+
 /** Same footprint as the hero, so nothing jumps when the list lands. */
 function HeroSkeleton() {
 	return (
@@ -216,6 +229,18 @@ export function Today() {
 	const { sessions, error, reload } = useSessionList({ from: week[0], to: week[6] }, "Couldn't load today.");
 	const pending = pendingCount();
 	const href = linkFor(today);
+
+	// A nicety, never a dependency: offline or failing, there is simply no line.
+	const [race, setRace] = useState<Race | undefined>();
+	useEffect(() => {
+		let live = true;
+		fetchRaces()
+			.then((races) => live && Array.isArray(races) && setRace(nextRace(races, today)))
+			.catch(() => {});
+		return () => {
+			live = false;
+		};
+	}, [today]);
 
 	const todays = sessions?.filter((s) => s.date === today) ?? [];
 	// The hero is the next thing you will actually do: the first session still
@@ -261,6 +286,13 @@ export function Today() {
 				</>
 			) : (
 				<RestCard today={today} next={next} week={sessions[0]} />
+			)}
+
+			{race && (
+				<a class="race-line" href="#/goals">
+					<Icon name="calendar" />
+					{raceCountdown(race, today)}
+				</a>
 			)}
 
 			<a class="btn-quiet" href="#/run/new" role="button">

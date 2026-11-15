@@ -12,6 +12,8 @@ import { logRun, logSet, saveFeedback, setExerciseStatus, setSessionStatus } fro
 import { FeedbackCard } from '../components/FeedbackCard';
 import { RunMetricsFields, type PlannedTarget } from '../components/RunMetricsFields';
 import { SessionScreenFallback } from '../components/SessionScreenFallback';
+import { longDate } from '../components/WeekStrip';
+import { weekLabel } from '../weekLabel';
 import { parseRunFields, runFieldsFrom, type RunFields } from '../runFields';
 import { formatDuration, formatPace, runSummary } from '../format';
 import { sessionSetTotals } from '../../sessionProgress';
@@ -276,10 +278,14 @@ export function Review({ sessionId }: ReviewProps) {
 				Back
 			</button>
 
-			{error && <p class="eyebrow">{error}</p>}
+			{error && (
+				<p class="eyebrow" role="alert">
+					{error}
+				</p>
+			)}
 
 			<span class="eyebrow">
-				{session.date} · Week {session.week_number}
+				{longDate(session.date)} · {weekLabel(session)}
 			</span>
 			<h1>{session.label}</h1>
 			<p class="exercise-target">{progressLine}</p>
@@ -316,12 +322,21 @@ export function Review({ sessionId }: ReviewProps) {
 
 			<FeedbackCard feedback={detail.feedback} onSave={handleSaveFeedback} />
 
-			<button type="button" class="btn-primary" onClick={() => finish('completed')} disabled={session.status === 'completed'}>
-				{session.status === 'completed' ? 'Completed' : 'Mark session complete'}
-			</button>
-			<button type="button" class="btn-secondary" onClick={() => finish('skipped')} disabled={session.status === 'skipped'}>
-				{session.status === 'skipped' ? 'Skipped' : 'Mark skipped'}
-			</button>
+			{/* Only the verdicts that would change something: a session already
+			    completed has nothing left to decide (reached right after finishing
+			    a lift, or from History); a skipped one can still be marked done once
+			    it is filled in; a planned one (a missed day, a run logged after the
+			    fact) needs both. */}
+			{session.status !== 'completed' && (
+				<button type="button" class="btn-primary" onClick={() => finish('completed')}>
+					Mark session complete
+				</button>
+			)}
+			{session.status === 'planned' && (
+				<button type="button" class="btn-secondary" onClick={() => finish('skipped')}>
+					Mark skipped
+				</button>
+			)}
 		</main>
 	);
 }

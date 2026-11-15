@@ -36,7 +36,7 @@ export function Plan() {
 			<h1>Plan</h1>
 			{error ? (
 				<>
-					<p>{error}</p>
+					<p role="alert">{error}</p>
 					<button type="button" class="btn-secondary" onClick={reload}>
 						Retry
 					</button>
@@ -55,7 +55,7 @@ export function Plan() {
 					emptyAction={
 						<a class="btn-primary" href="#/generate" role="button">
 							<Icon name="plus" />
-							Generate a plan
+							New plan
 						</a>
 					}
 					onReschedule={handleReschedule}

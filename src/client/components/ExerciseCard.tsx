@@ -104,11 +104,10 @@ export function ExerciseCard({ group, expanded, onToggle, onLog, onSwap, onSkipT
 				</span>
 			</button>
 
-			{/* Collapsing this card unmounts SetRow, discarding any typed-but-not-
-			    logged draft for whichever set is mid-edit. Accepted tradeoff —
-			    revisit only if this costs real work in the gym. */}
-			{expanded && (
-				<div class="exercise-card-body">
+			{/* Kept mounted and hidden when collapsed, so a typed-but-not-logged draft
+			    survives collapsing the card and opening it again. */}
+			{(
+				<div class="exercise-card-body" hidden={!expanded}>
 					{notes.map((member) => (
 						<p key={member.id} class="exercise-target">
 							{group.isSuperset ? `${member.exercise_name}: ${member.notes}` : member.notes}
@@ -160,6 +159,7 @@ export function ExerciseCard({ group, expanded, onToggle, onLog, onSwap, onSkipT
 										isBodyweight={slot.exercise.loading === 'bodyweight'}
 										defaultWeight={defaults.weight_kg}
 										defaultReps={defaults.reps}
+										defaultRir={slot.exercise.logged.find((l) => l.set_index === slot.setIndex - 1)?.rir ?? null}
 										logged={logged}
 										lastWeek={slot.exercise.lastWeek.find((l) => l.set_index === slot.setIndex)}
 										expanded={editingSlot === slot.slotKey}

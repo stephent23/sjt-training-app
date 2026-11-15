@@ -191,3 +191,35 @@ describe('ExerciseCard — logged sets collapse', () => {
 		expect(container.querySelector('.set-row--editing')).not.toBeNull();
 	});
 });
+
+describe('ExerciseCard — collapsing keeps the draft', () => {
+	it('keeps the set rows mounted (hidden) when collapsed, with a typed rep choice intact', async () => {
+		const plan = [plannedSet({ target_sets: 2 })];
+		const { container, group } = mount(plan, { expanded: true });
+		container.querySelector<HTMLButtonElement>('.set-row .tap-row button')!.click();
+		await tick();
+		const picked = container.querySelector('.set-row .tap-btn--selected')?.textContent;
+		expect(picked).toBeTruthy();
+
+		render(
+			<ExerciseCard group={group} expanded={false} onToggle={vi.fn()} onLog={vi.fn()} onSwap={vi.fn()} onSkipToggle={vi.fn()} restNode={null} restAfterRoundIndex={null} />,
+			container,
+		);
+		await tick();
+		expect(container.querySelector('.exercise-card-body')!.hasAttribute('hidden')).toBe(true);
+
+		render(
+			<ExerciseCard group={group} expanded onToggle={vi.fn()} onLog={vi.fn()} onSwap={vi.fn()} onSkipToggle={vi.fn()} restNode={null} restAfterRoundIndex={null} />,
+			container,
+		);
+		await tick();
+		expect(container.querySelector('.set-row .tap-btn--selected')?.textContent).toBe(picked);
+	});
+
+	it('prefills RIR on a later set from the set logged just before it', () => {
+		const { container } = mount([plannedSet({ target_sets: 3, logged: loggedSets(1, { weight_kg: 60, reps: 8, rir: 2 }) })]);
+		const open = container.querySelector('.set-row:not(.set-row--collapsed)')!;
+		const rirRow = [...open.querySelectorAll('.tap-row')].find((g) => (g.getAttribute('aria-label') ?? '').startsWith('RIR'))!;
+		expect(rirRow.querySelector('[aria-pressed="true"]')?.textContent).toBe('2');
+	});
+});

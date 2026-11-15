@@ -134,7 +134,7 @@ interface SessionListProps {
 	hideCompleted?: boolean;
 	/** History: one line per row, the logged result as a mono badge. */
 	dense?: boolean;
-	/** Shown beside the empty message (Plan's "Generate a plan"). */
+	/** Shown beside the empty message (Plan's "New plan"). */
 	emptyAction?: ComponentChildren;
 }
 

@@ -101,7 +101,7 @@ describe('LiftSession', () => {
 
 	it('offers the finish controls the screen previously lacked entirely', async () => {
 		const root = await mountLiftSession(sessionDetail());
-		const labels = text(root, 'main > button');
+		const labels = text(root, '.finish-bar button');
 
 		expect(labels).toContain('Mark complete');
 		expect(labels).toContain('Mark skipped');
@@ -110,7 +110,7 @@ describe('LiftSession', () => {
 	it('leaves "Mark complete" secondary while work is outstanding', async () => {
 		const root = await mountLiftSession(sessionDetail());
 
-		expect(root.querySelector('.btn-primary')).toBeNull();
+		expect(root.querySelector('.finish-bar .btn-primary')).toBeNull();
 	});
 
 	it('promotes "Mark complete" to primary once everything non-skipped is logged', async () => {
@@ -119,7 +119,7 @@ describe('LiftSession', () => {
 		detail.plannedSets[2].logged = loggedSets(3);
 		const root = await mountLiftSession(detail);
 
-		expect(root.querySelector('.btn-primary')?.textContent).toBe('Mark complete');
+		expect(root.querySelector('.finish-bar .btn-primary')?.textContent).toBe('Mark complete');
 	});
 
 	it('shows the superset as a single card of rounds when opened', async () => {
@@ -130,7 +130,7 @@ describe('LiftSession', () => {
 		await tick();
 
 		expect(text(root, '.superset-round-label')).toEqual(['Round 1', 'Round 2', 'Round 3']);
-		expect(text(root, '.set-row-index')).toEqual([
+		expect(text(root, '.exercise-card-body:not([hidden]) .set-row-index')).toEqual([
 			'DB bicep curl',
 			'Triceps pushdown',
 			'DB bicep curl',
@@ -146,7 +146,7 @@ describe('LiftSession', () => {
 		root.querySelector<HTMLButtonElement>('.exercise-card-summary')!.click(); // the fully-logged press
 		await tick();
 
-		expect(root.querySelectorAll('.set-row--collapsed')).toHaveLength(4);
+		expect(root.querySelectorAll('.exercise-card-body:not([hidden]) .set-row--collapsed')).toHaveLength(4);
 	});
 
 	// Finishing a gym session used to drop you back on Today with no route to
@@ -165,6 +165,9 @@ describe('LiftSession', () => {
 		const root = await mountLiftSession(sessionDetail());
 
 		buttonWith(root, 'Mark skipped').click();
+		await tick();
+		expect(location.hash).toBe('');
+		buttonWith(root, 'Yes, skip').click();
 		await tick();
 
 		expect(location.hash).toBe('#/');

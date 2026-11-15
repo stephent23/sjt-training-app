@@ -1,7 +1,9 @@
 import { Icon } from '../components/Icon';
 import { RunStructure } from '../components/RunStructure';
 import { SessionScreenFallback } from '../components/SessionScreenFallback';
+import { longDate } from '../components/WeekStrip';
 import { runSummary } from '../format';
+import { weekLabel } from '../weekLabel';
 import { useSession } from '../useSession';
 
 interface PreviewProps {
@@ -26,13 +28,16 @@ export function Preview({ sessionId, onBack }: PreviewProps) {
 				<Icon name="chevron-left" />
 				Back
 			</button>
-			{error && <p class="eyebrow">{error}</p>}
+			{error && (
+				<p class="eyebrow" role="alert">
+					{error}
+				</p>
+			)}
 
 			<span class="eyebrow">
-				{session.date} · Week {session.week_number}
+				{longDate(session.date)} · {weekLabel(session)}
 			</span>
 			<h1>{session.label}</h1>
-			<p class="exercise-target">Preview — this hasn't happened yet.</p>
 
 			{session.kind === 'lift'
 				? plannedSets.map((ps) => (

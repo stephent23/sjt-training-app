@@ -485,3 +485,35 @@ describe('DELETE /api/runs/:id', () => {
 		expect(await countRows('planned_runs', keeperId)).toBe(1);
 	});
 });
+
+describe('POST /api/runs plan block', () => {
+	async function insertBlock(startDate: string, weekCount: number, name = 'Block 2'): Promise<number> {
+		const row = await env.DB.prepare(`INSERT INTO plan_blocks (name, start_date, week_count) VALUES (?, ?, ?) RETURNING id`)
+			.bind(name, startDate, weekCount)
+			.first<{ id: number }>();
+		return row!.id;
+	}
+
+	async function blockOf(sessionId: number) {
+		return env.DB.prepare(`SELECT block_id, week_number FROM sessions WHERE id = ?`).bind(sessionId).first<{ block_id: number | null; week_number: number }>();
+	}
+
+	it('joins the block whose date range contains the run, in the right week', async () => {
+		const blockId = await insertBlock('2026-08-03', 4);
+		expect(await blockOf(await createRun({ date: '2026-08-03' }))).toEqual({ block_id: blockId, week_number: 1 });
+		expect(await blockOf(await createRun({ date: '2026-08-12' }))).toEqual({ block_id: blockId, week_number: 2 });
+		expect(await blockOf(await createRun({ date: '2026-08-30' }))).toEqual({ block_id: blockId, week_number: 4 });
+	});
+
+	it('stays outside a block when the date is past its last week or before its start', async () => {
+		await insertBlock('2026-08-03', 4);
+		expect((await blockOf(await createRun({ date: '2026-08-31' })))!.block_id).toBeNull();
+		expect((await blockOf(await createRun({ date: '2026-08-02' })))!.block_id).toBeNull();
+	});
+
+	it('shows the block name and length on the session detail', async () => {
+		await insertBlock('2026-08-03', 4, 'Block 7');
+		const detail = await fetchDetail(await createRun({ date: '2026-08-12' }));
+		expect(detail.session).toMatchObject({ week_number: 2, block_name: 'Block 7', block_week_count: 4 });
+	});
+});

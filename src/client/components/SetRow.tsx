@@ -19,6 +19,9 @@ interface SetRowProps {
 	isBodyweight: boolean;
 	defaultWeight: number;
 	defaultReps: number | null;
+	/** RIR of the previous set of this exercise logged this session, so after the
+	 *  first set RIR starts selected (and stays one tap to change). Null for set 1. */
+	defaultRir?: number | null;
 	logged: LoggedSetEntry | undefined;
 	lastWeek: LoggedSetEntry | undefined;
 	/** Whether the full controls are shown. An unlogged set is always expanded;
@@ -39,6 +42,7 @@ export function SetRow({
 	isBodyweight,
 	defaultWeight,
 	defaultReps,
+	defaultRir = null,
 	logged,
 	lastWeek,
 	expanded,
@@ -69,7 +73,7 @@ export function SetRow({
 	// logging, whereas suggesting a value from anywhere else would get
 	// confirmed without thought and quietly corrupt the signal every
 	// progression decision runs on. See the note in src/setDefaults.ts.
-	const rir = touchedRir ?? logged?.rir ?? null;
+	const rir = touchedRir ?? logged?.rir ?? defaultRir;
 
 	const repOptions: number[] = [];
 	for (let r = Math.max(0, repLow - 2); r <= repHigh + 2; r++) repOptions.push(r);
@@ -118,7 +122,6 @@ export function SetRow({
 					<p class="set-field-hint">Bodyweight — no added load</p>
 				) : (
 					<>
-						<p class="set-field-hint">Tap the number to type, or use ± to adjust by {incrementKg}kg</p>
 						<Stepper value={weight} step={incrementKg} suffix="kg" onChange={setTouchedWeight} />
 					</>
 				)}
@@ -140,7 +143,6 @@ export function SetRow({
 
 			<div class="set-field">
 				<span class="eyebrow">RIR · reps in reserve</span>
-				<p class="set-field-hint">0 = couldn't do another rep · 4 = several left</p>
 				<TapGroup
 					options={RIR_OPTIONS}
 					value={rir}

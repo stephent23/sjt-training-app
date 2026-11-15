@@ -170,7 +170,15 @@ sessions.get('/', async (c) => {
 
 sessions.get('/:id', async (c) => {
 	const id = Number(c.req.param('id'));
-	const session = await c.env.DB.prepare(`SELECT * FROM sessions WHERE id = ?`).bind(id).first<SessionRow>();
+	// The block name and length ride along so Preview/Review can print
+	// "Block 2 · Week 1 of 8" like the lists do.
+	const session = await c.env.DB
+		.prepare(
+			`SELECT s.*, pb.name AS block_name, pb.week_count AS block_week_count
+			 FROM sessions s LEFT JOIN plan_blocks pb ON pb.id = s.block_id WHERE s.id = ?`,
+		)
+		.bind(id)
+		.first<SessionRow>();
 	if (!session) return c.json({ error: 'not found' }, 404);
 	return c.json(await loadSessionDetail(c.env.DB, session));
 });
