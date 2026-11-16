@@ -6,7 +6,7 @@
 // persists whatever comes back.
 
 import { addDaysIso, daysBetweenIso, weekStartOnOrAfter, weekStartOnOrBefore } from './dates';
-import { adjustStartError, buildAdjustContext, loadBlock } from './adjustContext';
+import { adjustOverlapError, adjustStartError, buildAdjustContext, loadBlock } from './adjustContext';
 import { deleteSessionStatements } from './sessionDelete';
 import { sqlIn } from './sql';
 import { progressExercise, type ExercisePrescription, type LoggedSetForProgression } from './progression';
@@ -1078,6 +1078,11 @@ export async function importProposal(
 		}
 	}
 
+	if (adjustBlockId !== null && span) {
+		const overlap = await adjustOverlapError(db, adjustBlockId, span);
+		if (overlap) return { ok: false, errors: [overlap] };
+	}
+
 	const hydrated: MultiWeekProposal = { weeks: input.weeks.map((week) => hydrateProposal(week, context.exerciseCatalogue)) };
 	if (typeof input.summary === 'string') hydrated.summary = input.summary;
 
@@ -1151,11 +1156,31 @@ export async function insertWeeksFromProposal(
 
 	const span = proposalDateSpan(flattened.map(({ session }) => session));
 	if (span) {
-		const { replaceableIds, protectedDates } = await replaceableForPlan(db, span, adjustBlockId);
+		if (adjustBlockId !== null) {
+			const overlap = await adjustOverlapError(db, adjustBlockId, span);
+			if (overlap) return { ok: false, errors: [overlap] };
+		}
+		const { replaceableIds, protectedDates, affectedBlockIds } = await replaceableForPlan(db, span, adjustBlockId);
 		if (protectedDates.length > 0) {
 			return { ok: false, errors: protectedDates.map((d) => `${d} already has training you've done — the plan can't overwrite it`) };
 		}
-		const deleteStatements = deleteSessionStatements(db, replaceableIds);
+		// A new block supersedes everything planned from its start on, in whatever
+		// block: delete those sessions, then trim each affected block to what is
+		// left of it (or drop it) so no two blocks ever overlap in dates.
+		const deleteStatements: D1PreparedStatement[] = [];
+		for (let i = 0; i < replaceableIds.length; i += 80) deleteStatements.push(...deleteSessionStatements(db, replaceableIds.slice(i, i + 80)));
+		for (const id of affectedBlockIds) {
+			deleteStatements.push(
+				db
+					.prepare(
+						`UPDATE plan_blocks SET week_count = (SELECT MAX(week_number) FROM sessions WHERE block_id = ?1)
+						 WHERE id = ?1 AND EXISTS (SELECT 1 FROM sessions WHERE block_id = ?1)`,
+					)
+					.bind(id),
+				db.prepare(`UPDATE generated_plans SET block_id = NULL WHERE block_id = ?1 AND NOT EXISTS (SELECT 1 FROM sessions WHERE block_id = ?1)`).bind(id),
+				db.prepare(`DELETE FROM plan_blocks WHERE id = ?1 AND NOT EXISTS (SELECT 1 FROM sessions WHERE block_id = ?1)`).bind(id),
+			);
+		}
 		if (deleteStatements.length > 0) await db.batch(deleteStatements);
 	}
 
@@ -1168,7 +1193,7 @@ export async function insertWeeksFromProposal(
 		const block = await db
 			.prepare(
 				`INSERT INTO plan_blocks (name, start_date, week_count, goals, goal_tags, generated_plan_id)
-				 SELECT 'Block ' || ((SELECT COUNT(*) FROM plan_blocks) + 1), ?1, ?2,
+				 SELECT 'Block ' || (1 + COALESCE((SELECT MAX(CAST(SUBSTR(name, 7) AS INTEGER)) FROM plan_blocks WHERE name GLOB 'Block [0-9]*'), 0)), ?1, ?2,
 				        COALESCE((SELECT goals FROM settings WHERE id = 1), ''),
 				        COALESCE((SELECT goal_tags FROM settings WHERE id = 1), '[]'),
 				        ?3
@@ -1246,27 +1271,34 @@ export async function insertWeeksFromProposal(
 }
 
 /** What accepting a plan over `span` would delete, and the trained dates that
- * forbid it. A new-block plan replaces the untouched sessions inside its span.
- * A plan revising a block also replaces that block's untouched sessions from the
- * plan's start Monday on, so a shortened block keeps no stale tail. */
+ * forbid it. A new-block plan supersedes every untouched planned session from
+ * its start Monday on, in any block (`affectedBlockIds` are the blocks losing
+ * some, to be trimmed). A plan revising a block replaces that block's untouched
+ * sessions from the plan's start Monday on (plus any in its span), so a
+ * shortened block keeps no stale tail. */
 async function replaceableForPlan(
 	db: D1Database,
 	span: { first: string; last: string },
 	adjustBlockId: number | null,
-): Promise<{ replaceableIds: number[]; protectedDates: string[] }> {
+): Promise<{ replaceableIds: number[]; protectedDates: string[]; affectedBlockIds: number[] }> {
 	const found = await findReplaceableSessions(db, span.first, span.last);
-	if (adjustBlockId === null || found.protectedDates.length > 0) return found;
+	if (found.protectedDates.length > 0) return { replaceableIds: [], protectedDates: found.protectedDates, affectedBlockIds: [] };
 
 	const { results } = await db
 		.prepare(
-			`SELECT s.id FROM sessions s
-			 WHERE s.block_id = ?1 AND s.date >= ?2 AND s.status = 'planned'
+			`SELECT s.id, s.block_id FROM sessions s
+			 WHERE s.date >= ?1 AND s.status = 'planned' AND (?2 IS NULL OR s.block_id = ?2)
 			   AND NOT EXISTS (SELECT 1 FROM logged_sets ls WHERE ls.session_id = s.id)
 			   AND NOT EXISTS (SELECT 1 FROM logged_runs lr WHERE lr.session_id = s.id)`,
 		)
-		.bind(adjustBlockId, weekStartOnOrBefore(span.first))
-		.all<{ id: number }>();
-	return { replaceableIds: [...new Set([...found.replaceableIds, ...results.map((r) => r.id)])], protectedDates: [] };
+		.bind(weekStartOnOrBefore(span.first), adjustBlockId)
+		.all<{ id: number; block_id: number | null }>();
+	const later = results.map((r) => r.id);
+	return {
+		replaceableIds: adjustBlockId === null ? later : [...new Set([...found.replaceableIds, ...later])],
+		protectedDates: [],
+		affectedBlockIds: adjustBlockId === null ? [...new Set(results.map((r) => r.block_id).filter((b): b is number => b !== null))] : [],
+	};
 }
 
 /** How many untouched planned sessions accepting `plan` would replace, and the

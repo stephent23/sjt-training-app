@@ -4,7 +4,7 @@
 // proposal). See migrations/0013_adjust_block.sql. Pure reads; accept lives in
 // generator.ts next to the code that inserts sessions.
 
-import { addDaysIso, daysBetweenIso, isMondayIso, weekStartOnOrAfter } from './dates';
+import { addDaysIso, daysBetweenIso, isMondayIso, weekStartOnOrAfter, weekStartOnOrBefore } from './dates';
 import { parseGoalTags } from './types';
 import type { ActiveBlock, AdjustContext, AdjustSession, AdjustWeek, ProposedSessionInput, ProposedSetInput, RunType, SessionKind, SessionStatus, WeekProposalInput } from './types';
 
@@ -343,4 +343,30 @@ export async function buildAdjustContext(
 		},
 		weeks,
 	};
+}
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+/** 'Mon 14 Dec' */
+function shortDate(iso: string): string {
+	const d = new Date(`${iso}T00:00:00Z`);
+	return `${DAYS[d.getUTCDay()]} ${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`;
+}
+
+/** Blocks may not overlap in dates. An adjusting plan's span (first..last
+ * session date, widened to whole weeks) must stay clear of every OTHER block's
+ * range; otherwise a message naming the first one it runs into, else null. */
+export async function adjustOverlapError(db: D1Database, blockId: number, span: { first: string; last: string }): Promise<string | null> {
+	const first = weekStartOnOrBefore(span.first);
+	const last = addDaysIso(weekStartOnOrBefore(span.last), 6);
+	const { results } = await db
+		.prepare(`SELECT id, name, start_date, week_count, goals, goal_tags, generated_plan_id FROM plan_blocks WHERE id != ? ORDER BY start_date`)
+		.bind(blockId)
+		.all<BlockRow>();
+	const other = results.find((b) => b.start_date <= last && blockEnd(b) >= first);
+	if (!other) return null;
+	return other.start_date >= first
+		? `${other.name} starts ${shortDate(other.start_date)} — shorten this block or adjust ${other.name} instead`
+		: `${other.name} runs until ${shortDate(blockEnd(other))} — start this block after it or adjust ${other.name} instead`;
 }

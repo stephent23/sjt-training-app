@@ -125,7 +125,7 @@ describe('import/accept replaces the sessions inside the proposal date span', ()
 		expect(sessions[0].week_number).toBe(1);
 	});
 
-	it('leaves sessions dated before and after the span alone, however they are numbered', async () => {
+	it('leaves sessions dated before the span alone, however they are numbered; a new block supersedes later untouched ones', async () => {
 		const exerciseId = await insertExercise();
 		// Same week_number as the incoming plan, deliberately — only the dates
 		// decide what gets replaced.
@@ -141,11 +141,11 @@ describe('import/accept replaces the sessions inside the proposal date span', ()
 		expect(await postJson(`https://training-app.test/api/generator/${body.id}/accept`)).toHaveProperty('status', 200);
 
 		expect(await countWhere('sessions', 'id = ?', beforeId)).toBe(1);
-		expect(await countWhere('sessions', 'id = ?', afterId)).toBe(1);
+		expect(await countWhere('sessions', 'id = ?', afterId)).toBe(0); // planned after the new block starts: superseded
 		expect(await countWhere('sessions', 'id = ?', insideId)).toBe(0);
 
 		const sessions = await listSessions('2026-08-01', '2026-08-31');
-		expect(sessions.map((s) => s.label)).toEqual(['Before', 'New A', 'New B', 'After']);
+		expect(sessions.map((s) => s.label)).toEqual(['Before', 'New A', 'New B']);
 	});
 
 	// A lighter new week must not leave yesterday's plan showing on a day it no
