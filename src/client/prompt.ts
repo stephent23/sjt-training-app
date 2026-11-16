@@ -23,7 +23,7 @@ use your judgement. One broken rule rejects the whole plan, so check them before
 WHAT'S IN THE FILE
 
 - deterministicProposal — { "weeks": [...] }, the plan my app already computed mechanically.
-  Week 1 is arithmetic from last week's logged sets: small, cautious steps — a floor, not a
+  Normally week 1 is arithmetic from last week's logged sets (with adjust, see below): small, cautious steps — a floor, not a
   ceiling. Weeks 2 onward are flat copies of week 1 with dates pushed +7 days each. They are
   placeholders, not judgement (speculativeFromWeek marks where the copies start; it is always 2).
   Replace them with real periodisation.
@@ -76,10 +76,23 @@ WHAT'S IN THE FILE
   loading, shoulder_safe, back_safe. (modality, needs_spotter and is_default are app details; ignore.)
 - today, weekStartDate — today's date, and the Monday the new plan starts on (week 1 lands on it; I chose it).
 
+IF THE FILE HAS adjust - YOU ARE REVISING A BLOCK IN PROGRESS
+
+Everything above still applies, except "week 1" in the rules means the first week of your proposal.
+- adjust.block is the block and its original intent (goals, goalTags, summary). Keep its arc toward
+  the race: do not restart the build.
+- adjust.elapsed is planned vs done so far, week by week. Read it closely: what I skipped, what was
+  cut short or exceeded, where effort or heart rate ran high ("done" null = not trained).
+- adjust.scheduled and deterministicProposal are the weeks still planned (not arithmetic from last
+  week's sets): the plan you are revising, not a mechanical guess. Keep what is working and change
+  what the evidence says to change; don't rewrite for its own sake.
+- week_number values continue the block's numbering exactly as deterministicProposal gives them.
+- The "summary" says what changed and why, in a sentence.
+
 HARD RULES — BREAK ONE AND THE IMPORT FAILS
 
 1. Return every week in deterministicProposal.weeks, in the same order, with the same
-   week_number values (1..N — each plan is a fresh block, so numbering restarts at 1). Don't add weeks, don't drop weeks.
+   week_number values (with adjust, exactly as given; otherwise 1..N— each plan is a fresh block, so numbering restarts at 1). Don't add weeks, don't drop weeks.
 2. Every week may contain daysPerWeek sessions, or up to two fewer (at least 1) — room for a
    deload, taper, race week or a lighter week. Never more, never zero. Count them before you
    answer; this is the most common failure.

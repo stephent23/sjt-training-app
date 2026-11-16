@@ -6,6 +6,7 @@
 // persists whatever comes back.
 
 import { addDaysIso, daysBetweenIso, weekStartOnOrAfter, weekStartOnOrBefore } from './dates';
+import { adjustStartError, buildAdjustContext, loadBlock } from './adjustContext';
 import { deleteSessionStatements } from './sessionDelete';
 import { sqlIn } from './sql';
 import { progressExercise, type ExercisePrescription, type LoggedSetForProgression } from './progression';
@@ -14,6 +15,7 @@ import { parseGoalTags, RUN_TYPES } from './types';
 import type { RaceContext } from './raceContext';
 import type { TrainingSummary } from './trainingSummary';
 import type {
+	AdjustContext,
 	Exercise,
 	LoggedRunEntry,
 	LoggedSetEntry,
@@ -101,6 +103,10 @@ export interface ExportPayload extends ExportContext, RaceContext {
 	trainingSummary: TrainingSummary;
 	/** The owner's own words after sessions in the last RUN_HISTORY_WEEKS, newest first. */
 	sessionNotes: SessionNote[];
+	/** Only when revising a block in progress (?adjust=<blockId>): the block, what
+	 * happened so far and what is still scheduled. deterministicProposal.weeks are
+	 * then the scheduled weeks, numbered to continue the block. */
+	adjust?: AdjustContext;
 }
 
 export interface SessionNote {
@@ -507,6 +513,32 @@ export async function buildExportContext(
  */
 export async function generateNextWeeks(db: D1Database, weekCount: number, today: string, startDate?: string): Promise<ExportContext> {
 	return buildExportContext(db, weekCount, today, startDate);
+}
+
+/**
+ * The export context for revising block `blockId` from `startDate`: the usual
+ * context (history, catalogue, pain flags) with the deterministic weeks replaced
+ * by what is actually scheduled (see buildAdjustContext). Also what importProposal
+ * rebuilds to validate against, so the two can't disagree.
+ */
+export async function buildAdjustExport(
+	db: D1Database,
+	blockId: number,
+	weekCount: number,
+	today: string,
+	startDate: string,
+): Promise<{ ok: true; context: ExportContext; adjust: AdjustContext } | { ok: false; status: 400 | 404; error: string }> {
+	const block = await loadBlock(db, blockId);
+	if (!block) return { ok: false, status: 404, error: 'block not found' };
+	const startError = adjustStartError(block, startDate, today);
+	if (startError) return { ok: false, status: 400, error: startError };
+
+	const [base, built] = await Promise.all([buildExportContext(db, weekCount, today, startDate), buildAdjustContext(db, block, weekCount, startDate)]);
+	return {
+		ok: true,
+		context: { ...base, deterministicProposal: { weeks: built.weeks }, reasons: {}, skippedSessions: [] },
+		adjust: built.adjust,
+	};
 }
 
 const MAX_SUMMARY_CHARS = 1500;
@@ -985,6 +1017,7 @@ export async function importProposal(
 	today: string,
 	replace = false,
 	source: 'external-import' | 'live-api' = 'external-import',
+	adjustBlockId: number | null = null,
 ): Promise<ImportResult> {
 	if (input.weeks.length === 0) {
 		return { ok: false, errors: ['proposal must include at least one week'] };
@@ -1006,9 +1039,25 @@ export async function importProposal(
 	// readable date falls back to the default and fails structural validation.
 	const firstDates = (input.weeks[0]?.sessions ?? []).map((s) => s?.date).filter((d): d is string => isRealIsoDate(d));
 	const startDate = firstDates.length > 0 ? weekStartOnOrBefore(firstDates.reduce((a, b) => (a < b ? a : b))) : undefined;
-	const context = await buildExportContext(db, input.weeks.length, today, startDate);
+	let context: ExportContext;
+	const numberingErrors: string[] = [];
+	if (adjustBlockId === null) {
+		context = await buildExportContext(db, input.weeks.length, today, startDate);
+	} else {
+		// Revising a block: validate against the weeks still scheduled in it, and
+		// require the numbering to continue the block's.
+		const built = await buildAdjustExport(db, adjustBlockId, input.weeks.length, today, startDate ?? weekStartOnOrAfter(today));
+		if (!built.ok) return { ok: false, errors: [built.error] };
+		context = built.context;
+		input.weeks.forEach((week, index) => {
+			const expected = built.adjust.firstWeekNumber + index;
+			if (week.week_number !== expected) {
+				numberingErrors.push(`week at index ${index} has week_number ${JSON.stringify(week.week_number)} — this plan continues ${built.adjust.block.name}, so it must be ${expected}`);
+			}
+		});
+	}
 	const { results: raceRows } = await db.prepare(`SELECT date FROM races`).all<{ date: string }>();
-	const errors = validateProposal(input, context, new Set(raceRows.map((r) => r.date)));
+	const errors = [...validateProposal(input, context, new Set(raceRows.map((r) => r.date))), ...numberingErrors];
 	if (errors.length > 0) {
 		return { ok: false, errors };
 	}
@@ -1043,9 +1092,9 @@ export async function importProposal(
 	statements.push(
 		db
 			.prepare(
-				`INSERT INTO generated_plans (first_week_number, week_count, plan_json, deterministic_json, source) VALUES (?, ?, ?, ?, ?) RETURNING id`,
+				`INSERT INTO generated_plans (first_week_number, week_count, plan_json, deterministic_json, source, block_id) VALUES (?, ?, ?, ?, ?, ?) RETURNING id`,
 			)
-			.bind(input.weeks[0].week_number, input.weeks.length, JSON.stringify(hydrated), JSON.stringify(context.deterministicProposal), source),
+			.bind(input.weeks[0].week_number, input.weeks.length, JSON.stringify(hydrated), JSON.stringify(context.deterministicProposal), source, adjustBlockId),
 	);
 
 	const results = await db.batch<{ id: number }>(statements);
@@ -1086,16 +1135,23 @@ export async function insertWeeksFromProposal(
 	db: D1Database,
 	plan: MultiWeekProposal,
 	generatedPlanId: number | null = null,
+	adjustBlockId: number | null = null,
 ): Promise<{ ok: true } | { ok: false; errors: string[] }> {
-	// Accepting a plan starts a new block, so its weeks are numbered 1..N by
-	// position whatever the proposal said (the export already numbers them that
-	// way; this just makes a stale or hand-edited numbering harmless).
-	const flattened = plan.weeks.flatMap((week, weekIndex) => week.sessions.map((session) => ({ session, week_number: weekIndex + 1 })));
+	// A new-block plan is numbered 1..N by position whatever the proposal said
+	// (the export already numbers them that way; this just makes a stale or
+	// hand-edited numbering harmless). A plan revising a block continues the
+	// block's numbering from the week the proposal starts at (import enforced it).
+	const firstWeek = adjustBlockId === null ? 1 : Math.max(1, plan.weeks[0]?.week_number ?? 1);
+	const flattened = plan.weeks.flatMap((week, weekIndex) => week.sessions.map((session) => ({ session, week_number: firstWeek + weekIndex })));
 	if (flattened.length === 0) return { ok: true };
+
+	if (adjustBlockId !== null && !(await loadBlock(db, adjustBlockId))) {
+		return { ok: false, errors: ['The block this plan revises no longer exists.'] };
+	}
 
 	const span = proposalDateSpan(flattened.map(({ session }) => session));
 	if (span) {
-		const { replaceableIds, protectedDates } = await findReplaceableSessions(db, span.first, span.last);
+		const { replaceableIds, protectedDates } = await replaceableForPlan(db, span, adjustBlockId);
 		if (protectedDates.length > 0) {
 			return { ok: false, errors: protectedDates.map((d) => `${d} already has training you've done — the plan can't overwrite it`) };
 		}
@@ -1103,20 +1159,25 @@ export async function insertWeeksFromProposal(
 		if (deleteStatements.length > 0) await db.batch(deleteStatements);
 	}
 
-	// The block row: named by position, with the goals as they stand right now.
 	const startDate = weekStartOnOrBefore(span!.first); // flattened is non-empty, so a span exists
-	const block = await db
-		.prepare(
-			`INSERT INTO plan_blocks (name, start_date, week_count, goals, goal_tags, generated_plan_id)
-			 SELECT 'Block ' || ((SELECT COUNT(*) FROM plan_blocks) + 1), ?1, ?2,
-			        COALESCE((SELECT goals FROM settings WHERE id = 1), ''),
-			        COALESCE((SELECT goal_tags FROM settings WHERE id = 1), '[]'),
-			        ?3
-			 RETURNING id`,
-		)
-		.bind(startDate, plan.weeks.length, generatedPlanId)
-		.first<{ id: number }>();
-	const blockId = block!.id;
+	let blockId: number;
+	if (adjustBlockId !== null) {
+		blockId = adjustBlockId; // the block row is kept; week_count is settled after the inserts
+	} else {
+		// The block row: named by position, with the goals as they stand right now.
+		const block = await db
+			.prepare(
+				`INSERT INTO plan_blocks (name, start_date, week_count, goals, goal_tags, generated_plan_id)
+				 SELECT 'Block ' || ((SELECT COUNT(*) FROM plan_blocks) + 1), ?1, ?2,
+				        COALESCE((SELECT goals FROM settings WHERE id = 1), ''),
+				        COALESCE((SELECT goal_tags FROM settings WHERE id = 1), '[]'),
+				        ?3
+				 RETURNING id`,
+			)
+			.bind(startDate, plan.weeks.length, generatedPlanId)
+			.first<{ id: number }>();
+		blockId = block!.id;
+	}
 
 	const sessionRows = await db.batch<{ id: number }>(
 		flattened.map(({ session, week_number }) =>
@@ -1170,15 +1231,54 @@ export async function insertWeeksFromProposal(
 	});
 
 	if (children.length > 0) await db.batch(children);
+
+	if (adjustBlockId !== null) {
+		// The block now ends with the plan's last week — unless a trained session
+		// (never deleted) sits in a later week, which keeps that week in the block.
+		await db
+			.prepare(
+				`UPDATE plan_blocks SET week_count = MAX(?1, COALESCE((SELECT MAX(week_number) FROM sessions WHERE block_id = ?2), 1)) WHERE id = ?2`,
+			)
+			.bind(firstWeek - 1 + plan.weeks.length, adjustBlockId)
+			.run();
+	}
 	return { ok: true };
+}
+
+/** What accepting a plan over `span` would delete, and the trained dates that
+ * forbid it. A new-block plan replaces the untouched sessions inside its span.
+ * A plan revising a block also replaces that block's untouched sessions from the
+ * plan's start Monday on, so a shortened block keeps no stale tail. */
+async function replaceableForPlan(
+	db: D1Database,
+	span: { first: string; last: string },
+	adjustBlockId: number | null,
+): Promise<{ replaceableIds: number[]; protectedDates: string[] }> {
+	const found = await findReplaceableSessions(db, span.first, span.last);
+	if (adjustBlockId === null || found.protectedDates.length > 0) return found;
+
+	const { results } = await db
+		.prepare(
+			`SELECT s.id FROM sessions s
+			 WHERE s.block_id = ?1 AND s.date >= ?2 AND s.status = 'planned'
+			   AND NOT EXISTS (SELECT 1 FROM logged_sets ls WHERE ls.session_id = s.id)
+			   AND NOT EXISTS (SELECT 1 FROM logged_runs lr WHERE lr.session_id = s.id)`,
+		)
+		.bind(adjustBlockId, weekStartOnOrBefore(span.first))
+		.all<{ id: number }>();
+	return { replaceableIds: [...new Set([...found.replaceableIds, ...results.map((r) => r.id)])], protectedDates: [] };
 }
 
 /** How many untouched planned sessions accepting `plan` would replace, and the
  * date it starts on — the one-line outcome the review screen states before you
  * commit. Same span rule as accept, without writing anything. */
-export async function describeAcceptOutcome(db: D1Database, plan: MultiWeekProposal): Promise<{ replaces: number; start_date: string | null }> {
+export async function describeAcceptOutcome(
+	db: D1Database,
+	plan: MultiWeekProposal,
+	adjustBlockId: number | null = null,
+): Promise<{ replaces: number; start_date: string | null }> {
 	const span = proposalDateSpan(plan.weeks.flatMap((w) => w.sessions));
 	if (!span) return { replaces: 0, start_date: null };
-	const { replaceableIds } = await findReplaceableSessions(db, span.first, span.last);
+	const { replaceableIds } = await replaceableForPlan(db, span, adjustBlockId);
 	return { replaces: replaceableIds.length, start_date: weekStartOnOrBefore(span.first) };
 }

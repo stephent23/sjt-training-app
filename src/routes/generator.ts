@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
+import { findActiveBlock } from '../adjustContext';
 import { isMondayIso, todayIso, weekStartOnOrAfter } from '../dates';
-import { buildSessionNotes, describeAcceptOutcome, generateNextWeeks, importProposal, insertWeeksFromProposal, type ExportPayload } from '../generator';
+import { buildAdjustExport, buildSessionNotes, describeAcceptOutcome, generateNextWeeks, importProposal, insertWeeksFromProposal, type ExportPayload } from '../generator';
 import { buildRaceContext } from '../raceContext';
 import { buildTrainingSummary } from '../trainingSummary';
 import { ATHLETE_FIELDS, type Athlete, type MultiWeekProposal, type MultiWeekProposalInput, type Race } from '../types';
@@ -19,6 +20,7 @@ interface GeneratedPlanRow {
 	deterministic_json: string;
 	source: string;
 	reviewed_at: string | null;
+	block_id: number | null;
 }
 
 const MAX_WEEKS = 12;
@@ -48,16 +50,34 @@ generator.get('/export', async (c) => {
 	}
 	const startDate = startParam ?? weekStartOnOrAfter(today);
 
+	// Adjust mode: revise the block in progress instead of starting a new one.
+	const adjustParam = c.req.query('adjust');
+	let adjustBuilt: Extract<Awaited<ReturnType<typeof buildAdjustExport>>, { ok: true }> | null = null;
+	if (adjustParam !== undefined) {
+		const blockId = Number(adjustParam);
+		if (!Number.isInteger(blockId) || blockId < 1) return c.json({ error: 'adjust must be a block id' }, 400);
+		const built = await buildAdjustExport(c.env.DB, blockId, weeks, today, startDate);
+		if (!built.ok) return c.json({ error: built.error }, built.status);
+		adjustBuilt = built;
+	}
+
 	const [context, trainingSummary, raceRows, hr, sessionNotes] = await Promise.all([
-		generateNextWeeks(c.env.DB, weeks, today, startDate),
+		adjustBuilt ? adjustBuilt.context : generateNextWeeks(c.env.DB, weeks, today, startDate),
 		buildTrainingSummary(c.env.DB, today),
 		c.env.DB.prepare(`SELECT id, name, date, distance_km, target_seconds, result_seconds, priority FROM races`).all<Race>(),
 		c.env.DB.prepare(`SELECT ${ATHLETE_KEYS.join(', ')} FROM settings WHERE id = 1`).first<Athlete>(),
 		buildSessionNotes(c.env.DB, today),
 	]);
+	const raceContext = buildRaceContext(raceRows.results, today, { startDate, weeks });
+	if (adjustBuilt) {
+		// block_week counts from the plan's first week; the block's numbering continues.
+		const offset = adjustBuilt.adjust.firstWeekNumber - 1;
+		raceContext.races = raceContext.races.map((r) => (r.block_week === null ? r : { ...r, block_week: r.block_week + offset }));
+	}
 	const payload: ExportPayload = {
 		...context,
-		...buildRaceContext(raceRows.results, today, { startDate, weeks }),
+		...raceContext,
+		...(adjustBuilt ? { adjust: adjustBuilt.adjust } : {}),
 		athlete: Object.fromEntries(ATHLETE_KEYS.map((key) => [key, hr?.[key] ?? null])) as Athlete,
 		today,
 		weekStartDate: startDate,
@@ -74,7 +94,10 @@ generator.get('/export', async (c) => {
 generator.post('/import', async (c) => {
 	const body = await c.req.json<MultiWeekProposalInput>();
 	const source = c.req.query('source') === 'live-api' || c.req.header('X-Source') === 'live-api' ? 'live-api' : 'external-import';
-	const result = await importProposal(c.env.DB, body, todayIso(), c.req.query('replace') === 'true', source);
+	const adjustParam = c.req.query('adjust');
+	const adjustBlockId = adjustParam === undefined ? null : Number(adjustParam);
+	if (adjustBlockId !== null && (!Number.isInteger(adjustBlockId) || adjustBlockId < 1)) return c.json({ error: 'adjust must be a block id' }, 400);
+	const result = await importProposal(c.env.DB, body, todayIso(), c.req.query('replace') === 'true', source, adjustBlockId);
 	// `errors` is the list; `error` is the same thing joined, kept because it is
 	// what every existing caller reads. The list is what lets the UI show one
 	// line per problem, and hand them all back to the assistant that caused them.
@@ -82,11 +105,16 @@ generator.post('/import', async (c) => {
 	return c.json({ id: result.id });
 });
 
+// The block in progress, if any — what New plan offers to adjust.
+generator.get('/active-block', async (c) => c.json({ block: await findActiveBlock(c.env.DB, todayIso()) }));
+
 generator.get('/pending', async (c) => {
 	const row = await c.env.DB.prepare(`SELECT * FROM generated_plans WHERE status = 'pending' ORDER BY id DESC LIMIT 1`).first<GeneratedPlanRow>();
 	if (!row) return c.json({ pending: null });
 
 	const plan = JSON.parse(row.plan_json) as MultiWeekProposal;
+	const block =
+		row.block_id === null ? null : await c.env.DB.prepare(`SELECT id, name, week_count FROM plan_blocks WHERE id = ?`).bind(row.block_id).first<{ id: number; name: string; week_count: number }>();
 	return c.json({
 		pending: {
 			id: row.id,
@@ -97,7 +125,8 @@ generator.get('/pending', async (c) => {
 			// What the mechanical pass proposed (so the review can show what the
 			// assistant changed), and what accepting would replace.
 			deterministic: JSON.parse(row.deterministic_json) as MultiWeekProposalInput,
-			...(await describeAcceptOutcome(c.env.DB, plan)),
+			...(await describeAcceptOutcome(c.env.DB, plan, row.block_id)),
+			block,
 		},
 	});
 });
@@ -108,7 +137,7 @@ generator.post('/:id/accept', async (c) => {
 	if (!row) return c.json({ error: 'not found' }, 404);
 
 	const plan = JSON.parse(row.plan_json) as MultiWeekProposal;
-	const result = await insertWeeksFromProposal(c.env.DB, plan, id);
+	const result = await insertWeeksFromProposal(c.env.DB, plan, id, row.block_id);
 	if (!result.ok) return c.json({ error: result.errors.join('; '), errors: result.errors }, 409);
 
 	await c.env.DB.prepare(`UPDATE generated_plans SET status = 'accepted', reviewed_at = datetime('now') WHERE id = ?`).bind(id).run();

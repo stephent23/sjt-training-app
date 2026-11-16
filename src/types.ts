@@ -17,6 +17,53 @@ export type PlannedSetStatus = 'planned' | 'skipped';
  * week — see migrations/0008_manual_runs.sql. */
 export type SessionOrigin = 'planned' | 'manual';
 
+/** A block in progress, as New plan offers it for adjusting (migrations 0010 and
+ * 0013). `next_monday` is where an adjustment starts (today if it is a Monday);
+ * `weeks_remaining` counts the block's weeks from there on, so 0 means the block
+ * ends before then and there is nothing left to adjust. */
+export interface ActiveBlock {
+	id: number;
+	name: string;
+	start_date: string;
+	week_count: number;
+	/** 1..week_count: the block week that contains today. */
+	current_week: number;
+	weeks_remaining: number;
+	next_monday: string;
+	/** The assistant's coaching note from the plan that created the block, if any. */
+	summary: string | null;
+}
+
+/** One session of a block, as the assistant sees it when revising: what was
+ * planned, and — if it was trained — what actually happened. Plain strings on
+ * purpose: this is read by a model, not computed on. */
+export interface AdjustSession {
+	date: string;
+	kind: 'lift' | 'run';
+	label: string;
+	status: SessionStatus;
+	/** e.g. "Goblet squat 3x8-10 @24kg; DB press 3x6-10 @22kg" or "long run 12 km". */
+	planned: string;
+	/** e.g. "Goblet squat 24kg x10/9/8 (RIR 1-3)" or "12.4 km in 1:08:10, RPE 6, avg HR 151"; null if not trained. */
+	done: string | null;
+}
+
+export interface AdjustWeek {
+	week_number: number;
+	sessions: AdjustSession[];
+}
+
+/** Sent with the export when adjusting a block in progress. */
+export interface AdjustContext {
+	block: { id: number; name: string; start_date: string; week_count: number; goals: string; goal_tags: string[]; summary: string | null };
+	/** The block week the revised plan's first week takes (the weeks continue the block's numbering). */
+	firstWeekNumber: number;
+	/** Weeks (or part-weeks) already past, planned against actual. */
+	elapsed: AdjustWeek[];
+	/** The weeks still scheduled from the start date on — the plan being revised. */
+	scheduled: AdjustWeek[];
+}
+
 export interface Exercise {
 	id: number;
 	name: string;
