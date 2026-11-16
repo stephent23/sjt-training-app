@@ -735,9 +735,21 @@ a.plan-row {
    is why .panel is declared after this block (ExerciseCard.tsx relies on that
    order). */
 .exercise-card--superset {
-	border-left: 3px solid var(--ink);
-	padding-left: var(--s3);
-	margin-left: calc(-1 * var(--s3) - 3px);
+	position: relative;
+}
+
+/* The bar hangs in the screen's side gutter. It is drawn, not a border pushed
+   out with a negative margin: .row is width: 100%, so shifting the box left
+   left its right edge 15px short of every other row — divider and chevron
+   stopped early. */
+.exercise-card--superset::before {
+	content: '';
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	left: calc(-1 * var(--s3) - 3px);
+	width: 3px;
+	background: var(--ink);
 }
 
 /* Member names stack in the summary, so they wrap rather than inherit
@@ -2898,6 +2910,34 @@ summary:focus-visible,
 		box-sizing: border-box;
 		width: 100%;
 		padding-bottom: 0;
+	}
+	/* The proposal review's decision bar (.rv-bar) is one level down, inside
+	   .review, so .review takes the free space and pushes the bar to its foot. */
+	.shell-content:has(.rv-bar) {
+		display: flex;
+		flex-direction: column;
+	}
+	.screen:has(.rv-bar) {
+		display: flex;
+		flex-direction: column;
+		flex: 1 0 auto;
+		box-sizing: border-box;
+		width: 100%;
+		padding-bottom: 0;
+	}
+	.screen:has(.rv-bar) > .review {
+		display: flex;
+		flex-direction: column;
+		flex: 1 0 auto;
+	}
+	/* Margins don't collapse inside a flex column: the note's bottom margin used
+	   to merge with the first card's top margin. Keep the same single gap. */
+	.review > .review-note {
+		margin-bottom: 0;
+	}
+	.review > .rv-bar {
+		margin-top: auto;
+		box-shadow: 0 calc(-1 * var(--s4)) 0 var(--bg);
 	}
 	.screen > .back-btn {
 		align-self: flex-start;
