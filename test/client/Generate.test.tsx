@@ -156,3 +156,102 @@ describe('Review marks', () => {
 		expect(root.textContent).not.toContain('speculative');
 	});
 });
+
+describe('Adjust the current block', () => {
+	const block = {
+		id: 7,
+		name: 'Block 2',
+		start_date: '2026-10-26',
+		week_count: 8,
+		current_week: 4,
+		weeks_remaining: 4,
+		next_monday: '2026-11-23',
+		summary: null,
+	};
+
+	function stubWithBlock(activeBlock: unknown, pending: unknown = null) {
+		const fetchMock = stubApi(pending);
+		const base = fetchMock.getMockImplementation()!;
+		fetchMock.mockImplementation(async (url: string, init?: unknown) => {
+			if (url === '/api/generator/active-block') {
+				if (activeBlock instanceof Error) throw activeBlock;
+				return json({ block: activeBlock });
+			}
+			if (url.startsWith('/api/generator/import')) return json({ id: 9 });
+			return base(url, init as never);
+		});
+		return fetchMock;
+	}
+
+	const urls = (m: ReturnType<typeof stubApi>, prefix: string) => m.mock.calls.map((c) => String(c[0])).filter((u) => u.startsWith(prefix));
+
+	it('offers the choice with Adjust selected, and no start picker', async () => {
+		stubWithBlock(block);
+		const root = await mount();
+		await waitFor(() => root.querySelector('.mode-row') !== null);
+		expect(button(root, 'Adjust Block 2').getAttribute('aria-pressed')).toBe('true');
+		expect(button(root, 'New block').getAttribute('aria-pressed')).toBe('false');
+		expect(root.querySelector('.start-row')).toBeNull();
+		expect(root.textContent).toContain('Revises weeks 5–8 of Block 2, from Mon 23 Nov');
+		expect(root.querySelector('.weeks-control-value')!.textContent).toContain('4');
+		expect(root.textContent).toContain('Block ends Sun 20 Dec');
+	});
+
+	it('exports and imports against the block, and New block restores today’s URLs', async () => {
+		const fetchMock = stubWithBlock(block);
+		const root = await mount();
+		await waitFor(() => root.querySelector('.mode-row') !== null);
+		await waitFor(() => urls(fetchMock, '/api/generator/export').some((u) => u.includes('adjust=7')));
+		expect(urls(fetchMock, '/api/generator/export')).toContain('/api/generator/export?weeks=4&adjust=7&startDate=2026-11-23');
+
+		vi.stubGlobal('navigator', { ...navigator, clipboard: { readText: async () => JSON.stringify({ weeks: [] }) } });
+		button(root, 'Paste Claude').click();
+		await waitFor(() => urls(fetchMock, '/api/generator/import').length > 0);
+		expect(urls(fetchMock, '/api/generator/import')[0]).toBe('/api/generator/import?adjust=7');
+
+		button(root, 'New block').click();
+		await waitFor(() => urls(fetchMock, '/api/generator/export').some((u) => !u.includes('adjust')));
+		expect(urls(fetchMock, '/api/generator/export').pop()).toMatch(/^\/api\/generator\/export\?weeks=8&startDate=\d{4}-\d\d-\d\d$/);
+		expect(root.querySelector('.start-row')).not.toBeNull();
+		expect(JSON.parse(localStorage.getItem('generate-plan-v2')!).mode).toBe('new');
+	});
+
+	it('shows no choice without an active block, with none left, or when the lookup fails', async () => {
+		for (const active of [null, { ...block, weeks_remaining: 0 }, new Error('offline')]) {
+			stubWithBlock(active);
+			const root = await mount();
+			await tick();
+			await tick();
+			expect(root.querySelector('.mode-row')).toBeNull();
+			expect(root.querySelector('.start-row')).not.toBeNull();
+			render(null, container!);
+			container!.remove();
+			container = null;
+			vi.unstubAllGlobals();
+		}
+	});
+
+	it('titles an adjusting plan with the block’s own week numbers and says it was updated', async () => {
+		const fetchMock = stubWithBlock(null, {
+			...pendingPlan,
+			first_week_number: 5,
+			week_count: 2,
+			block: { id: 7, name: 'Block 2', week_count: 8 },
+			plan: { ...pendingPlan.plan, weeks: pendingPlan.plan.weeks.map((w, i) => ({ ...w, week_number: 5 + i })) },
+		});
+		const root = await mount();
+		expect(root.querySelector('.rv-block-line')!.textContent).toBe('Updates Block 2 — weeks 5–6');
+		expect([...root.querySelectorAll('.proposal-week-title')].map((e) => e.textContent)).toEqual(['Week 5 of 8', 'Week 6 of 8deload']);
+		fetchMock.mockImplementation(async (url: string) => (url.endsWith('/accept') ? json({ ok: true }) : json({ pending: null })));
+		button(root, 'Accept').click();
+		await waitFor(() => root.querySelector('.done-card') !== null);
+		expect(root.querySelector('.done-card')!.textContent).toContain('Block 2 updated');
+	});
+
+	it('leaves a new-block plan looking as before', async () => {
+		stubWithBlock(block, pendingPlan);
+		const root = await mount();
+		expect(root.querySelector('.rv-block-line')).toBeNull();
+		expect(root.querySelector('.proposal-week-title')!.textContent).toBe('Week 1 of 2');
+	});
+});

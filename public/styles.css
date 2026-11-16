@@ -3089,3 +3089,20 @@ summary:focus-visible,
 .rv-unskip {
 	margin-left: calc(-1 * var(--s1));
 }
+
+/* ---- Adjust current block (New plan mode choice, review header) ---- */
+.mode-row {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: var(--s2);
+}
+
+.mode-row .tap-btn {
+	min-height: 48px;
+	line-height: 1.25;
+}
+
+.rv-block-line {
+	margin: 0;
+	font-weight: 600;
+}

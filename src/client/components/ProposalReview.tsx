@@ -10,6 +10,9 @@ interface ProposalReviewProps {
 	/** Untouched planned sessions accepting would replace, and the Monday it starts. */
 	replaces?: number;
 	startDate?: string | null;
+	/** Set when the plan revises a block in progress; weeks then carry the block's own numbers. */
+	block?: { name: string; week_count: number } | null;
+	firstWeekNumber?: number;
 	busy: boolean;
 	onAccept: () => void;
 	onReject: () => void;
@@ -123,7 +126,7 @@ function SessionRow({ session, baseline }: { session: ProposedSession; baseline:
 // that is real arithmetic and the rest are the assistant's judgement over it.
 // Accept/reject is whole-proposal, not per-week, and lives in a bar that stays
 // on screen however far down the weeks you have scrolled.
-export function ProposalReview({ proposal, deterministic, replaces, startDate, busy, onAccept, onReject }: ProposalReviewProps) {
+export function ProposalReview({ proposal, deterministic, replaces, startDate, block, firstWeekNumber = 1, busy, onAccept, onReject }: ProposalReviewProps) {
 	const [open, setOpen] = useState<Set<number>>(() => new Set([0]));
 	const toggle = (i: number) =>
 		setOpen((current) => {
@@ -144,6 +147,11 @@ export function ProposalReview({ proposal, deterministic, replaces, startDate, b
 
 	return (
 		<div class="review">
+			{block && (
+				<p class="rv-block-line">
+					Updates {block.name} — {proposal.weeks.length === 1 ? `week ${firstWeekNumber}` : `weeks ${firstWeekNumber}–${firstWeekNumber + proposal.weeks.length - 1}`}
+				</p>
+			)}
 			{typeof proposal.summary === 'string' && proposal.summary.trim() !== '' && <p class="card review-note">{proposal.summary.trim()}</p>}
 
 			{proposal.weeks.map((week, weekIndex) => {
@@ -158,7 +166,7 @@ export function ProposalReview({ proposal, deterministic, replaces, startDate, b
 						<button type="button" class="rv-week-head" aria-expanded={isOpen} onClick={() => toggle(weekIndex)}>
 							<span class="rv-week-main">
 								<span class="section-heading proposal-week-title">
-									Week {weekIndex + 1} of {proposal.weeks.length}
+									{block ? `Week ${firstWeekNumber + weekIndex} of ${block.week_count}` : `Week ${weekIndex + 1} of ${proposal.weeks.length}`}
 									{week.focus && <span class="badge badge--accent">{week.focus}</span>}
 								</span>
 								<span class="rv-session-meta">

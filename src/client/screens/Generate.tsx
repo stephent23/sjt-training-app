@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'preact/hooks';
 import { todayIso, weekStartOnOrAfter } from '../../dates';
-import { acceptProposal, fetchPendingProposal, fetchRaces, fetchSettings, rejectProposal, type PendingProposal } from '../api';
+import { acceptProposal, fetchActiveBlock, fetchPendingProposal, fetchRaces, fetchSettings, rejectProposal, type PendingProposal } from '../api';
 import { PlanRequest } from '../components/GenerateFlow';
 import { Icon } from '../components/Icon';
-import { DEFAULT_WEEKS, blockEndLine, StartPicker, startDateError, WeeksControl } from '../components/PlanSetup';
+import { DEFAULT_WEEKS, adjustLengthLine, adjustRangeLine, blockEndLine, StartPicker, startDateError, WeeksControl } from '../components/PlanSetup';
 import { ProposalReview } from '../components/ProposalReview';
 import { goalsSummary } from '../goalsSummary';
-import type { Race } from '../../types';
+import type { ActiveBlock, Race } from '../../types';
 
 const STORAGE_KEY = 'generate-plan-v2';
 
@@ -15,10 +15,14 @@ interface Saved {
 	startDate: string;
 	/** Step 1 done — so coming back from the Claude app shows step 2 ready. */
 	asked: boolean;
+	/** Revise the block in progress, or start a new one. Only offered while a block is in progress. */
+	mode: 'adjust' | 'new';
+	/** Length when adjusting; null means "whatever is left of the block". */
+	adjustWeeks: number | null;
 }
 
 function defaults(): Saved {
-	return { weeks: DEFAULT_WEEKS, startDate: weekStartOnOrAfter(todayIso()), asked: false };
+	return { weeks: DEFAULT_WEEKS, startDate: weekStartOnOrAfter(todayIso()), asked: false, mode: 'adjust', adjustWeeks: null };
 }
 
 /** Last saved answers. Storage can be missing, blocked or hold junk (private
@@ -31,7 +35,8 @@ function load(): Saved {
 		if (!raw) return fresh;
 		const weeks = Number.isInteger(raw.weeks) && raw.weeks! >= 1 && raw.weeks! <= 12 ? raw.weeks! : fresh.weeks;
 		const startDate = typeof raw.startDate === 'string' && startDateError(raw.startDate) === null ? raw.startDate : fresh.startDate;
-		return { weeks, startDate, asked: raw.asked === true && startDate === raw.startDate };
+		const adjustWeeks = Number.isInteger(raw.adjustWeeks) && raw.adjustWeeks! >= 1 && raw.adjustWeeks! <= 12 ? raw.adjustWeeks! : null;
+		return { weeks, startDate, asked: raw.asked === true && startDate === raw.startDate, mode: raw.mode === 'new' ? 'new' : 'adjust', adjustWeeks };
 	} catch {
 		return fresh;
 	}
@@ -54,9 +59,14 @@ export function Generate() {
 	const [error, setError] = useState<string | null>(null);
 	const [retryToken, setRetryToken] = useState(0);
 	const [busy, setBusy] = useState(false);
-	const [accepted, setAccepted] = useState(false);
+	const [accepted, setAccepted] = useState<{ updated: string | null } | null>(null);
+	const [block, setBlock] = useState<ActiveBlock | null>(null);
 
 	const { weeks, startDate, asked } = saved;
+	// Adjusting is only on offer while the block has weeks left to revise.
+	const canAdjust = block !== null && block.weeks_remaining > 0;
+	const adjusting = canAdjust && saved.mode === 'adjust';
+	const adjustLen = adjusting ? (saved.adjustWeeks ?? block.weeks_remaining) : weeks;
 	// Changing what is asked for makes a previous "asked" stale unless told otherwise.
 	const update = (patch: Partial<Saved>, keepAsked = false) =>
 		setSaved((current) => {
@@ -75,6 +85,20 @@ export function Generate() {
 			})
 			.catch(() => {
 				if (!cancelled) setError('Could not load the plan.');
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [retryToken]);
+
+	useEffect(() => {
+		let cancelled = false;
+		fetchActiveBlock()
+			.then((result) => {
+				if (!cancelled) setBlock(result);
+			})
+			.catch(() => {
+				// No choice shown: New plan behaves as it always has.
 			});
 		return () => {
 			cancelled = true;
@@ -132,7 +156,7 @@ export function Generate() {
 			save(null);
 			setProposal(null);
 			setSaved(defaults());
-			setAccepted(true);
+			setAccepted({ updated: proposal.block?.name ?? null });
 			setRetryToken((t) => t + 1);
 		} catch {
 			setError('Could not accept that plan — try again.');
@@ -159,7 +183,7 @@ export function Generate() {
 			<main class="screen">
 				<h1>New plan</h1>
 				<section class="card done-card" role="status">
-					<h2 class="section-heading">Plan accepted</h2>
+					<h2 class="section-heading">{accepted.updated ? `${accepted.updated} updated` : 'Plan accepted'}</h2>
 					<a class="btn-primary" href="#/plan" role="button">
 						See the plan
 					</a>
@@ -177,6 +201,8 @@ export function Generate() {
 					deterministic={proposal.deterministic}
 					replaces={proposal.replaces}
 					startDate={proposal.start_date}
+					block={proposal.block}
+					firstWeekNumber={proposal.first_week_number}
 					busy={busy}
 					onAccept={handleAccept}
 					onReject={handleReject}
@@ -196,18 +222,46 @@ export function Generate() {
 				<Icon name="chevron-right" />
 			</a>
 
+			{canAdjust && (
+				<div class="tap-row mode-row" role="group" aria-label="What to plan">
+					{(['adjust', 'new'] as const).map((m) => (
+						<button
+							key={m}
+							type="button"
+							class={`tap-btn ${saved.mode === m ? 'tap-btn--selected' : ''}`}
+							aria-pressed={saved.mode === m}
+							onClick={() => saved.mode !== m && update({ mode: m })}
+						>
+							{m === 'adjust' ? `Adjust ${block.name}` : 'New block'}
+						</button>
+					))}
+				</div>
+			)}
+
 			<section class="card plan-setup">
-				<h2 class="section-heading">Starts</h2>
-				<StartPicker value={startDate} onChange={(d) => update({ startDate: d })} />
-				<h2 class="section-heading">Length</h2>
-				<WeeksControl value={weeks} onChange={(w) => update({ weeks: w })} />
-				<p class="rv-session-meta">{blockEndLine(startDate, weeks, races, todayIso())}</p>
+				{adjusting ? (
+					<>
+						<p class="rv-session-meta">{adjustRangeLine(block, adjustLen)}</p>
+						<h2 class="section-heading">Length</h2>
+						<WeeksControl value={adjustLen} onChange={(w) => update({ adjustWeeks: w })} />
+						<p class="rv-session-meta">{adjustLengthLine(block, adjustLen)}</p>
+					</>
+				) : (
+					<>
+						<h2 class="section-heading">Starts</h2>
+						<StartPicker value={startDate} onChange={(d) => update({ startDate: d })} />
+						<h2 class="section-heading">Length</h2>
+						<WeeksControl value={weeks} onChange={(w) => update({ weeks: w })} />
+						<p class="rv-session-meta">{blockEndLine(startDate, weeks, races, todayIso())}</p>
+					</>
+				)}
 			</section>
 
 			<PlanRequest
-				weeks={weeks}
-				startDate={startDate}
-				disabled={startDateError(startDate) !== null}
+				weeks={adjustLen}
+				startDate={adjusting ? block.next_monday : startDate}
+				adjustBlockId={adjusting ? block.id : undefined}
+				disabled={!adjusting && startDateError(startDate) !== null}
 				asked={asked}
 				onAsked={() => update({ asked: true }, true)}
 				onImported={() => setRetryToken((t) => t + 1)}

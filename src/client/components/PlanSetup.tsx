@@ -1,5 +1,5 @@
 import { useState } from 'preact/hooks';
-import type { Race } from '../../types';
+import type { ActiveBlock, Race } from '../../types';
 import { addDaysIso, daysBetweenIso, isMondayIso, todayIso, weekStartOnOrAfter } from '../../dates';
 import { Icon } from './Icon';
 
@@ -102,6 +102,24 @@ export function WeeksControl({ value, onChange }: WeeksControlProps) {
 			</button>
 		</div>
 	);
+}
+
+type AdjustBlock = Pick<ActiveBlock, 'name' | 'start_date' | 'week_count' | 'weeks_remaining' | 'next_monday'>;
+
+/** "Revises weeks 5–8 of Block 2, from Mon 23 Nov": which block weeks `weeks` covers. */
+export function adjustRangeLine(block: AdjustBlock, weeks: number): string {
+	const first = block.week_count - block.weeks_remaining + 1;
+	const range = weeks === 1 ? `week ${first}` : `weeks ${first}–${first + weeks - 1}`;
+	return `Revises ${range} of ${block.name}, from ${shortDate(block.next_monday)}`;
+}
+
+/** What the chosen length does to the block: "Block ends Sun 13 Dec", "Extends the
+ * block by 2 weeks", "Shortens it by 1 week". */
+export function adjustLengthLine(block: AdjustBlock, weeks: number): string {
+	const diff = weeks - block.weeks_remaining;
+	if (diff === 0) return `Block ends ${shortDate(addDaysIso(block.start_date, block.week_count * 7 - 1))}`;
+	const n = Math.abs(diff);
+	return `${diff > 0 ? 'Extends the block by' : 'Shortens it by'} ${n} ${n === 1 ? 'week' : 'weeks'}`;
 }
 
 /** "Ends Sun 7 Feb · Brighton Half is 5 weeks later" — how the block sits

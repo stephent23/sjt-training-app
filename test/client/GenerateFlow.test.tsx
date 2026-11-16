@@ -1,7 +1,7 @@
 import { render } from 'preact';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PlanRequest } from '../../src/client/components/GenerateFlow';
-import { blockEndLine } from '../../src/client/components/PlanSetup';
+import { adjustLengthLine, adjustRangeLine, blockEndLine } from '../../src/client/components/PlanSetup';
 
 // Step 1's download used to be a bare <a href="/api/..." download>, which in the
 // installed standalone PWA saved a 0-byte file and reported nothing. These
@@ -254,5 +254,18 @@ describe('blockEndLine', () => {
 	it('names the week when the race is inside the block, and ignores finished races', () => {
 		expect(blockEndLine('2026-12-14', 10, [brighton], '2026-11-15')).toContain('falls in week 9');
 		expect(blockEndLine('2026-12-14', 8, [{ ...brighton, result_seconds: 5000 }], '2026-11-15')).toBe('Ends Sun 7 Feb');
+	});
+});
+
+describe('adjust lines', () => {
+	const block = { name: 'Block 2', start_date: '2026-10-26', week_count: 8, weeks_remaining: 4, next_monday: '2026-11-23' };
+	it('says which weeks are revised', () => {
+		expect(adjustRangeLine(block, 4)).toBe('Revises weeks 5–8 of Block 2, from Mon 23 Nov');
+		expect(adjustRangeLine(block, 1)).toBe('Revises week 5 of Block 2, from Mon 23 Nov');
+	});
+	it('says what the length does to the block', () => {
+		expect(adjustLengthLine(block, 4)).toBe('Block ends Sun 20 Dec');
+		expect(adjustLengthLine(block, 6)).toBe('Extends the block by 2 weeks');
+		expect(adjustLengthLine(block, 3)).toBe('Shortens it by 1 week');
 	});
 });

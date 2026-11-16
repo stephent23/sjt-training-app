@@ -1,4 +1,5 @@
 import type {
+	ActiveBlock,
 	ApplySwapInput,
 	Exercise,
 	Modality,
@@ -233,8 +234,10 @@ export async function updateSettings(patch: Partial<Settings>): Promise<void> {
 /** The export as raw text. Shared by the download and the copy-it-all-as-one-
  * paste button, so the two can't diverge — and the text is passed through
  * unmodified, never re-serialised. */
-export async function fetchExportText(weeks: number, startDate?: string): Promise<string> {
-	const res = await fetch(`/api/generator/export?weeks=${weeks}${startDate ? `&startDate=${startDate}` : ''}`);
+export async function fetchExportText(weeks: number, startDate?: string, adjustBlockId?: number): Promise<string> {
+	const res = await fetch(
+		`/api/generator/export?weeks=${weeks}${adjustBlockId != null ? `&adjust=${adjustBlockId}` : ''}${startDate ? `&startDate=${startDate}` : ''}`,
+	);
 	if (!res.ok) throw await errorFrom(res);
 
 	const text = await res.text();
@@ -272,6 +275,16 @@ export interface PendingProposal {
 	/** Untouched planned sessions accepting this would replace, and the Monday it starts. */
 	replaces?: number;
 	start_date?: string | null;
+	/** Set when the plan revises a block in progress rather than starting a new one. */
+	block?: { id: number; name: string; week_count: number } | null;
+}
+
+/** The block in progress, if any, for the "adjust it" option on New plan. */
+export async function fetchActiveBlock(): Promise<ActiveBlock | null> {
+	const res = await fetch('/api/generator/active-block');
+	if (!res.ok) throw new Error(`request failed: ${res.status}`);
+	const data = (await res.json()) as { block: ActiveBlock | null };
+	return data.block;
 }
 
 export async function fetchPendingProposal(): Promise<PendingProposal | null> {
@@ -292,8 +305,9 @@ export class ImportRejected extends Error {
 	}
 }
 
-export async function importProposal(input: MultiWeekProposalInput, replace = false): Promise<{ id: number }> {
-	const res = await fetch(`/api/generator/import${replace ? '?replace=true' : ''}`, {
+export async function importProposal(input: MultiWeekProposalInput, replace = false, adjustBlockId?: number): Promise<{ id: number }> {
+	const query = [adjustBlockId != null ? `adjust=${adjustBlockId}` : '', replace ? 'replace=true' : ''].filter(Boolean).join('&');
+	const res = await fetch(`/api/generator/import${query ? `?${query}` : ''}`, {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify(input),

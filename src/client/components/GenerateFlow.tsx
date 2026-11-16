@@ -38,12 +38,14 @@ interface PlanRequestProps {
 	asked: boolean;
 	onAsked: () => void;
 	onImported: () => void;
+	/** Set when revising the block in progress: the export and import both carry it. */
+	adjustBlockId?: number;
 }
 
 /** The two things this screen does: get the training data and the prompt in
  * front of an assistant ("1"), and bring its answer back ("2"). No live API call
  * anywhere — see docs/generator-design.md. */
-export function PlanRequest({ weeks, startDate, disabled, asked, onAsked, onImported }: PlanRequestProps) {
+export function PlanRequest({ weeks, startDate, disabled, asked, onAsked, onImported, adjustBlockId }: PlanRequestProps) {
 	const [status, setStatus] = useState('');
 	const [error, setError] = useState<string | null>(null);
 	const [busy, setBusy] = useState(false);
@@ -61,9 +63,9 @@ export function PlanRequest({ weeks, startDate, disabled, asked, onAsked, onImpo
 	 * browser's brief window after a tap. A failed request is dropped so the next
 	 * tap retries instead of replaying the same error forever. */
 	function exportFor(): Promise<string> {
-		const key = `${weeks}|${startDate}`;
+		const key = `${weeks}|${startDate}|${adjustBlockId ?? ''}`;
 		if (exportRequest.current?.key !== key) {
-			const text = fetchExportText(weeks, startDate);
+			const text = fetchExportText(weeks, startDate, adjustBlockId);
 			exportRequest.current = { key, text };
 			text.catch(() => {
 				if (exportRequest.current?.text === text) exportRequest.current = null;
@@ -76,7 +78,7 @@ export function PlanRequest({ weeks, startDate, disabled, asked, onAsked, onImpo
 		setError(null);
 		// A prefetch failure is shown by the action that needs it, not here.
 		exportFor().catch(() => {});
-	}, [weeks, startDate]);
+	}, [weeks, startDate, adjustBlockId]);
 
 	/** Every export action needs the text; only what it does with it differs.
 	 * It returns the line to show when done, and whether that completes step 1. */
@@ -137,7 +139,7 @@ export function PlanRequest({ weeks, startDate, disabled, asked, onAsked, onImpo
 
 		setBusy(true);
 		try {
-			await importProposal(parsed.value, replace);
+			await importProposal(parsed.value, replace, adjustBlockId);
 			setPasted('');
 			setCanReplace(false);
 			setStatus('Plan imported');
