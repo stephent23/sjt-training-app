@@ -48,7 +48,13 @@ WHAT'S IN THE FILE
 - races — my upcoming races: name, date, distance_km, priority ("A" = peak and taper for it, "B" = run it
   as training), target_seconds, target_pace_seconds_per_km (null without a target), days_until, weeks_until,
   block_week (1..N: the week of this block it falls in; null if before or after the block).
-- raceResults — past races with a result; personalBests — my fastest result per distance.
+- raceResults — ALL my past race results, however old; personalBests — my fastest per distance, over
+  all of them. Read the trajectory and consistency, treat the PB as the ceiling reference, and treat
+  results older than about a year as history, not current fitness (race_estimates uses only the last
+  year). racesWithoutTime — past races with no time recorded; informational.
+- sessionNotes — my own words about how sessions felt (date, kind, label, note; energy_1_5 if set),
+  last six weeks, newest first. Read them: a note about pain, fatigue, illness or travel outranks
+  the arithmetic.
 - athlete — { max_hr, resting_hr, vo2max, threshold_pace_seconds_per_km, threshold_hr }, each null if
   unknown; never guess one. Use max_hr to judge effort (logged avg_hr as a share of it) and to set
   easy-day guidance; with resting_hr too, use heart-rate-reserve zones. vo2max is my Garmin estimate —

@@ -38,6 +38,8 @@ export interface RaceContext {
 	races: UpcomingRace[];
 	raceResults: RaceResult[];
 	personalBests: PersonalBest[];
+	/** Past races with no result recorded: informational ("raced, time not recorded"). */
+	racesWithoutTime: { name: string; date: string; distance_km: number }[];
 }
 
 const pace = (seconds: number, km: number) => Math.round(seconds / km);
@@ -63,7 +65,7 @@ export function buildRaceContext(rows: Race[], today: string, block?: { startDat
 		});
 
 	const done = rows
-		.filter((r): r is Race & { result_seconds: number } => r.result_seconds !== null && r.date <= today)
+		.filter((r): r is Race & { result_seconds: number } => r.result_seconds !== null)
 		.sort((a, b) => b.date.localeCompare(a.date));
 
 	const raceResults = done.map((r): RaceResult => ({
@@ -74,14 +76,21 @@ export function buildRaceContext(rows: Race[], today: string, block?: { startDat
 		pace_seconds_per_km: pace(r.result_seconds, r.distance_km),
 	}));
 
+	// A half typed as 21.0975 and one picked as 21.1 are the same distance: compare per 0.1 km.
 	const best = new Map<number, (typeof raceResults)[number]>();
 	for (const r of raceResults) {
-		const current = best.get(r.distance_km);
-		if (!current || r.result_seconds < current.result_seconds) best.set(r.distance_km, r);
+		const key = Math.round(r.distance_km * 10);
+		const current = best.get(key);
+		if (!current || r.result_seconds < current.result_seconds) best.set(key, r);
 	}
 	const personalBests = [...best.values()]
 		.sort((a, b) => a.distance_km - b.distance_km)
 		.map((r): PersonalBest => ({ distance_km: r.distance_km, result_seconds: r.result_seconds, pace_seconds_per_km: r.pace_seconds_per_km, date: r.date, name: r.name }));
 
-	return { races: upcoming, raceResults, personalBests };
+	const racesWithoutTime = rows
+		.filter((r) => r.date < today && r.result_seconds === null)
+		.sort((a, b) => b.date.localeCompare(a.date))
+		.map((r) => ({ name: r.name, date: r.date, distance_km: r.distance_km }));
+
+	return { races: upcoming, raceResults, personalBests, racesWithoutTime };
 }

@@ -99,6 +99,38 @@ export interface ExportPayload extends ExportContext, RaceContext {
 	 * trend view historyWindow's raw rows are too short to show. Built in the
 	 * route alongside the clock, so buildExportContext stays as it was. */
 	trainingSummary: TrainingSummary;
+	/** The owner's own words after sessions in the last RUN_HISTORY_WEEKS, newest first. */
+	sessionNotes: SessionNote[];
+}
+
+export interface SessionNote {
+	date: string;
+	kind: string;
+	label: string;
+	note: string;
+	energy_1_5?: number;
+}
+
+const SESSION_NOTE_MAX_CHARS = 400;
+const SESSION_NOTE_MAX_ENTRIES = 30;
+
+export async function buildSessionNotes(db: D1Database, today: string): Promise<SessionNote[]> {
+	const { results } = await db
+		.prepare(
+			`SELECT s.date, s.kind, s.label, f.note, f.energy_1_5
+			 FROM session_feedback f JOIN sessions s ON s.id = f.session_id
+			 WHERE s.date >= ?1 AND s.date <= ?2 AND f.note IS NOT NULL AND TRIM(f.note) <> ''
+			 ORDER BY s.date DESC, s.id DESC LIMIT ?3`,
+		)
+		.bind(addDaysIso(today, -7 * RUN_HISTORY_WEEKS), today, SESSION_NOTE_MAX_ENTRIES)
+		.all<{ date: string; kind: string; label: string; note: string; energy_1_5: number | null }>();
+	return results.map((r) => ({
+		date: r.date,
+		kind: r.kind,
+		label: r.label,
+		note: r.note.trim().slice(0, SESSION_NOTE_MAX_CHARS),
+		...(r.energy_1_5 === null ? {} : { energy_1_5: r.energy_1_5 }),
+	}));
 }
 
 export type ImportResult = { ok: true; id: number } | { ok: false; errors: string[] };

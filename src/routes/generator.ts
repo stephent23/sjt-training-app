@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { isMondayIso, todayIso, weekStartOnOrAfter } from '../dates';
-import { describeAcceptOutcome, generateNextWeeks, importProposal, insertWeeksFromProposal, type ExportPayload } from '../generator';
+import { buildSessionNotes, describeAcceptOutcome, generateNextWeeks, importProposal, insertWeeksFromProposal, type ExportPayload } from '../generator';
 import { buildRaceContext } from '../raceContext';
 import { buildTrainingSummary } from '../trainingSummary';
 import { ATHLETE_FIELDS, type Athlete, type MultiWeekProposal, type MultiWeekProposalInput, type Race } from '../types';
@@ -48,11 +48,12 @@ generator.get('/export', async (c) => {
 	}
 	const startDate = startParam ?? weekStartOnOrAfter(today);
 
-	const [context, trainingSummary, raceRows, hr] = await Promise.all([
+	const [context, trainingSummary, raceRows, hr, sessionNotes] = await Promise.all([
 		generateNextWeeks(c.env.DB, weeks, today, startDate),
 		buildTrainingSummary(c.env.DB, today),
 		c.env.DB.prepare(`SELECT id, name, date, distance_km, target_seconds, result_seconds, priority FROM races`).all<Race>(),
 		c.env.DB.prepare(`SELECT ${ATHLETE_KEYS.join(', ')} FROM settings WHERE id = 1`).first<Athlete>(),
+		buildSessionNotes(c.env.DB, today),
 	]);
 	const payload: ExportPayload = {
 		...context,
@@ -61,6 +62,7 @@ generator.get('/export', async (c) => {
 		today,
 		weekStartDate: startDate,
 		trainingSummary,
+		sessionNotes,
 	};
 	return c.json(payload);
 });

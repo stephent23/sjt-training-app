@@ -1,9 +1,9 @@
-import { SELF } from 'cloudflare:test';
+import { env, SELF } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
 import { buildRaceContext } from '../src/raceContext';
 import { addDaysIso } from '../src/dates';
 import type { Race, RaceInput } from '../src/types';
-import { todayIso } from './fixtures';
+import { insertSession, todayIso } from './fixtures';
 
 const URL = 'https://training-app.test/api/races';
 const base: RaceInput = { name: 'Spring Half', date: '2027-04-18', distance_km: 21.1, target_seconds: 6000, result_seconds: null, priority: 'A' };
@@ -90,5 +90,75 @@ describe('GET /api/generator/export — race context', () => {
 		expect(body.raceResults).toMatchObject([{ name: 'Past 10k', pace_seconds_per_km: 300 }]);
 		expect(body.personalBests).toMatchObject([{ distance_km: 10, result_seconds: 3000 }]);
 		expect(body.athlete).toEqual({ max_hr: 190, resting_hr: null, vo2max: null, threshold_pace_seconds_per_km: null, threshold_hr: null });
+	});
+});
+
+describe('old results and PB buckets', () => {
+	const row = (o: Partial<Race>): Race => ({ id: 1, name: 'R', date: '2027-01-01', distance_km: 10, target_seconds: null, result_seconds: null, priority: 'A', ...o });
+
+	it('compares 21.0975 and 21.1 as one distance but keeps each row distance', () => {
+		const ctx = buildRaceContext(
+			[
+				row({ id: 1, name: 'Typed', date: '2026-05-01', distance_km: 21.0975, result_seconds: 6200 }),
+				row({ id: 2, name: 'Picked', date: '2026-10-01', distance_km: 21.1, result_seconds: 6100 }),
+			],
+			'2026-11-15',
+		);
+		expect(ctx.personalBests).toHaveLength(1);
+		expect(ctx.personalBests[0]).toMatchObject({ name: 'Picked', distance_km: 21.1 });
+		expect(ctx.raceResults.map((r) => r.distance_km)).toEqual([21.1, 21.0975]);
+	});
+
+	it('lists a result dated today once, and past races without a time separately', () => {
+		const ctx = buildRaceContext(
+			[
+				row({ id: 1, name: 'Today', date: '2026-11-15', result_seconds: 3000 }),
+				row({ id: 2, name: 'No time', date: '2026-09-01' }),
+				row({ id: 3, name: 'Today goal', date: '2026-11-15' }),
+			],
+			'2026-11-15',
+		);
+		expect(ctx.raceResults.map((r) => r.name)).toEqual(['Today']);
+		expect(ctx.races.map((r) => r.name)).toEqual(['Today goal']);
+		expect(ctx.racesWithoutTime).toEqual([{ name: 'No time', date: '2026-09-01', distance_km: 10 }]);
+	});
+
+	it('export keeps a result from two years ago out of race_estimates but in results and PBs', async () => {
+		const today = todayIso();
+		await send('POST', URL, { ...base, name: 'Old half', date: addDaysIso(today, -730), distance_km: 21.0975, target_seconds: null, result_seconds: 6000 });
+		await send('POST', URL, { ...base, name: 'Recent 10k', date: addDaysIso(today, -20), distance_km: 10, target_seconds: null, result_seconds: 2800 });
+		const body = (await (await SELF.fetch('https://training-app.test/api/generator/export')).json()) as Record<string, any>;
+		expect(body.raceResults.map((r: any) => r.name)).toEqual(['Recent 10k', 'Old half']);
+		expect(body.personalBests.map((r: any) => r.name)).toEqual(['Recent 10k', 'Old half']);
+		const sources = body.trainingSummary.run_fitness.race_estimates.filter((e: any) => e.source === 'race');
+		expect(sources).toHaveLength(1);
+		expect(sources[0].date).toBe(addDaysIso(today, -20));
+	});
+});
+
+describe('GET /api/generator/export — sessionNotes', () => {
+	async function feedback(date: string, note: string | null, energy: number | null = null, kind: 'lift' | 'run' = 'lift') {
+		const id = await insertSession({ date, kind, label: `S ${date}`, status: 'completed' });
+		await env.DB.prepare(`INSERT INTO session_feedback (session_id, note, energy_1_5) VALUES (?, ?, ?)`).bind(id, note, energy).run();
+	}
+
+	it('returns recent non-empty notes newest first, truncated, with energy only when set', async () => {
+		const today = todayIso();
+		await feedback(addDaysIso(today, -10), 'older note', 3);
+		await feedback(addDaysIso(today, -2), 'x'.repeat(500), null, 'run');
+		await feedback(addDaysIso(today, -3), '   ');
+		await feedback(addDaysIso(today, -4), null);
+		await feedback(addDaysIso(today, -50), 'too old');
+		const body = (await (await SELF.fetch('https://training-app.test/api/generator/export')).json()) as Record<string, any>;
+		expect(body.sessionNotes).toHaveLength(2);
+		expect(body.sessionNotes[0]).toEqual({ date: addDaysIso(today, -2), kind: 'run', label: `S ${addDaysIso(today, -2)}`, note: 'x'.repeat(400) });
+		expect(body.sessionNotes[1]).toMatchObject({ note: 'older note', energy_1_5: 3, kind: 'lift' });
+	});
+
+	it('caps at 30 entries', async () => {
+		const today = todayIso();
+		for (let i = 0; i < 32; i++) await feedback(addDaysIso(today, -(i % 20)), `n${i}`);
+		const body = (await (await SELF.fetch('https://training-app.test/api/generator/export')).json()) as Record<string, any>;
+		expect(body.sessionNotes).toHaveLength(30);
 	});
 });
