@@ -9,7 +9,7 @@ import { addDaysIso, daysBetweenIso, weekStartOnOrAfter, weekStartOnOrBefore } f
 import { deleteSessionStatements } from './sessionDelete';
 import { sqlIn } from './sql';
 import { progressExercise, type ExercisePrescription, type LoggedSetForProgression } from './progression';
-import { MAX_WEEKLY_RUN_GROWTH, progressRun, type LoggedRunForProgression } from './runProgression';
+import { progressRun, type LoggedRunForProgression } from './runProgression';
 import { parseGoalTags, RUN_TYPES } from './types';
 import type { RaceContext } from './raceContext';
 import type { TrainingSummary } from './trainingSummary';
@@ -181,6 +181,16 @@ type LoggedRunRow = LoggedRunEntry & { id: number; session_id: number };
  * comment on HistoryWindow. */
 export const RUN_HISTORY_WEEKS = 6;
 
+/** The most a plan may raise a lift's weight, or the long run's distance, in one
+ * week over the highest earlier value — a guard against an error or a reckless
+ * answer, not a target. It is deliberately looser than the mechanical pass's
+ * own steps (progression.ts and runProgression.ts stay cautious, +10% a week
+ * for the long run): someone returning to fitness can rebuild toward what they
+ * have done before much faster than that, and the prompt tells the assistant
+ * when the evidence supports it. How hard to push is judgement, in the prompt;
+ * this only stops the absurd. */
+export const MAX_PLAN_STEP = 0.25;
+
 /**
  * Runs the deterministic progression pass over the most recently scheduled
  * week to produce week 1, then — for weekCount > 1 — appends flat copies of
@@ -289,7 +299,7 @@ export async function buildExportContext(
 	const anchorWeekSessions = windowSessions.filter((s) => s.date >= anchorMonday);
 	// A run recorded by hand (migrations/0008_manual_runs.sql) must not become a
 	// template for every future week — validateSessionCount requires week 1 to
-	// hold exactly days_per_week sessions, so an extra copied-forward session
+	// hold at most days_per_week sessions, so an extra copied-forward session
 	// would break the export's own re-importability. Its logged data still
 	// reaches historyWindow below (that query is over the unfiltered window),
 	// it just isn't copied forward or counted as skipped.
@@ -765,7 +775,7 @@ function validateWeekAgainstBaseline(
 				errors.push(`${exercise.name} is flagged back-unsafe but a back pain flag is active (week ${week.week_number}, ${session.date})`);
 			}
 
-			// Weight jump vs the baseline week, capped at 10% — only on
+			// Weight jump vs the baseline week, capped at MAX_PLAN_STEP — only on
 			// increases; a decrease (e.g. a deload) is never rejected here. A
 			// substituted exercise_id with no matching baseline entry in the
 			// baseline week is unconstrained on weight — nothing to compare
@@ -775,9 +785,9 @@ function validateWeekAgainstBaseline(
 				: weightBaselineByExercise.get(set.exercise_id);
 			if (baseline !== undefined && baseline !== null && baseline > 0 && set.target_weight_kg !== null && set.target_weight_kg > baseline) {
 				const jump = (set.target_weight_kg - baseline) / baseline;
-				if (jump > 0.1) {
+				if (jump > MAX_PLAN_STEP) {
 					errors.push(
-						`Weight jump for exercise_id ${set.exercise_id} on ${session.date} (week ${week.week_number}) exceeds 10% vs ${baselineDescription} (${baseline}kg -> ${set.target_weight_kg}kg)`,
+						`Weight jump for exercise_id ${set.exercise_id} on ${session.date} (week ${week.week_number}) exceeds ${MAX_PLAN_STEP * 100}% vs ${baselineDescription} (${baseline}kg -> ${set.target_weight_kg}kg)`,
 					);
 				}
 			}
@@ -788,9 +798,9 @@ function validateWeekAgainstBaseline(
 			const baselineKm = (dateKeyed ? longRunBaselineByDate.get(session.date) : longRunBaseline) ?? null;
 			if (baselineKm !== null && baselineKm > 0 && session.plannedRun.target_km !== null && session.plannedRun.target_km > baselineKm) {
 				const growth = (session.plannedRun.target_km - baselineKm) / baselineKm;
-				if (growth > MAX_WEEKLY_RUN_GROWTH) {
+				if (growth > MAX_PLAN_STEP) {
 					errors.push(
-						`Long run growth on ${session.date} (week ${week.week_number}) exceeds the ${MAX_WEEKLY_RUN_GROWTH * 100}% cap vs ${baselineDescription} (${baselineKm}km -> ${session.plannedRun.target_km}km)`,
+						`Long run growth on ${session.date} (week ${week.week_number}) exceeds the ${MAX_PLAN_STEP * 100}% cap vs ${baselineDescription} (${baselineKm}km -> ${session.plannedRun.target_km}km)`,
 					);
 				}
 			}
@@ -809,9 +819,11 @@ function validateWeekAgainstBaseline(
  * more than `days_per_week`, and never zero — with days_per_week of 1 the
  * floor and the target are the same number.
  */
-function validateSessionCount(week: WeekProposalInput, context: ExportContext, isFirstWeek: boolean): string[] {
+function validateSessionCount(week: WeekProposalInput, context: ExportContext): string[] {
 	const target = context.daysPerWeek;
-	const floor = isFirstWeek ? target : Math.max(1, target - 2);
+	// The same room in every week, week 1 included: a returning runner, a race
+	// week or a lighter week should not need a workaround to pass.
+	const floor = Math.max(1, target - 2);
 	if (week.sessions.length >= floor && week.sessions.length <= target) return [];
 
 	const allowed = floor === target ? `${target}` : `${floor}-${target}`;
@@ -858,7 +870,7 @@ export function validateProposal(proposal: MultiWeekProposalInput, context: Expo
 	const errors: string[] = [];
 
 	proposal.weeks.forEach((week, index) => {
-		errors.push(...validateSessionCount(week, context, index === 0));
+		errors.push(...validateSessionCount(week, context));
 
 		if (index === 0) {
 			errors.push(

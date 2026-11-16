@@ -178,20 +178,33 @@ describe('importProposal', () => {
 		expect(result.errors.join(' ')).toMatch(/Unknown exercise_id/);
 	});
 
-	it('rejects a weight jump over 10% vs the deterministic baseline in week 1', async () => {
+	it('rejects a weight jump over 25% vs the deterministic baseline in week 1', async () => {
 		await seedOneSessionWeek();
 		const context = await buildExportContext(env.DB, 1, TODAY);
 		const input = JSON.parse(JSON.stringify(context.deterministicProposal)) as MultiWeekProposalInput;
 		const baseline = input.weeks[0].sessions[0].plannedSets[0].target_weight_kg!;
-		input.weeks[0].sessions[0].plannedSets[0].target_weight_kg = baseline * 1.5; // +50%, way over the 10% cap
+		input.weeks[0].sessions[0].plannedSets[0].target_weight_kg = baseline * 1.5; // +50%, way over the 25% cap
 
 		const result = await importProposal(env.DB, input, TODAY);
 		expect(result.ok).toBe(false);
 		if (result.ok) throw new Error('expected failure');
-		expect(result.errors.join(' ')).toMatch(/exceeds 10%/);
+		expect(result.errors.join(' ')).toMatch(/exceeds 25%/);
 	});
 
-	it('rejects a jump over 10% of the highest earlier weight (a deload week does not lower the baseline)', async () => {
+	// The cap is a guard against mistakes, not a pace: someone rebuilding toward
+	// what they have done before can step well past the mechanical +10%.
+	it('accepts a 20% step over the baseline, which the old 10% cap rejected', async () => {
+		await seedOneSessionWeek();
+		const context = await buildExportContext(env.DB, 1, TODAY);
+		const input = JSON.parse(JSON.stringify(context.deterministicProposal)) as MultiWeekProposalInput;
+		const baseline = input.weeks[0].sessions[0].plannedSets[0].target_weight_kg!;
+		input.weeks[0].sessions[0].plannedSets[0].target_weight_kg = baseline * 1.2;
+
+		const result = await importProposal(env.DB, input, TODAY);
+		expect(result.ok).toBe(true);
+	});
+
+	it('rejects a jump over 25% of the highest earlier weight (a deload week does not lower the baseline)', async () => {
 		const { exerciseId } = await seedOneSessionWeek();
 		const context = await buildExportContext(env.DB, 3, TODAY);
 		const template = context.deterministicProposal.weeks[0].sessions[0];
@@ -199,7 +212,7 @@ describe('importProposal', () => {
 		// week 1 (the real, deterministic-baseline-checked week): weight 20kg —
 		// exactly the deterministic baseline, so week 1 itself validates cleanly.
 		// week 2: 20kg held — no jump vs week 1.
-		// week 3: 26kg — a 30% jump vs week 2's 20kg (MUST fail, exceeds 10%),
+		// week 3: 26kg — a 30% jump vs week 2's 20kg (MUST fail, exceeds 25%),
 		// but week 3 vs week 1's ORIGINAL baseline is also 20->26 (+30%) which
 		// would ALSO fail under a fixed-baseline check — so to prove the chain
 		// (not a fixed baseline) is actually what's checked, week 1 itself is
@@ -224,7 +237,7 @@ describe('importProposal', () => {
 				},
 				{
 					week_number: 4,
-					sessions: [{ ...template, date: '2026-08-24', plannedSets: [{ ...template.plannedSets[0], target_weight_kg: 23 }] }],
+					sessions: [{ ...template, date: '2026-08-24', plannedSets: [{ ...template.plannedSets[0], target_weight_kg: 26 }] }],
 				},
 			],
 		};
@@ -232,7 +245,7 @@ describe('importProposal', () => {
 		const result = await importProposal(env.DB, input, TODAY);
 		expect(result.ok).toBe(false);
 		if (result.ok) throw new Error('expected failure');
-		expect(result.errors.join(' ')).toMatch(new RegExp(`Weight jump for exercise_id ${exerciseId}.*\\(week 4\\) exceeds 10% vs earlier weeks`));
+		expect(result.errors.join(' ')).toMatch(new RegExp(`Weight jump for exercise_id ${exerciseId}.*\\(week 4\\) exceeds 25% vs earlier weeks`));
 	});
 
 	it('accepts a substituted exercise_id in week 2 with an unconstrained weight (no baseline in week 1 for that id)', async () => {

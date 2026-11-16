@@ -297,12 +297,22 @@ describe('validateProposal — session counts and deloads', () => {
 		return { week_number: weekNumber, sessions: dates.map((date) => liftSession(exerciseId, { date })) };
 	}
 
-	it('requires week 1 to match days_per_week exactly — it mirrors a real week', async () => {
+	// Week 1 used to need exactly days_per_week sessions, which made a returning
+	// runner, a race week or a lighter first week need a workaround to import.
+	// It now has the same room as every other week.
+	it('gives week 1 the same room as later weeks: up to two fewer, never more, never zero', async () => {
 		const { exerciseId } = await seedFourDayWeek();
 		const context = await buildExportContext(env.DB, 1, TODAY);
 
-		const proposal = { weeks: [weekOf(exerciseId, 2, ['2026-08-10', '2026-08-11', '2026-08-12'])] };
-		expect(validateProposal(proposal, context).join(' ')).toMatch(/Session count/);
+		const three = { weeks: [weekOf(exerciseId, 2, ['2026-08-10', '2026-08-11', '2026-08-12'])] };
+		expect(validateProposal(three, context)).toEqual([]);
+		const two = { weeks: [weekOf(exerciseId, 2, ['2026-08-10', '2026-08-12'])] };
+		expect(validateProposal(two, context)).toEqual([]);
+
+		const one = { weeks: [weekOf(exerciseId, 2, ['2026-08-10'])] };
+		expect(validateProposal(one, context).join(' ')).toMatch(/Session count/);
+		const five = { weeks: [weekOf(exerciseId, 2, ['2026-08-09', '2026-08-10', '2026-08-11', '2026-08-12', '2026-08-13'])] };
+		expect(validateProposal(five, context).join(' ')).toMatch(/Session count/);
 	});
 
 	// A deload that drops a session is real judgement, and used to be

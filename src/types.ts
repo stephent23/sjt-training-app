@@ -245,7 +245,7 @@ export interface MultiWeekProposal {
 export const GOAL_TAG_GROUPS = {
 	'What I want': ['build_strength', 'build_muscle', 'lose_fat', 'run_endurance', 'run_speed', 'stay_injury_free', 'maintain'],
 	'Where to push': ['upper_body', 'lower_body', 'core', 'posterior_chain'],
-	'What to work around': ['protect_shoulder', 'protect_back', 'limited_time', 'calorie_deficit', 'race_training'],
+	'What to work around': ['protect_shoulder', 'protect_back', 'limited_time', 'calorie_deficit', 'race_training', 'returning_to_fitness'],
 } as const;
 
 export const GOAL_TAGS: readonly string[] = Object.values(GOAL_TAG_GROUPS).flat();

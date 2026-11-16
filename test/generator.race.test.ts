@@ -118,10 +118,11 @@ describe('caps against the highest earlier value', () => {
 		expect(jumps(validateProposal(chain(id, [20, 15, 22], [10, 6, 11]), context))).toEqual([]);
 	});
 
-	it('still rejects a jump above 110% of the previous peak', async () => {
+	it('still rejects a jump above 125% of the previous peak, and lets a 20% step through', async () => {
 		const id = await seed();
 		const context = await buildExportContext(env.DB, 3, TODAY);
-		const errors = jumps(validateProposal(chain(id, [20, 15, 23], [10, 6, 12]), context));
+		expect(jumps(validateProposal(chain(id, [20, 15, 24], [10, 6, 12]), context))).toEqual([]);
+		const errors = jumps(validateProposal(chain(id, [20, 15, 26], [10, 6, 13]), context));
 		expect(errors).toHaveLength(2);
 		expect(errors.join(' ')).toMatch(/Weight jump/);
 		expect(errors.join(' ')).toMatch(/Long run growth/);
@@ -132,7 +133,7 @@ describe('caps against the highest earlier value', () => {
 		const context = await buildExportContext(env.DB, 3, TODAY);
 		const race = new Set(['2026-08-18']);
 		expect(jumps(validateProposal(chain(id, [20, 20, 20], [10, 21.1, 11]), context, race))).toEqual([]);
-		expect(jumps(validateProposal(chain(id, [20, 20, 20], [10, 21.1, 12]), context, race))).toHaveLength(1);
+		expect(jumps(validateProposal(chain(id, [20, 20, 20], [10, 21.1, 13]), context, race))).toHaveLength(1);
 	});
 });
 
