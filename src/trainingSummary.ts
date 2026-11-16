@@ -261,7 +261,7 @@ function hrOf(t: PaceTotals): number | null {
 }
 
 /** Riegel prediction: time over distance D1 converted to distance D2. */
-function riegel(seconds: number, fromKm: number, toKm: number): number {
+export function riegel(seconds: number, fromKm: number, toKm: number): number {
 	return Math.round(seconds * Math.pow(toKm / fromKm, 1.06));
 }
 

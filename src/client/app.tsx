@@ -6,6 +6,7 @@ import { Goals } from './screens/Goals';
 import { Plan } from './screens/Plan';
 import { History } from './screens/History';
 import { Preview } from './screens/Preview';
+import { Progress } from './screens/Progress';
 import { Review } from './screens/Review';
 import { RunEditor } from './screens/RunEditor';
 import { RunSession } from './screens/RunSession';
@@ -15,6 +16,7 @@ type View =
 	| { name: 'today' }
 	| { name: 'plan' }
 	| { name: 'history' }
+	| { name: 'progress' }
 	| { name: 'generate' }
 	| { name: 'goals' }
 	| { name: 'lift'; sessionId: number }
@@ -30,6 +32,7 @@ const RUN_EDIT_ROUTE = /^#\/run\/(\d+)\/edit$/;
 function viewFromHash(): View {
 	if (location.hash === '#/plan') return { name: 'plan' };
 	if (location.hash === '#/history') return { name: 'history' };
+	if (location.hash === '#/progress') return { name: 'progress' };
 	if (location.hash === '#/generate') return { name: 'generate' };
 	if (location.hash === '#/goals') return { name: 'goals' };
 	if (location.hash === '#/run/new') return { name: 'run-new' };
@@ -67,6 +70,8 @@ function tabFor(view: View): 'today' | 'plan' | 'history' | 'generate' | 'goals'
 		case 'lift':
 		case 'run':
 			return 'today';
+		case 'progress':
+			return 'history';
 		case 'plan':
 		case 'history':
 		case 'generate':
@@ -97,6 +102,8 @@ function screenFor(view: View, goBack: () => void) {
 			return <Plan />;
 		case 'history':
 			return <History />;
+		case 'progress':
+			return <Progress />;
 		case 'generate':
 			return <Generate />;
 		default:

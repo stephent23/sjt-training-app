@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { exercises } from './routes/exercises';
 import { generator } from './routes/generator';
+import { progress } from './routes/progress';
 import { races } from './routes/races';
 import { runs } from './routes/runs';
 import { sessions } from './routes/sessions';
@@ -18,6 +19,7 @@ api.get('/health', async (c) => {
 api.route('/sessions', sessions);
 api.route('/runs', runs);
 api.route('/races', races);
+api.route('/progress', progress);
 api.route('/swaps', swaps);
 api.route('/generator', generator);
 api.route('/settings', settings);

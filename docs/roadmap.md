@@ -221,6 +221,46 @@ branches simply carry the earlier commits with them.
       Built by five parallel agents behind a coordinator-written migration/types/client-API
       contract, then an Opus review whose findings (the deload rejection and the fake-result bug
       among them) were all applied. 596 tests, typecheck and build clean.
+- [x] **16 · Everyday fixes and a fuller export** (migration 0012). *Done (2026-11-16).*
+      - Finishing screens use `location.replace`, so Back no longer loops after saving a run or
+        finishing a session. The tab bar is on every screen (`Shell` wraps them all in `app.tsx`).
+      - Time fields regroup from the digits on every keystroke (`autoColon`); "2840" used to
+        become "2:840".
+      - Review is one summary row per exercise that opens an editor. The feedback card is a note
+        first, soreness second, and is shown for lifts only.
+      - Goals has a "From your watch" card: max/resting HR, VO2 max, threshold pace and HR.
+      - The export now carries `sessionNotes` (six weeks of feedback notes), every past race
+        result however old, and the watch numbers under `athlete`.
+- [x] **17 · Looser plan rules: the model is the coach.** *Done (2026-11-16).* The owner's
+      recent fitness was being held back by the 10% caps. Weight and long-run steps may now rise
+      25% over the highest earlier value (`MAX_PLAN_STEP`); the session-count range
+      (`daysPerWeek − 2 .. daysPerWeek`) is the same for every week; days can be arranged freely.
+      The validator is a safety net. The prompt's "HOW HARD TO PUSH" section does the coaching:
+      start from current fitness, build a little quicker when recovery is good, and use the full
+      25% only with evidence.
+- [x] **18 · Adjust the block in progress** (migration 0013). *Done (2026-11-16).* New plan opens
+      on "Adjust <block>" beside "New block" while a block has weeks left. The export's
+      `?adjust=<id>` mode sends planned-versus-done for the weeks gone and the weeks still
+      scheduled (`src/adjustContext.ts`); the answer continues the block's week numbers, and
+      accepting replaces only untrained sessions and updates `week_count`. Known limit: it cannot
+      proceed when every remaining session is already trained.
+- [x] **19 · Blocks may not overlap** (migration 0014). *Done (2026-11-16).* A block's range is
+      `start_date .. start_date + 7 × week_count − 1`. Accepting a new block removes untouched
+      planned sessions on or after its start in every block, and trims or deletes the older
+      blocks. Migration 0014 repairs existing overlaps the same way and never deletes a trained
+      session, so a logged session inside a later block's dates stays where it is.
+- [x] **20 · Progress.** *Done (2026-11-16).* `GET /api/progress` and `#/progress`, reached from
+      a Sessions / Progress switch at the top of History. `src/progress.ts` reshapes the same
+      training summary and race context the export uses, so the screen and the plan-writer agree:
+      - the next main race with target, current estimate (fastest Riegel prediction from the last
+        12 weeks' runs and the last year's races) and best time at the distance, and the gap;
+      - km per week and longest run per week as tappable bars over 12 weeks, plus the easy-pace
+        and heart-rate trend;
+      - estimated 1RM trend for the six lifts trained in the most weeks.
+      No migration. 656 tests, typecheck and build clean.
+
+      **Ideas not started:** import a run from a Garmin activity file instead of typing it; a
+      weekly "planned versus done" nudge on Today that opens Adjust; the laptop layout.
 
 ## Merge checklist
 
@@ -233,7 +273,8 @@ npm run db:migrate:remote
 ```
 
 Migrations added so far: `0006_structured_goals.sql`, `0007_run_metrics.sql`, `0008_manual_runs.sql`,
-`0010_plan_blocks.sql`, `0011_races_and_profile.sql`, `0012_garmin_fitness.sql`.
+`0010_plan_blocks.sql`, `0011_races_and_profile.sql`, `0012_garmin_fitness.sql`,
+`0013_adjust_block.sql`, `0014_tidy_overlapping_blocks.sql`.
 
 ## Notes for whoever picks this up
 

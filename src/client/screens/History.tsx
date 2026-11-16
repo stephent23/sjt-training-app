@@ -2,6 +2,7 @@ import type { SessionSummary } from '../../types';
 import { addDaysIso, todayIso } from '../../dates';
 import { SessionList } from '../components/SessionRow';
 import { ListSkeleton, StripSkeleton } from '../components/Skeletons';
+import { HistoryTabs } from '../components/HistoryTabs';
 import { Icon } from '../components/Icon';
 import { useSessionList } from '../useSessionList';
 
@@ -35,6 +36,7 @@ export function History() {
 	return (
 		<main class="screen">
 			<h1>History</h1>
+			<HistoryTabs active="sessions" />
 			<p class="lede">Everything logged, newest first. Tap a session to see what happened, or fix what you recorded.</p>
 			{totals && sessions!.length > 0 && (
 				<section class="card" aria-label="Last four weeks">

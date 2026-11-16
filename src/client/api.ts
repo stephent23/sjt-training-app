@@ -18,6 +18,7 @@ import type {
 	MultiWeekProposal,
 	MultiWeekProposalInput,
 } from '../types';
+import type { Progress } from '../progress';
 import { writeCachedSession } from './sessionCache';
 import { enqueue } from './sync';
 
@@ -208,6 +209,12 @@ export const updateRace = async (id: number, input: RaceInput): Promise<Race> =>
 export const deleteRace = async (id: number): Promise<void> => {
 	await raceRequest<{ ok: true }>(`/${id}`, 'DELETE');
 };
+
+export async function fetchProgress(): Promise<Progress> {
+	const res = await fetch('/api/progress');
+	if (!res.ok) throw new Error(`request failed: ${res.status}`);
+	return res.json();
+}
 
 export async function fetchSettings(): Promise<Settings> {
 	const res = await fetch('/api/settings');
