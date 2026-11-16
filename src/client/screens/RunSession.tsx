@@ -27,7 +27,7 @@ export function RunSession({ sessionId, onBack }: RunSessionProps) {
 	function finish(status: 'completed' | 'skipped') {
 		setSessionStatus(sessionId, status);
 		setDetail({ ...detail!, session: { ...session, status } });
-		location.hash = '#/';
+		location.replace('#/');
 	}
 
 	return (

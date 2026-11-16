@@ -410,9 +410,9 @@ button:disabled {
 }
 
 /* ---- App shell / tab bar ---------------------------------------------------
-   Shell.tsx renders this around Today, Plan, History and Generate: content,
-   then a four-tab bar fixed to the bottom of the viewport. The session
-   screens (lift, run, review) render without it — they have a back button.
+   Shell.tsx renders this around every screen: content, then a five-tab bar
+   fixed to the bottom of the viewport. The session screens keep their own back
+   button as well, and their sticky action bars sit just above the tab bar.
    At 900px the same markup becomes a left rail (see Laptop, below). */
 
 .shell {
@@ -2487,11 +2487,13 @@ summary:focus-visible,
 
 .run-actionbar {
 	position: sticky;
-	bottom: 0;
+	/* Just above the tab bar, which is on every screen and already covers the
+	   home-indicator inset — so no inset padding of its own. */
+	bottom: calc(var(--nav-h) + env(safe-area-inset-bottom));
 	z-index: 20;
 	/* Bleed to the screen edges, past .screen's own padding. */
 	margin: var(--s4) calc(-1 * var(--s4)) calc(-1 * (var(--s6) + env(safe-area-inset-bottom)));
-	padding: var(--s3) var(--s4) calc(var(--s3) + env(safe-area-inset-bottom));
+	padding: var(--s3) var(--s4);
 	background: var(--surface);
 	border-top: 1px solid var(--line);
 }
@@ -2845,4 +2847,27 @@ summary:focus-visible,
 
 .exercise-card-body[hidden] {
 	display: none;
+}
+
+/* ==========================================================================
+   Tab bar on every screen; lighter feedback card
+   ========================================================================== */
+
+/* On a laptop the tab bar is a left rail, not a bottom bar, so the sticky
+   action bars go back to the bottom edge. */
+@media (min-width: 900px) {
+	.run-actionbar,
+	.rv-bar {
+		bottom: 0;
+	}
+}
+
+/* Five tabs share the bottom bar; the longest label ("New plan") must not wrap. */
+.tabbar-item span {
+	white-space: nowrap;
+}
+
+/* "How did it feel?" — the note leads; pain scoring is a disclosure beneath. */
+.feedback-card .disclosure {
+	margin-top: var(--s2);
 }

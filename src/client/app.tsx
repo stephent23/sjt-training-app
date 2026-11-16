@@ -56,38 +56,50 @@ export function App() {
 		history.back();
 	}
 
-	if (view.name === 'lift') return <LiftSession sessionId={view.sessionId} onBack={goBack} />;
-	if (view.name === 'run') return <RunSession sessionId={view.sessionId} onBack={goBack} />;
-	if (view.name === 'review') return <Review sessionId={view.sessionId} />;
-	if (view.name === 'preview') return <Preview sessionId={view.sessionId} onBack={goBack} />;
-	if (view.name === 'goals') return <Goals />;
-	if (view.name === 'run-new') return <RunEditor />;
-	if (view.name === 'run-edit') return <RunEditor sessionId={view.sessionId} />;
+	return <Shell active={tabFor(view)}>{screenFor(view, goBack)}</Shell>;
+}
 
-	if (view.name === 'plan')
-		return (
-			<Shell active="plan">
-				<Plan />
-			</Shell>
-		);
+/** Which tab a screen belongs to, if any. A session opened from Today keeps
+ * Today lit; review, preview and the run editor belong to no tab. */
+function tabFor(view: View): 'today' | 'plan' | 'history' | 'generate' | 'goals' | undefined {
+	switch (view.name) {
+		case 'today':
+		case 'lift':
+		case 'run':
+			return 'today';
+		case 'plan':
+		case 'history':
+		case 'generate':
+		case 'goals':
+			return view.name;
+		default:
+			return undefined;
+	}
+}
 
-	if (view.name === 'history')
-		return (
-			<Shell active="history">
-				<History />
-			</Shell>
-		);
-
-	if (view.name === 'generate')
-		return (
-			<Shell active="generate">
-				<Generate />
-			</Shell>
-		);
-
-	return (
-		<Shell active="today">
-			<Today />
-		</Shell>
-	);
+function screenFor(view: View, goBack: () => void) {
+	switch (view.name) {
+		case 'lift':
+			return <LiftSession sessionId={view.sessionId} onBack={goBack} />;
+		case 'run':
+			return <RunSession sessionId={view.sessionId} onBack={goBack} />;
+		case 'review':
+			return <Review sessionId={view.sessionId} />;
+		case 'preview':
+			return <Preview sessionId={view.sessionId} onBack={goBack} />;
+		case 'goals':
+			return <Goals />;
+		case 'run-new':
+			return <RunEditor />;
+		case 'run-edit':
+			return <RunEditor sessionId={view.sessionId} />;
+		case 'plan':
+			return <Plan />;
+		case 'history':
+			return <History />;
+		case 'generate':
+			return <Generate />;
+		default:
+			return <Today />;
+	}
 }

@@ -119,10 +119,13 @@ function RunEditorBody({ sessionId, initialDate, initialRunType, initialFields, 
 		try {
 			if (sessionId === undefined) {
 				const { id } = await createManualRun(body);
-				location.hash = `#/review/${id}`;
+				// replace, not assign: the editor must not stay in the history, or
+				// Back from the review lands on this form again (blank, for a new
+				// run — one tap from saving a duplicate).
+				location.replace(`#/review/${id}`);
 			} else {
 				await updateManualRun(sessionId, body);
-				location.hash = `#/review/${sessionId}`;
+				location.replace(`#/review/${sessionId}`);
 			}
 		} catch (err) {
 			setErrors([err instanceof Error ? err.message : 'Could not save this run.']);
@@ -135,7 +138,7 @@ function RunEditorBody({ sessionId, initialDate, initialRunType, initialFields, 
 		setDeleting(true);
 		try {
 			await deleteManualRun(sessionId);
-			location.hash = '#/history';
+			location.replace('#/history');
 		} catch (err) {
 			setErrors([err instanceof Error ? err.message : 'Could not delete this run.']);
 			setDeleting(false);

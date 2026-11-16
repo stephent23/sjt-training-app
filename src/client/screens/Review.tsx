@@ -247,7 +247,8 @@ export function Review({ sessionId }: ReviewProps) {
 		if (!detail) return;
 		setSessionStatus(sessionId, status);
 		setDetail({ ...detail, session: { ...detail.session, status } });
-		location.hash = '#/';
+		// replace: a finished review shouldn't be what Back from Today returns to.
+		location.replace('#/');
 	}
 
 	// Shared with LiftSession so the two screens can't disagree about what
@@ -314,13 +315,17 @@ export function Review({ sessionId }: ReviewProps) {
 						</p>
 					)}
 					<ReviewRun loggedRun={loggedRun} runType={detail.plannedRun?.run_type ?? null} planned={detail.plannedRun ?? null} onCommit={handleCommitRun} />
-					<button type="button" class="btn-secondary" onClick={() => (location.hash = `#/run/${sessionId}/edit`)}>
+					{/* replace: edit and review are one round trip, so the review must not
+					    sit in the history behind the editor — saving returns to a fresh
+					    review, and Back from either goes to wherever you came from. */}
+					<button type="button" class="btn-secondary" onClick={() => location.replace(`#/run/${sessionId}/edit`)}>
 						Edit run details
 					</button>
 				</>
 			)}
 
-			<FeedbackCard feedback={detail.feedback} onSave={handleSaveFeedback} />
+			{/* Lifts only: a run already has its effort scale and "How it went" note. */}
+			{session.kind === 'lift' && <FeedbackCard feedback={detail.feedback} onSave={handleSaveFeedback} />}
 
 			{/* Only the verdicts that would change something: a session already
 			    completed has nothing left to decide (reached right after finishing

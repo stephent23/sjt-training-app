@@ -101,7 +101,9 @@ function LoadedLiftSession({ sessionId, detail, error, setDetail, reload, onBack
 		// while the session is still fresh — the same reasoning "Log what you
 		// ran" already applies to runs. Skipping has nothing to add there, so it
 		// goes back to Today as before.
-		location.hash = status === 'completed' ? `#/review/${sessionId}` : '#/';
+		// replace: the finished lift screen shouldn't be what Back from the
+		// review (or Today) returns to.
+		location.replace(status === 'completed' ? `#/review/${sessionId}` : '#/');
 	}
 
 	return (

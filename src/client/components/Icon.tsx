@@ -20,7 +20,8 @@ export type IconName =
 	| 'alert'
 	| 'today'
 	| 'calendar'
-	| 'history';
+	| 'history'
+	| 'flag';
 
 const PATHS: Record<IconName, string[]> = {
 	// A dumbbell end-on: bar, inner plates, outer collars.
@@ -37,6 +38,7 @@ const PATHS: Record<IconName, string[]> = {
 	today: ['M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18', 'M12 9a3 3 0 1 0 0 6a3 3 0 1 0 0-6'],
 	calendar: ['M5 5h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z', 'M8 3v4', 'M16 3v4', 'M3 10h18'],
 	history: ['M3 12a9 9 0 1 0 2.6-6.4L3 8', 'M3 3v5h5', 'M12 7.5V12l3 2'],
+	flag: ['M5 21V4', 'M5 4h12l-2.5 4 2.5 4H5'],
 };
 
 interface IconProps {
