@@ -426,7 +426,9 @@ button:disabled {
 
 .shell-content {
 	flex: 1 1 auto;
-	padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + var(--s4));
+	/* Clears the fixed tab bar and nothing more: the screen inside already pads
+	   its own bottom, so adding to it here left a dead band above the bar. */
+	padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom));
 }
 
 .tabbar {
@@ -2492,7 +2494,7 @@ summary:focus-visible,
 	bottom: calc(var(--nav-h) + env(safe-area-inset-bottom));
 	z-index: 20;
 	/* Bleed to the screen edges, past .screen's own padding. */
-	margin: var(--s4) calc(-1 * var(--s4)) calc(-1 * (var(--s6) + env(safe-area-inset-bottom)));
+	margin: var(--s4) calc(-1 * var(--s4)) 0;
 	padding: var(--s3) var(--s4);
 	background: var(--surface);
 	border-top: 1px solid var(--line);
@@ -2752,8 +2754,10 @@ summary:focus-visible,
 	font: 400 13px var(--mono);
 }
 
-.screen {
-	padding-bottom: calc(var(--s6) + env(safe-area-inset-bottom));
+@media (max-width: 899px) {
+	.screen {
+		padding-bottom: var(--s5);
+	}
 }
 
 /* ==========================================================================
@@ -2870,4 +2874,178 @@ summary:focus-visible,
 /* "How did it feel?" — the note leads; pain scoring is a disclosure beneath. */
 .feedback-card .disclosure {
 	margin-top: var(--s2);
+}
+
+/* ==========================================================================
+   Review redesign, sticky-bar fit and Goals polish (round 3)
+   ========================================================================== */
+
+/* A screen with a sticky action bar fills the space above the tab bar and
+   pushes the bar to its foot, so on a short page the bar sits right on the tab
+   bar instead of floating mid-screen above an empty band. On a long page there
+   is no free space and nothing changes: the bar still pins at
+   bottom: nav-h while you scroll, and being last in the flow it is also what
+   the last content ends against. */
+@media (max-width: 899px) {
+	.shell-content:has(> .screen > .run-actionbar) {
+		display: flex;
+		flex-direction: column;
+	}
+	.screen:has(> .run-actionbar) {
+		display: flex;
+		flex-direction: column;
+		flex: 1 0 auto;
+		box-sizing: border-box;
+		width: 100%;
+		padding-bottom: 0;
+	}
+	.screen > .back-btn {
+		align-self: flex-start;
+	}
+	.screen > .run-actionbar {
+		margin-top: auto;
+		/* The auto margin is zero on a full page; keep a gap above the bar. */
+		box-shadow: 0 calc(-1 * var(--s4)) 0 var(--bg);
+	}
+}
+
+/* Review: one compact row per exercise inside a single hairline-divided list.
+   The summary line is the answer; the set editor opens beneath it. */
+.rv-list {
+	margin: var(--s2) 0 var(--s4);
+}
+.rv-ex {
+	border-bottom: 1px solid var(--line);
+}
+.rv-ex-sum {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--s3);
+	min-height: 56px;
+	padding: var(--s3) 0;
+	cursor: pointer;
+	list-style: none;
+}
+.rv-ex-sum::-webkit-details-marker {
+	display: none;
+}
+.rv-ex-sum--plain {
+	cursor: default;
+}
+.rv-ex-main {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+	flex: 1;
+}
+.rv-ex-title {
+	display: flex;
+	align-items: center;
+	gap: var(--s2);
+	font-weight: 600;
+}
+.rv-ex-line {
+	color: var(--ink-2);
+	font: 400 13px/1.4 var(--mono);
+	font-variant-numeric: tabular-nums;
+}
+.rv-ex-target {
+	margin-left: auto;
+	flex-shrink: 0;
+	color: var(--ink-3);
+	font: 400 13px var(--mono);
+}
+.rv-ex-details > .rv-ex-sum::after {
+	content: '+';
+	flex-shrink: 0;
+	font: 400 18px/1 var(--mono);
+	color: var(--ink-3);
+}
+.rv-ex-details[open] > .rv-ex-sum::after {
+	content: '–';
+}
+.rv-ex--skipped .rv-ex-name {
+	color: var(--ink-3);
+	text-decoration: line-through;
+	text-decoration-color: var(--line-strong);
+}
+.rv-unskip {
+	margin: 0 0 var(--s2);
+	color: var(--accent-ink);
+}
+
+/* The set editor: labels once, no row rules, 48px boxes, no spinners. */
+.rv-table {
+	table-layout: fixed;
+	border-collapse: separate;
+	border-spacing: var(--s2) 6px;
+	margin: 0 calc(-1 * var(--s2)) var(--s2);
+	width: calc(100% + 2 * var(--s2));
+}
+.rv-table th {
+	padding: 0;
+	text-align: left;
+	font: 400 11px var(--mono);
+	text-transform: uppercase;
+	letter-spacing: 0.1em;
+	color: var(--ink-3);
+}
+.rv-table th:first-child,
+.rv-table td:first-child {
+	width: 28px;
+}
+.rv-table td {
+	padding: 0;
+}
+.rv-table td.num {
+	font: 500 15px var(--mono);
+	color: var(--ink-2);
+}
+.rv-table input {
+	box-sizing: border-box;
+	width: 100%;
+	min-height: 48px;
+	padding: 0 var(--s2);
+	font: 400 16px var(--mono);
+	font-variant-numeric: tabular-nums;
+	border: 1px solid var(--line-strong);
+	border-radius: var(--r);
+	background: var(--surface-2);
+	color: var(--ink);
+	appearance: textfield;
+	-moz-appearance: textfield;
+}
+.rv-table input::-webkit-outer-spin-button,
+.rv-table input::-webkit-inner-spin-button {
+	-webkit-appearance: none;
+	margin: 0;
+}
+
+/* The live run summary is a caption, not a field: no box, no input look. */
+.run-summary {
+	margin: var(--s3) 0 var(--s1);
+	padding: 0;
+	background: none;
+	font: 400 14px/1.4 var(--mono);
+	color: var(--ink-2);
+}
+
+/* Goals: "Add a race" is a real button. */
+.race-add {
+	width: 100%;
+	margin-top: var(--s3);
+}
+.goals-hr .field {
+	margin: 0;
+}
+
+/* History rows with a result badge: the title column takes the free width, so
+   badge and title stay left-aligned instead of floating to the middle. */
+.plan-item .plan-row-main {
+	flex: 1;
+}
+.rv-unskip {
+	margin-left: calc(-1 * var(--s1));
 }

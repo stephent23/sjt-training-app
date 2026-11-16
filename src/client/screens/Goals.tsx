@@ -123,7 +123,7 @@ export function Goals() {
 			<section class="card">
 				<h2 class="section-heading">Races</h2>
 				{races && <RaceList races={races} today={todayIso()} onSelect={setEditing} />}
-				<button type="button" class="btn-quiet" onClick={() => setEditing('new')}>
+				<button type="button" class="btn-secondary race-add" onClick={() => setEditing('new')}>
 					Add a race
 				</button>
 			</section>

@@ -29,7 +29,7 @@ interface ReviewSetRowProps {
 	onCommit: (setIndex: number, weightKg: number, reps: number, rir: number) => void;
 }
 
-// One editable row of an exercise's review table. Local string state lets the
+// One editable row of an exercise's set editor. Local string state lets the
 // person type freely; the write only fires on blur/Enter (the `change`
 // event), not per keystroke — an `input` handler here would queue a write
 // for every partial value ("2", "22", "22.5") and race them against each
@@ -46,6 +46,8 @@ function ReviewSetRow({ setIndex, entry, onCommit }: ReviewSetRowProps) {
 	}, [entry?.weight_kg, entry?.reps, entry?.rir]);
 
 	function commit() {
+		// A half-filled row isn't a set: an empty box would read as 0 reps / RIR 0.
+		if (weight.trim() === '' || reps.trim() === '' || rir.trim() === '') return;
 		const w = Number(weight);
 		const r = Number(reps);
 		const ri = Number(rir);
@@ -53,6 +55,8 @@ function ReviewSetRow({ setIndex, entry, onCommit }: ReviewSetRowProps) {
 		onCommit(setIndex, w, r, ri);
 	}
 
+	// Column labels live once in the table header, so each box carries its own
+	// accessible name.
 	return (
 		<tr>
 			<td class="num">{setIndex}</td>
@@ -60,6 +64,7 @@ function ReviewSetRow({ setIndex, entry, onCommit }: ReviewSetRowProps) {
 				<input
 					type="number"
 					inputmode="decimal"
+					aria-label={`Set ${setIndex} weight in kg`}
 					value={weight}
 					onInput={(e) => setWeight((e.target as HTMLInputElement).value)}
 					onChange={commit}
@@ -69,6 +74,7 @@ function ReviewSetRow({ setIndex, entry, onCommit }: ReviewSetRowProps) {
 				<input
 					type="number"
 					inputmode="numeric"
+					aria-label={`Set ${setIndex} reps`}
 					value={reps}
 					onInput={(e) => setReps((e.target as HTMLInputElement).value)}
 					onChange={commit}
@@ -78,6 +84,7 @@ function ReviewSetRow({ setIndex, entry, onCommit }: ReviewSetRowProps) {
 				<input
 					type="number"
 					inputmode="numeric"
+					aria-label={`Set ${setIndex} reps in reserve`}
 					value={rir}
 					onInput={(e) => setRir((e.target as HTMLInputElement).value)}
 					onChange={commit}
@@ -87,53 +94,76 @@ function ReviewSetRow({ setIndex, entry, onCommit }: ReviewSetRowProps) {
 	);
 }
 
+const range = (lo: number, hi: number) => (lo === hi ? String(lo) : `${lo}–${hi}`);
+
+/** One line for what was done: "24 kg · 10 / 9 / 8 reps · RIR 1–3". Weights that
+ * vary show as a range; a part-logged exercise says how many sets. */
+export function describeSets(logged: LoggedSetEntry[], targetSets: number): string {
+	if (logged.length === 0) return 'Not logged';
+	const sets = [...logged].sort((a, b) => a.set_index - b.set_index);
+	const weights = sets.map((l) => l.weight_kg);
+	const rirs = sets.map((l) => l.rir);
+	const heaviest = Math.max(...weights);
+	const parts = [
+		heaviest === 0 ? 'Bodyweight' : `${range(Math.min(...weights), heaviest)} kg`,
+		`${sets.map((l) => l.reps).join(' / ')} reps`,
+		`RIR ${range(Math.min(...rirs), Math.max(...rirs))}`,
+	];
+	if (sets.length < targetSets) parts.unshift(`${sets.length} of ${targetSets} sets`);
+	return parts.join(' · ');
+}
+
 interface ReviewExerciseProps {
 	exercise: PlannedSetDetail;
 	onCommitSet: (exercise: PlannedSetDetail, setIndex: number, weightKg: number, reps: number, rir: number) => void;
 	onUnskip: (exercise: PlannedSetDetail) => void;
 }
 
+// One compact row per exercise: the summary says what was done, tapping it
+// opens the set editor.
 function ReviewExercise({ exercise, onCommitSet, onUnskip }: ReviewExerciseProps) {
 	const skipped = exercise.status === 'skipped';
 	const setIndexes = Array.from({ length: exercise.target_sets }, (_, i) => i + 1);
 
-	// A skipped exercise used to render as a normal, empty table — identical to
-	// one you simply hadn't got to yet. Show the table only if something was
-	// actually logged before the skip, so a mis-skip stays inspectable and
-	// repairable without hiding real data.
-	const showTable = !skipped || exercise.logged.length > 0;
 	// Ticked once every prescribed set has a logged entry — the word is in the
 	// aria-label, so the tick is never the only carrier.
 	const complete = !skipped && exercise.logged.length >= exercise.target_sets;
+	// Gaps open by themselves so they are seen without a tap. Decided once, on
+	// mount: re-deriving it per render would snap the editor shut the moment the
+	// last set was typed in.
+	const [startOpen] = useState(!skipped && !complete);
+
+	// A skipped exercise shows its table only if something was logged before the
+	// skip, so a mis-skip stays inspectable without hiding real data.
+	const showTable = !skipped || exercise.logged.length > 0;
+
+	const head = (
+		<>
+			<span class="rv-ex-main">
+				<span class="rv-ex-title">
+					<span class="rv-ex-name">{exercise.exercise_name}</span>
+					{complete && (
+						<span class="review-tick" role="img" aria-label="All sets logged">
+							<Icon name="check" />
+						</span>
+					)}
+					{!skipped && <span class="rv-ex-target">{`${exercise.target_sets} × ${exercise.rep_low}-${exercise.rep_high}`}</span>}
+				</span>
+				<span class="rv-ex-line">{skipped ? 'Skipped' : describeSets(exercise.logged, exercise.target_sets)}</span>
+			</span>
+		</>
+	);
 
 	return (
-		<section class={`card review-exercise${skipped ? ' review-exercise--skipped' : ''}`}>
-			<h2 class="section-heading">
-				{exercise.exercise_name}
-				{complete && (
-					<span class="review-tick" role="img" aria-label="All sets logged">
-						<Icon name="check" />
-					</span>
-				)}
-			</h2>
-			<p class="exercise-target">{skipped ? 'Skipped' : `${exercise.target_sets} × ${exercise.rep_low}-${exercise.rep_high}`}</p>
-
-			{skipped && (
-				// Without this an accidental skip is unreachable: once the session
-				// is completed, Today routes to Review rather than back into the
-				// lift screen, which is the only other place with a skip toggle.
-				<button type="button" class="btn-secondary" onClick={() => onUnskip(exercise)}>
-					Unskip
-				</button>
-			)}
-
-			{showTable && (
-				<div class="table-scroll">
-					<table class="review-table">
+		<div class={`rv-ex${skipped ? ' rv-ex--skipped' : ''}`}>
+			{showTable ? (
+				<details class="rv-ex-details" open={startOpen}>
+					<summary class="rv-ex-sum">{head}</summary>
+					<table class="rv-table">
 						<thead>
 							<tr>
 								<th>Set</th>
-								<th>Weight</th>
+								<th>Weight kg</th>
 								<th>Reps</th>
 								<th>RIR</th>
 							</tr>
@@ -149,9 +179,19 @@ function ReviewExercise({ exercise, onCommitSet, onUnskip }: ReviewExerciseProps
 							))}
 						</tbody>
 					</table>
-				</div>
+				</details>
+			) : (
+				<div class="rv-ex-sum rv-ex-sum--plain">{head}</div>
 			)}
-		</section>
+			{skipped && (
+				// Without this an accidental skip is unreachable: once the session
+				// is completed, Today routes to Review rather than back into the
+				// lift screen, which is the only other place with a skip toggle.
+				<button type="button" class="btn-quiet rv-unskip" onClick={() => onUnskip(exercise)}>
+					Unskip
+				</button>
+			)}
+		</div>
 	);
 }
 
@@ -289,9 +329,10 @@ export function Review({ sessionId }: ReviewProps) {
 				{longDate(session.date)} · {weekLabel(session)}
 			</span>
 			<h1>{session.label}</h1>
-			<p class="exercise-target">{progressLine}</p>
 
-			{/* What actually happened, before the tables that let you fix it. */}
+			{/* What actually happened, before the rows that let you fix it. The
+			    figures replace the progress line once there is anything to show —
+			    never both, so nothing is said twice. */}
 			{stats.length > 0 ? (
 				<dl class="summary-strip">
 					{stats.map((stat) => (
@@ -302,11 +343,15 @@ export function Review({ sessionId }: ReviewProps) {
 					))}
 				</dl>
 			) : (
-				<p class="hint">Nothing logged for this one — fill it in below.</p>
+				<p class="exercise-target">{progressLine}</p>
 			)}
 
 			{session.kind === 'lift' ? (
-				plannedSets.map((ps) => <ReviewExercise key={ps.id} exercise={ps} onCommitSet={handleCommitSet} onUnskip={handleUnskip} />)
+				<div class="rv-list">
+					{plannedSets.map((ps) => (
+						<ReviewExercise key={ps.id} exercise={ps} onCommitSet={handleCommitSet} onUnskip={handleUnskip} />
+					))}
+				</div>
 			) : (
 				<>
 					{detail.plannedRun && (
