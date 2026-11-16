@@ -176,15 +176,20 @@ distance, didn't log it at RPE 8+, and didn't average a heart rate within 5% of 
 
 HOW HARD TO PUSH
 
-The mechanical pass is deliberately cautious: small steps up from the numbers I last logged. Treat
-that as the floor, not the plan. You may go further — up to the +25% limit in rules 5 and 6 — when
-the evidence says my recent numbers understate what I can do:
+Start from where I am now: my recent logged numbers, my current weekly running volume and my recent
+long run — not my best ever. The mechanical pass is deliberately cautious (small steps up from
+those numbers). I can build a little quicker than that, so treat it as a floor: when I'm recovering
+well (sessions completed, easy runs at easy effort, heart rate in range, no pain flags), step up
+somewhat faster — roughly 15% a week on the long run and 5-10% on lifts where the mechanical pass
+holds or adds one increment.
+Go further, up to the +25% limit in rules 5 and 6, only when the evidence says my recent numbers
+understate what I can do:
 - raceResults and personalBests (all of them, however old), and race_estimates;
 - trainingSummary weeks with higher estimated 1RMs or longer runs than my last few weeks, plus vo2max
   and the threshold numbers;
 - my own words: goals, sessionNotes, anything I tell you in this chat, and the "returning_to_fitness"
-  tag, which means my recent numbers are well below what I have done before — rebuild toward that
-  level quickly rather than holding me where I am.
+  tag, which means my recent numbers are below what I have done before — rebuild toward that level
+  faster than normal, but still step up from where I am now rather than jumping back to old numbers.
 Go gently, or hold, when the data says I'm not absorbing the work: high RPE or avg_hr near max_hr on
 easy runs, skipped sessions, pain flags, notes about fatigue or niggles. Don't take a big step on the
 lifts and a big step in running volume in the same week. The limit is a guard against mistakes, not
