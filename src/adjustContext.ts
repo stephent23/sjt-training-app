@@ -354,6 +354,21 @@ function shortDate(iso: string): string {
 	return `${DAYS[d.getUTCDay()]} ${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`;
 }
 
+/** Where a block really ends: its stored range, cut short the day before the
+ * next block starts. A new block takes every future session from the one
+ * before it, so that block is over from then on even when its week_count says
+ * otherwise. (week_count is kept as MAX(week_number) so history still reads
+ * "Block 1 · Week 23 of 23" — but Block 1's week numbers are the old app-wide
+ * counter from migration 0010, so its stored range can run months past its
+ * last session.) `blocks` must be ordered by start_date. */
+function effectiveEnd(block: BlockRow, blocks: BlockRow[]): string {
+	const next = blocks.find((b) => b.id !== block.id && b.start_date > block.start_date);
+	const end = blockEnd(block);
+	if (!next) return end;
+	const dayBefore = addDaysIso(next.start_date, -1);
+	return dayBefore < end ? dayBefore : end;
+}
+
 /** Blocks may not overlap in dates. An adjusting plan's span (first..last
  * session date, widened to whole weeks) must stay clear of every OTHER block's
  * range; otherwise a message naming the first one it runs into, else null. */
@@ -361,12 +376,11 @@ export async function adjustOverlapError(db: D1Database, blockId: number, span: 
 	const first = weekStartOnOrBefore(span.first);
 	const last = addDaysIso(weekStartOnOrBefore(span.last), 6);
 	const { results } = await db
-		.prepare(`SELECT id, name, start_date, week_count, goals, goal_tags, generated_plan_id FROM plan_blocks WHERE id != ? ORDER BY start_date`)
-		.bind(blockId)
+		.prepare(`SELECT id, name, start_date, week_count, goals, goal_tags, generated_plan_id FROM plan_blocks ORDER BY start_date, id`)
 		.all<BlockRow>();
-	const other = results.find((b) => b.start_date <= last && blockEnd(b) >= first);
+	const other = results.find((b) => b.id !== blockId && b.start_date <= last && effectiveEnd(b, results) >= first);
 	if (!other) return null;
 	return other.start_date >= first
 		? `${other.name} starts ${shortDate(other.start_date)} — shorten this block or adjust ${other.name} instead`
-		: `${other.name} runs until ${shortDate(blockEnd(other))} — start this block after it or adjust ${other.name} instead`;
+		: `${other.name} runs until ${shortDate(effectiveEnd(other, results))} — start this block after it or adjust ${other.name} instead`;
 }
