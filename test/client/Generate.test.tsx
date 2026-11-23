@@ -175,6 +175,26 @@ describe('Review marks', () => {
 	});
 });
 
+describe('Review supersets', () => {
+	it('labels sets sharing a superset_group, and ignores a lone stale group', async () => {
+		const set = (exercise_id: number, order_index: number, superset_group: number | null) => ({
+			exercise_id, order_index, target_sets: 3, rep_low: 8, rep_high: 10, target_weight_kg: 20, rest_seconds: 90, notes: null, superset_group,
+			exercise_name: `Ex ${exercise_id}`, pattern: 'push',
+		});
+		const plan = {
+			weeks: [{ week_number: 1, focus: null, sessions: [{ date: '2026-11-23', kind: 'lift', label: 'Lift A', plannedRun: null,
+				plannedSets: [set(1, 1, 3), set(11, 2, 3), set(7, 3, null), set(24, 4, 1), set(33, 5, 1), set(26, 6, 9)] }] }],
+		};
+		stubApi({ ...pendingPlan, plan });
+		const root = await mount();
+		const lines = [...root.querySelectorAll('.rv-session-body .exercise-target')].map((p) => p.textContent ?? '');
+		expect(lines.filter((l) => l.startsWith('Superset A'))).toHaveLength(2);
+		expect(lines.filter((l) => l.startsWith('Superset B'))).toHaveLength(2);
+		expect(lines[2]).not.toContain('Superset');
+		expect(lines[5]).not.toContain('Superset');
+	});
+});
+
 describe('Adjust the current block', () => {
 	const block = {
 		id: 7,

@@ -2,6 +2,7 @@ import { Icon } from '../components/Icon';
 import { RunStructure } from '../components/RunStructure';
 import { SessionScreenFallback } from '../components/SessionScreenFallback';
 import { longDate } from '../components/WeekStrip';
+import { groupPlannedSets } from '../../supersets';
 import { runSummary } from '../format';
 import { weekLabel } from '../weekLabel';
 import { useSession } from '../useSession';
@@ -40,14 +41,21 @@ export function Preview({ sessionId, onBack }: PreviewProps) {
 			<h1>{session.label}</h1>
 
 			{session.kind === 'lift'
-				? plannedSets.map((ps) => (
-						<div key={ps.id} class="row">
-							<h2 class="section-heading">{ps.exercise_name}</h2>
-							<p class="exercise-target">
-								{ps.target_sets} × {ps.rep_low}-{ps.rep_high}
-								{ps.target_weight_kg ? ` @ ${ps.target_weight_kg}kg` : ''}
-							</p>
-							{ps.notes && <p class="exercise-target">{ps.notes}</p>}
+				? groupPlannedSets(plannedSets).map((group) => (
+						// Same grouping as the workout screen: a superset is one row with the
+						// unbroken left rule, its members listed in the order you do them.
+						<div key={group.key} class={`row ${group.isSuperset ? 'exercise-card--superset' : ''}`}>
+							{group.isSuperset && <span class="eyebrow eyebrow--accent">Superset · {group.rounds} rounds</span>}
+							{group.members.map((ps) => (
+								<div key={ps.id}>
+									<h2 class="section-heading">{ps.exercise_name}</h2>
+									<p class="exercise-target">
+										{ps.target_sets} × {ps.rep_low}-{ps.rep_high}
+										{ps.target_weight_kg ? ` @ ${ps.target_weight_kg}kg` : ''}
+									</p>
+									{ps.notes && <p class="exercise-target">{ps.notes}</p>}
+								</div>
+							))}
 						</div>
 					))
 				: plannedRun && (
