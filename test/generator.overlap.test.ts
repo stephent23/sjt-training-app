@@ -29,11 +29,11 @@ async function seedHistory() {
 
 /** A block starting at `start` with one Monday lift per week; week_count is
  * `weekCount` (default: the number of weeks). */
-async function seedBlock(name: string, start: string, weeks: number, weekCount = weeks) {
+async function seedBlock(name: string, start: string, weeks: number, weekCount = weeks, firstWeekNumber = 1) {
 	const block = await env.DB.prepare(`INSERT INTO plan_blocks (name, start_date, week_count) VALUES (?, ?, ?) RETURNING id`).bind(name, start, weekCount).first<{ id: number }>();
 	const ids: number[] = [];
 	for (let w = 0; w < weeks; w++) {
-		const id = await insertSession({ date: addDaysIso(start, w * 7), label: `${name} lift`, week_number: w + 1 });
+		const id = await insertSession({ date: addDaysIso(start, w * 7), label: `${name} lift`, week_number: firstWeekNumber + w });
 		await env.DB.prepare(`UPDATE sessions SET block_id = ? WHERE id = ?`).bind(block!.id, id).run();
 		ids.push(id);
 	}
@@ -123,6 +123,43 @@ describe('new-block accept supersedes older blocks from its start', () => {
 });
 
 describe('adjusting a block may not run into another block', () => {
+	it("ignores an older block's stored range past the next block's start (Block 1's old app-wide week numbers)", async () => {
+		await seedHistory();
+		// Block 1 as migration 0010 left it: sessions numbered 20..27, week_count 27, so its
+		// stored range runs ~19 weeks past its last session.
+		const old = await seedBlock('Block 1', addDaysIso(S, -28), 8, 27, 20);
+		await train(old.ids[0]);
+		const id = await importPlan(await planFrom(S, 2));
+		expect((await postJson(`${BASE}/${id}/accept`)).status).toBe(200);
+
+		// History keeps its block: the earlier sessions still say Block 1, Week 20..23 of 23.
+		expect(await blockRow(old.id)).toEqual({ name: 'Block 1', week_count: 23 });
+		expect(await count(`SELECT COUNT(*) AS n FROM sessions WHERE block_id = ? AND date < ?`, old.id, S)).toBe(4);
+		expect(await count(`SELECT COUNT(*) AS n FROM sessions WHERE block_id = ? AND date >= ?`, old.id, S)).toBe(0);
+
+		// Adjusting the new block is allowed: Block 1 is over the day before it started.
+		const fresh = (await env.DB.prepare(`SELECT id FROM plan_blocks WHERE id != ?`).bind(old.id).first<{ id: number }>())!.id;
+		const exp = await SELF.fetch(`${BASE}/export?adjust=${fresh}&weeks=2&startDate=${addDaysIso(S, 7)}`);
+		expect(exp.status).toBe(200);
+		const plan = ((await exp.json()) as { deterministicProposal: MultiWeekProposalInput }).deterministicProposal;
+		const imp = await postJson(`${BASE}/import?adjust=${fresh}`, plan);
+		expect(imp.status).toBe(200);
+		expect((await postJson(`${BASE}/${((await imp.json()) as { id: number }).id}/accept`)).status).toBe(200);
+		expect(await blockRow(old.id)).toEqual({ name: 'Block 1', week_count: 23 });
+	});
+
+	it('still refuses adjusting an older block into the newer one', async () => {
+		await seedHistory();
+		const monday = weekStartOnOrAfter(todayIso());
+		const mine = await seedBlock('Block 1', addDaysIso(monday, -14), 3, 27, 20);
+		await seedBlock('Block 2', addDaysIso(monday, 7), 2);
+		const exp = await SELF.fetch(`${BASE}/export?adjust=${mine.id}&weeks=3`);
+		const plan = ((await exp.json()) as { deterministicProposal: MultiWeekProposalInput }).deterministicProposal;
+		const refused = await postJson(`${BASE}/import?adjust=${mine.id}`, plan);
+		expect(refused.status).toBe(422);
+		expect(((await refused.json()) as { error: string }).error).toMatch(/^Block 2 starts /);
+	});
+
 	it('refuses at import (422) and at accept (409), naming the block', async () => {
 		await seedHistory();
 		const monday = weekStartOnOrAfter(todayIso());
