@@ -155,6 +155,24 @@ describe('Review marks', () => {
 		expect(root.querySelectorAll('.rv-session .badge--accent')).toHaveLength(1);
 		expect(root.textContent).not.toContain('speculative');
 	});
+
+	it('compares every week against the plan it replaces when revising a block', async () => {
+		const deterministic = {
+			weeks: pendingPlan.plan.weeks.map((w) => ({
+				week_number: w.week_number + 4,
+				sessions: w.sessions.map((s) => ({ ...s, label: 'Different' })),
+			})),
+		};
+		const plan = { ...pendingPlan.plan, weeks: pendingPlan.plan.weeks.map((w) => ({ ...w, week_number: w.week_number + 4 })) };
+		stubApi({ ...pendingPlan, plan, first_week_number: 5, deterministic, block: { id: 7, name: 'Block 2', week_count: 8 } });
+		const root = await mount();
+		expect(root.querySelector('.rv-week-head')!.textContent).toContain('1 changed');
+		const heads = root.querySelectorAll('.rv-week-head');
+		expect(heads[1].textContent).toContain('1 changed');
+		(heads[1] as HTMLElement).click();
+		await waitFor(() => root.querySelectorAll('.rv-session').length === 2);
+		expect(root.querySelectorAll('.rv-session .badge--accent')).toHaveLength(2);
+	});
 });
 
 describe('Adjust the current block', () => {

@@ -124,6 +124,8 @@ function SessionRow({ session, baseline }: { session: ProposedSession; baseline:
 //
 // The first week is open and the rest folded, because the first is the one
 // that is real arithmetic and the rest are the assistant's judgement over it.
+// When the plan revises a block, every week is marked against the week it
+// replaces.
 // Accept/reject is whole-proposal, not per-week, and lives in a bar that stays
 // on screen however far down the weeks you have scrolled.
 export function ProposalReview({ proposal, deterministic, replaces, startDate, block, firstWeekNumber = 1, busy, onAccept, onReject }: ProposalReviewProps) {
@@ -155,9 +157,11 @@ export function ProposalReview({ proposal, deterministic, replaces, startDate, b
 			{typeof proposal.summary === 'string' && proposal.summary.trim() !== '' && <p class="card review-note">{proposal.summary.trim()}</p>}
 
 			{proposal.weeks.map((week, weekIndex) => {
-				// Only week 1 is the mechanical pass's real arithmetic; later weeks are
-				// flat copies, so comparing against them would flag everything.
-				const baseline = hasBaseline && weekIndex === 0 ? deterministic?.weeks[0] : undefined;
+				// A new block: only week 1 is the mechanical pass's real arithmetic; later
+				// weeks are flat copies, so comparing against them would flag everything.
+				// Revising a block: every deterministic week is the plan already
+				// scheduled, so each week is compared with its own.
+				const baseline = !hasBaseline ? undefined : block ? deterministic?.weeks[weekIndex] : weekIndex === 0 ? deterministic?.weeks[0] : undefined;
 				const changes = baseline ? week.sessions.filter((s) => diffSession(s, baseline).changed).length : 0;
 				const isOpen = open.has(weekIndex);
 				const first = week.sessions[0]?.date;
