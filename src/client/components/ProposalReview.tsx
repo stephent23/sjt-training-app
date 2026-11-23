@@ -77,8 +77,22 @@ function sessionNumbers(s: ProposedSession): string {
 		.join(' · ');
 }
 
+/** Superset letters (A, B, …) by first appearance, for groups of two or more
+ * sets in the session — a lone set with a stale group is not a superset. */
+function supersetLetters(session: ProposedSession): Map<number, string> {
+	const counts = new Map<number, number>();
+	for (const ps of session.plannedSets) if (ps.superset_group != null) counts.set(ps.superset_group, (counts.get(ps.superset_group) ?? 0) + 1);
+	const letters = new Map<number, string>();
+	for (const ps of [...session.plannedSets].sort((a, b) => a.order_index - b.order_index)) {
+		const g = ps.superset_group;
+		if (g != null && (counts.get(g) ?? 0) > 1 && !letters.has(g)) letters.set(g, String.fromCharCode(65 + letters.size));
+	}
+	return letters;
+}
+
 function SessionRow({ session, baseline }: { session: ProposedSession; baseline: WeekProposalInput | undefined }) {
 	const { changed, notes, runNote } = diffSession(session, baseline);
+	const letters = session.kind === 'lift' ? supersetLetters(session) : new Map<number, string>();
 	return (
 		<details class="rv-session">
 			<summary class="rv-session-head">
@@ -99,6 +113,9 @@ function SessionRow({ session, baseline }: { session: ProposedSession; baseline:
 				{session.kind === 'lift'
 					? session.plannedSets.map((ps, j) => (
 							<p key={j} class="exercise-target">
+								{ps.superset_group != null && letters.has(ps.superset_group) && (
+									<span class="eyebrow eyebrow--accent">Superset {letters.get(ps.superset_group)} </span>
+								)}
 								{ps.exercise_name} — {ps.target_sets} × {ps.rep_low}-{ps.rep_high}
 								{ps.target_weight_kg != null ? ` @ ${ps.target_weight_kg}kg` : ''}
 								{ps.notes ? ` (${ps.notes})` : ''}
